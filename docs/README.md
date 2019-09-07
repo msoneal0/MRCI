@@ -44,13 +44,13 @@ Because the host is modular, the things you can customize it to do is almost lim
 
 ### Documentation ###
 
-[1.1 The Protocol](Protocol.md)
-[2.1 Command Loaders](Command_Loaders.md)
-[3.1 Command Objects](Command_Objects.md)
-[4.1 Type IDs](Type_IDs.md)
-[5.1 Host Features](Host_Features.md)
-[6.1 Async Commands](Async.md)
-[7.1 Internal Commands](Internal_Commands.md)
+* [1.1 The Protocol](Protocol.md)
+* [2.1 Command Loaders](Command_Loaders.md)
+* [3.1 Command Objects](Command_Objects.md)
+* [4.1 Type IDs](Type_IDs.md)
+* [5.1 Host Features](Host_Features.md)
+* [6.1 Async Commands](Async.md)
+* [7.1 Internal Commands](Internal_Commands.md)
 
 ### Development Setup ###
 
