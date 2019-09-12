@@ -139,7 +139,7 @@ void UploadMod::procFinished(int exStatus)
         db.addCondition(COLUMN_MOD_NAME, modName);
         db.exec();
 
-        emit backendDataOut(ASYNC_ENABLE_MOD, toTEXT(modPath), PUB_IPC_WITH_FEEDBACK);
+        emit backendDataOut(ASYNC_ENABLE_MOD, toTEXT(modName), PUB_IPC_WITH_FEEDBACK);
 
         mainTxt("\nFinished...");
     }
@@ -187,12 +187,14 @@ void UploadMod::procStartError(QProcess::ProcessError err)
 
 void UploadMod::setup()
 {
+    mkPath(modPath);
+
     if (QLibrary::isLibrary(clientFile))
     {
         QString suffix = QFileInfo(clientFile).completeSuffix();
         QString dst    = modPath + "/main." + suffix;
 
-        mainTxt("copy file: " + fileBuff->fileName() + " --> " + dst + "/n");
+        mainTxt("copy file: " + fileBuff->fileName() + " --> " + dst + "\n");
 
         if (QFile::copy(fileBuff->fileName(), dst))
         {
@@ -348,10 +350,8 @@ void DelMod::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, ucha
             db.addCondition(COLUMN_MOD_NAME, name);
             db.exec();
 
-            QByteArray modPath = toTEXT(modDataPath() + "/" + name + "/main");
-
-            emit backendDataOut(ASYNC_DISABLE_MOD, modPath, PRIV_IPC);
-            emit backendDataOut(ASYNC_DISABLE_MOD, modPath, PUB_IPC_WITH_FEEDBACK);
+            emit backendDataOut(ASYNC_DISABLE_MOD, toTEXT(name), PRIV_IPC);
+            emit backendDataOut(ASYNC_DISABLE_MOD, toTEXT(name), PUB_IPC_WITH_FEEDBACK);
         }
     }
 }

@@ -26,20 +26,20 @@ class CmdExecutor : public QObject
 
 private:
 
-    SharedObjs                            *rdSharedObjs;
-    RWSharedObjs                          *rwSharedObjs;
-    InternalCommandLoader                 *internalCmds;
-    QSharedMemory                         *exeDebugInfo;
-    QList<quint16>                         moreInputCmds;
-    QList<quint16>                         activeLoopCmds;
-    QList<quint16>                         pausedCmds;
-    QHash<quint16, QString>                cmdNames;
-    QHash<quint16, ExternCommand*>         commands;
-    QHash<QPluginLoader*, QList<quint16> > mods;
-    int                                    loopIndex;
+    SharedObjs                     *rdSharedObjs;
+    RWSharedObjs                   *rwSharedObjs;
+    InternalCommandLoader          *internalCmds;
+    QSharedMemory                  *exeDebugInfo;
+    QHash<QString, CommandLoader*>  cmdLoaders;
+    QHash<QString, QPluginLoader*>  plugins;
+    QHash<QString, QList<quint16> > cmdIdsByModName;
+    QList<quint16>                  moreInputCmds;
+    QList<quint16>                  activeLoopCmds;
+    QList<quint16>                  pausedCmds;
+    QHash<quint16, QString>         cmdNames;
+    QHash<quint16, ExternCommand*>  commands;
+    int                             loopIndex;
 
-    void    clearCommands();
-    void    loadMods();
     void    nextLoopCmd();
     void    preExe(ExternCommand *cmdObj, quint16 cmdId);
     void    preExe(const QList<ExternCommand*> &cmdObjs, quint16 cmdId);
@@ -48,17 +48,17 @@ private:
     void    connectInternCmd(InternCommand *cmd, quint16 cmdId, const QString &cmdName);
     void    connectExternCmd(ExternCommand *cmd, quint16 cmdId, const QString &cmdName);
     void    openOrCloseChByName(quint16 cmdId, const QString &ch, const QString &sub, bool open);
-    void    loadCmd(CommandLoader *loader, quint16 cmdId, QPluginLoader *pluginLoader, const QString &cmdName, const QString &uniqueCmdName);
-    void    loadCmds(CommandLoader *loader, quint16 idOffs, QPluginLoader *pluginLoader, const QString &modName);
+    void    loadCmd(CommandLoader *loader, quint16 cmdId, const QString &modName, const QString &cmdName, const QString &uniqueCmdName);
+    void    loadCmds(CommandLoader *loader, quint16 idOffs, const QString &modName);
     void    loadInternCmd(CommandLoader *loader, const QString &cmdName, const QString &uniqueName, quint16 id);
-    void    loadExternCmd(CommandLoader *loader, const QString &cmdName, const QString &uniqueName, quint16 id);
-    void    addToModList(quint16 cmdId, QPluginLoader *pluginLoader);
-    bool    isModFileLoaded(const QString &path);
+    void    loadExternCmd(CommandLoader *loader, const QString &modName, const QString &cmdName, const QString &uniqueName, quint16 id);
+    void    addCommandToList(quint16 cmdId, const QString &cmdName, const QString &modName, ExternCommand *cmdObj);
     bool    externBlockedTypeId(uchar typeId);
     bool    p2pBlockedTypeId(uchar typeId);
     bool    allowCmdLoad(const QString &cmdName, const QString &modName, const QStringList &exemptList);
     QString makeCmdUnique(const QString &name);
-    quint16 getModIdOffs(const QString &path);
+    QString getModFile(const QString &modName);
+    quint16 getModIdOffs(const QString &name);
 
 private slots:
 
@@ -82,10 +82,10 @@ public slots:
 
     void close();
     void buildCommands();
+    void buildCmdLoaders();
     void wrCrashDebugInfo(const QString &msg);
-    void unloadModFile(const QString &path);
-    void loadModFile(const QString &path);
-    void loadModLib(const QString &path, quint16 idOffs);
+    void unloadModFile(const QString &modName);
+    void loadModFile(const QString &modName);
     void exeCmd(quint16 cmdId, const QByteArray &data, uchar typeId);
     void backendFromCmd(quint16 cmdId, const QByteArray &data, uchar typeId);
 

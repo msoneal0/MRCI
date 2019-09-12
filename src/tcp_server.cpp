@@ -16,11 +16,55 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
+ModDeleteTimer::ModDeleteTimer(const QString &mod, QStringList *queue, QObject *parent) : QTimer (parent)
+{
+    delQueue = queue;
+    modName  = mod;
+
+    setInterval(5000); // 5 seconds
+
+    queue->append(mod);
+
+    connect(this, &ModDeleteTimer::timeout, this, &ModDeleteTimer::delMod);
+}
+
+void ModDeleteTimer::resetTimer(const QString &mod)
+{
+    if (modName == mod)
+    {
+        start();
+    }
+}
+
+void ModDeleteTimer::delMod()
+{
+    Query db(this);
+
+    db.setType(Query::PULL, TABLE_MODULES);
+    db.addColumn(COLUMN_MOD_MAIN);
+    db.addCondition(COLUMN_MOD_NAME, modName);
+    db.exec();
+
+    if (db.rows())
+    {
+        QString file = db.getData(COLUMN_MOD_MAIN).toString();
+
+        QDir(QFileInfo(file).path()).removeRecursively();
+
+        db.setType(Query::DEL, TABLE_MODULES);
+        db.addCondition(COLUMN_MOD_NAME, modName);
+        db.exec();
+    }
+
+    delQueue->removeAll(modName);
+
+    deleteLater();
+}
+
 TCPServer::TCPServer(QObject *parent) : QTcpServer(parent)
 {
     sessionCounter = new QSharedMemory(sessionCountShareKey(), this);
     controlPipe    = new QLocalServer(this);
-    dirDelTimer    = new QTimer(this);
     controlSocket  = nullptr;
     flags          = 0;
 
@@ -28,7 +72,6 @@ TCPServer::TCPServer(QObject *parent) : QTcpServer(parent)
     sessionCounter->attach();
 
     connect(controlPipe, &QLocalServer::newConnection, this, &TCPServer::newPipeConnection);
-    connect(dirDelTimer, &QTimer::timeout, this, &TCPServer::delDir);
 }
 
 void TCPServer::newPipeConnection()
@@ -91,8 +134,6 @@ bool TCPServer::start()
             ret = true;
 
             flags |= ACCEPTING;
-
-            syncModPath();
         }
         else
         {
@@ -102,42 +143,6 @@ bool TCPServer::start()
     }
 
     return ret;
-}
-
-void TCPServer::syncModPath()
-{
-    QDir dir(modDataPath());
-
-    dir.setFilter(QDir::Dirs | QDir::NoDotAndDotDot);
-
-    QStringList modNames = dir.entryList();
-
-    for (auto&& modName : modNames)
-    {
-        QString modPath = dir.absolutePath() + "/" + modName;
-
-        if (!QFile::exists(modPath + "/main"))
-        {
-            QDir(modPath).removeRecursively();
-        }
-        else if (!modExists(modName))
-        {
-            Query db(this);
-
-            db.setType(Query::PULL, TABLE_MODULES);
-            db.addColumn(COLUMN_MOD_NAME);
-            db.exec();
-
-            quint16 idOffs = static_cast<quint16>((db.rows() + 2) * MAX_CMDS_PER_MOD);
-
-            db.setType(Query::PUSH, TABLE_MODULES);
-            db.addColumn(COLUMN_MOD_NAME, modName);
-            db.addColumn(COLUMN_MOD_MAIN, modPath + "/main");
-            db.addColumn(COLUMN_LOCKED, false);
-            db.addColumn(COLUMN_CMD_ID_OFFS, idOffs);
-            db.exec();
-        }
-    }
 }
 
 void TCPServer::sessionEnded()
@@ -258,32 +263,16 @@ bool TCPServer::inBanList(const QString &ip)
     return db.rows();
 }
 
-void TCPServer::delDir()
+void TCPServer::delayedModDel(const QString &modName)
 {
-    if (dirsToDel.isEmpty())
+    if (!modDelQueue.contains(modName))
     {
-        dirDelTimer->stop();
+        auto *timer = new ModDeleteTimer(modName, &modDelQueue, this);
+
+        connect(this, &TCPServer::resetModDelTimer, timer, &ModDeleteTimer::resetTimer);
     }
-    else
-    {
-        QString path = dirsToDel.takeFirst();
 
-        Query db(this);
-
-        db.setType(Query::DEL, TABLE_MODULES);
-        db.addCondition(COLUMN_MOD_MAIN, path, Query::LIKE);
-        db.exec();
-
-        QDir(path).removeRecursively();
-    }
-}
-
-void TCPServer::delayedDirDel(const QString &path)
-{
-    dirDelTimer->setSingleShot(false);
-    dirDelTimer->start(5000);
-
-    dirsToDel.append(path);
+    emit resetModDelTimer(modName);
 }
 
 void TCPServer::incomingConnection(qintptr socketDescriptor)
@@ -318,7 +307,7 @@ void TCPServer::incomingConnection(qintptr socketDescriptor)
             connect(ses, &Session::ended, this, &TCPServer::sessionEnded);
             connect(ses, &Session::ended, thr, &QThread::quit);
             connect(ses, &Session::connectPeers, this, &TCPServer::connectPeers);
-            connect(ses, &Session::delayedDirDel, this, &TCPServer::delayedDirDel);
+            connect(ses, &Session::delayedModDel, this, &TCPServer::delayedModDel);
             connect(ses, &Session::closeServer, this, &TCPServer::closeServer);
             connect(ses, &Session::resServer, this, &TCPServer::resServer);
 

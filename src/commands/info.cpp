@@ -38,14 +38,31 @@ QString ListDBG::cmdName()      {return "ls_dbg";}
 QString MyInfo::cmdName()       {return "my_info";}
 QString CmdInfo::cmdName()      {return "cmd_info";}
 
+bool ListCommands::strInRowTxt(const QString &str, const QStringList &rowTxt)
+{
+    bool ret = false;
+
+    for (auto&& strInList : rowTxt)
+    {
+        if (strInList.contains(str, Qt::CaseInsensitive))
+        {
+            ret = true;
+
+            break;
+        }
+    }
+
+    return ret;
+}
+
 void ListCommands::procBin(const SharedObjs *sharedObjs, const QByteArray &data, uchar dType)
 {
     Q_UNUSED(sharedObjs);
 
     if (dType == TEXT)
     {
-        QString            find   = getParam("-find", parseArgs(data, 2));
-        QList<quint16>     cmdIds = sharedObjs->cmdNames->keys();
+        QString            find     = getParam("-find", parseArgs(data, 2));
+        QStringList        cmdNames = sharedObjs->cmdNames->values();
         QList<QStringList> tableData;
         QStringList        separators;
         QList<int>         justLens;
@@ -56,18 +73,20 @@ void ListCommands::procBin(const SharedObjs *sharedObjs, const QByteArray &data,
             separators.append("-------");
         }
 
+        cmdNames.sort(Qt::CaseInsensitive);
         tableData.append(QStringList() << "command_id" << "command_name" << "summary");
         tableData.append(separators);
 
-        for (auto&& cmdId: cmdIds)
+        for (auto&& cmdName: cmdNames)
         {
             QStringList rowData;
+            quint16     id = sharedObjs->cmdNames->key(cmdName);
 
-            rowData.append(QString::number(cmdId));
-            rowData.append(sharedObjs->cmdNames->value(cmdId));
-            rowData.append(rwSharedObjs->commands->value(cmdId)->shortText());
+            rowData.append(QString::number(id));
+            rowData.append(cmdName);
+            rowData.append(rwSharedObjs->commands->value(id)->shortText());
 
-            if (find.isEmpty() || rowData.contains(find, Qt::CaseInsensitive))
+            if (find.isEmpty() || strInRowTxt(find, rowData))
             {
                 for (int k = 0; k < justLens.size(); ++k)
                 {

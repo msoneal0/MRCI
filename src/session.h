@@ -116,9 +116,9 @@ signals:
     void backendToPeers(quint16 cmdId, const QByteArray data);
     void connectPeers(QSharedPointer<SessionCarrier> peer);
     void setMaxSessions(uint value);
-    void unloadModFile(const QString &path);
-    void loadModFile(const QString &path);
-    void delayedDirDel(const QString &path);
+    void unloadModFile(const QString &modName);
+    void loadModFile(const QString &modName);
+    void delayedModDel(const QString &modName);
     void ended();
     void closeExe();
     void closeServer();

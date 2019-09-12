@@ -33,9 +33,28 @@ CmdExecutor::CmdExecutor(RWSharedObjs *rwShare, SharedObjs *rdOnlyShare, QShared
     exeDebugInfo = debugInfo;
     rdSharedObjs = rdOnlyShare;
     rwSharedObjs = rwShare;
-    internalCmds = new InternalCommandLoader(rwShare, this);
+    internalCmds = nullptr;
 
     connect(this, &CmdExecutor::loop, this, &CmdExecutor::exeCmd);
+}
+
+void CmdExecutor::buildCmdLoaders()
+{
+    internalCmds = new InternalCommandLoader(rwSharedObjs, this);
+
+    cmdLoaders.insert(INTERN_MOD_NAME, internalCmds);
+
+    Query db(this);
+
+    db.setType(Query::PULL, TABLE_MODULES);
+    db.addColumn(COLUMN_MOD_NAME);
+    db.addCondition(COLUMN_LOCKED, false);
+    db.exec();
+
+    for (int i = 0; i < db.rows(); ++i)
+    {
+        loadModFile(db.getData(COLUMN_MOD_NAME, i).toString());
+    }
 }
 
 void CmdExecutor::wrCrashDebugInfo(const QString &msg)
@@ -75,8 +94,6 @@ void CmdExecutor::connectInternCmd(InternCommand *cmd, quint16 cmdId, const QStr
     connect(cmd, &InternCommand::authOk, this, &CmdExecutor::authOk);
     connect(cmd, &InternCommand::termAllCommands, this, &CmdExecutor::termAllCommands);
     connect(cmd, &InternCommand::termCommandId, this, &CmdExecutor::termCommandId);
-    connect(cmd, &InternCommand::loadMod, this, &CmdExecutor::loadModFile);
-    connect(cmd, &InternCommand::unloadMod, this, &CmdExecutor::unloadModFile);
     connect(cmd, &InternCommand::reloadCommands, this, &CmdExecutor::buildCommands);
 
     connectCommon(cmd, cmdOutput, cmdId, cmdName);
@@ -108,7 +125,10 @@ void CmdExecutor::connectCommon(ExternCommand *cmd, CommandOutput *cmdOutput, qu
     connect(cmd, &ExternCommand::closeSession, this, &CmdExecutor::endSession);
     connect(cmd, &ExternCommand::logout, this, &CmdExecutor::logout);
 
-    cmd->cmdId = cmdId;
+    cmd->cmdId           = cmdId;
+    cmd->inMoreInputMode = false;
+    cmd->inLoopMode      = false;
+    cmd->errSent         = false;
 
     cmd->setObjectName(cmdName);
     cmdOutput->setCmdId(cmdId);
@@ -225,7 +245,7 @@ void CmdExecutor::termCommandObj(quint16 cmdId, ExternCommand *cmd, bool del)
 
     if (del)
     {
-        wrCrashDebugInfo(" exe func: termCommandObj()\n cmd id: " + QString::number(cmdId) + "\n note: calling the command object's aboutToDelete()");
+        wrCrashDebugInfo(" exe func: termCommandObj()\n cmd id: " + QString::number(cmdId) + "\n note: deleting intern commands");
 
         for (auto internObj : cmd->internCommands.values())
         {
@@ -233,11 +253,23 @@ void CmdExecutor::termCommandObj(quint16 cmdId, ExternCommand *cmd, bool del)
             internObj->deleteLater();
         }
 
+        wrCrashDebugInfo(" exe func: termCommandObj()\n cmd id: " + QString::number(cmdId) + "\n note: calling the command object's aboutToDelete()");
+
         cmd->aboutToDelete();
         cmd->deleteLater();
 
         commands.remove(cmdId);
         cmdNames.remove(cmdId);
+
+        for (auto&& list : cmdIdsByModName.values())
+        {
+            if (list.contains(cmdId))
+            {
+                list.removeAll(cmdId);
+
+                break;
+            }
+        }
 
         emit dataToSession(ASYNC_RM_CMD, wrInt(cmdId, 16), CMD_ID);
     }
@@ -268,34 +300,22 @@ void CmdExecutor::termAllCommands()
 
 void CmdExecutor::close()
 {
-    clearCommands();
+    termCommandsInList(commands.keys(), true);
+
+    for (auto cmdLoader : cmdLoaders.values())
+    {
+        cmdLoader->aboutToDelete();
+    }
+
+    for (auto plugin : plugins.values())
+    {
+        plugin->unload();
+        plugin->deleteLater();
+    }
+
     cleanupDbConnection();
 
     emit okToDelete();
-}
-
-void CmdExecutor::clearCommands()
-{
-    termCommandsInList(commands.keys(), true);
-
-    QList<QPluginLoader*> loaders = mods.keys();
-
-    for (auto* loader : loaders)
-    {
-        ModCommandLoader *cmdLoader = qobject_cast<ModCommandLoader*>(loader->instance());
-
-        if (cmdLoader)
-        {
-            wrCrashDebugInfo(" exe func: clearCommands()\n mod file: " + loader->fileName() + "\n note: calling the modules's aboutToDelete()");
-
-            cmdLoader->aboutToDelete();
-        }
-
-        loader->unload();
-        loader->deleteLater();
-    }
-
-    mods.clear();
 }
 
 void CmdExecutor::commandFinished(quint16 cmdId)
@@ -343,143 +363,122 @@ void CmdExecutor::procInternRequest(ExternCommand *cmd, quint16 cmdId, const QSt
     }
 }
 
-quint16 CmdExecutor::getModIdOffs(const QString &path)
+quint16 CmdExecutor::getModIdOffs(const QString &name)
 {
-    Query db(this);
-
-    db.setType(Query::PULL, TABLE_MODULES);
-    db.addColumn(COLUMN_CMD_ID_OFFS);
-    db.addCondition(COLUMN_MOD_MAIN, path);
-    db.exec();
-
-    return static_cast<quint16>(db.getData(COLUMN_CMD_ID_OFFS).toUInt());
-}
-
-void CmdExecutor::loadModFile(const QString &path)
-{
-    loadModLib(path, getModIdOffs(path));
-}
-
-void CmdExecutor::loadModLib(const QString &path, quint16 idOffs)
-{
-    if (!isModFileLoaded(path) && QFile::exists(path))
+    if (name == INTERN_MOD_NAME)
     {
-        bool              modOk        = false;
-        auto             *pluginLoader = new QPluginLoader(path);
-        QObject          *cmdLoaderObj = pluginLoader->instance();
-        ModCommandLoader *cmdLoader    = qobject_cast<ModCommandLoader*>(cmdLoaderObj);
-        QString           modPath      = QFileInfo(path).path();
+        return MAX_CMDS_PER_MOD;
+    }
+    else
+    {
+        Query db(this);
 
-        if (idOffs == 0)
-        {
-            qDebug() << "CmdExecutor::loadModLib() err: failed to get a valid command id offset for the module.";
-        }
-        else if (!pluginLoader->isLoaded())
-        {
-            qDebug() << "CmdExecutor::loadModLib() err: failed to load mod lib file: " << path << " reason: " << pluginLoader->errorString();
-        }
-        else if (!cmdLoaderObj)
-        {
-            qDebug() << "CmdExecutor::loadModLib() err: failed to load mod lib file: " << path << " reason: the root component object could not be instantiated.";
-        }
-        else if (!cmdLoader)
-        {
-            qDebug() << "CmdExecutor::loadModLib() err: failed to load mod lib file: " << path << " reason: the ModCommandLoader object could not be instantiated.";
-        }
-        else if (cmdLoader->rev() < IMPORT_REV)
-        {
-            qDebug() << "CmdExecutor::loadModLib() err: failed to load mod lib file: " << path << " reason: module import rev " << cmdLoader->rev() << " not compatible with host rev " << IMPORT_REV << ".";
-        }
-        else if (!cmdLoader->hostRevOk(IMPORT_REV))
-        {
-            qDebug() << "CmdExecutor::loadModLib() err: failed to load mod lib file: " << path << " the module rejected the host import rev. reason: " << cmdLoader->lastError() << ".";
-        }
-        else
-        {
-            wrCrashDebugInfo(" exe func: loadModLib()\n path: " + path);
+        db.setType(Query::PULL, TABLE_MODULES);
+        db.addColumn(COLUMN_CMD_ID_OFFS);
+        db.addCondition(COLUMN_MOD_NAME, name);
+        db.exec();
 
-            modOk = true;
-
-            cmdLoader->modPath(modPath);
-
-            loadCmds(cmdLoader, idOffs, pluginLoader, QFileInfo(modPath).fileName());
-        }
-
-        if (!modOk)
-        {
-            pluginLoader->unload();
-            pluginLoader->deleteLater();
-        }
+        return static_cast<quint16>(db.getData(COLUMN_CMD_ID_OFFS).toUInt());
     }
 }
 
-void CmdExecutor::unloadModFile(const QString &path)
-{
-    if (isModFileLoaded(path))
-    {
-        QList<QPluginLoader*> modLoaders = mods.keys();
-
-        for (auto* loader : modLoaders)
-        {
-            if (rmFileSuffix(loader->fileName()) == path)
-            {
-                QList<quint16> cmdList = mods.value(loader);
-
-                termCommandsInList(cmdList, true);
-
-                ModCommandLoader *cmdLoader = qobject_cast<ModCommandLoader*>(loader->instance());
-
-                if (cmdLoader != nullptr)
-                {
-                    wrCrashDebugInfo(" exe func: unloadModFile()\n mod file: " + loader->fileName() + "\n note: calling the modules's aboutToDelete()");
-
-                    cmdLoader->aboutToDelete();
-                }
-
-                loader->unload();
-                loader->deleteLater();
-
-                mods.remove(loader);
-
-                break;
-            }
-        }
-    }
-}
-
-bool CmdExecutor::isModFileLoaded(const QString &path)
-{
-    bool ret = false;
-
-    QList<QPluginLoader*> loaders = mods.keys();
-
-    for (auto* loader : loaders)
-    {
-        if (rmFileSuffix(loader->fileName()) == path)
-        {
-            ret = true;
-
-            break;
-        }
-    }
-
-    return ret;
-}
-
-void CmdExecutor::loadMods()
+QString CmdExecutor::getModFile(const QString &modName)
 {
     Query db(this);
 
     db.setType(Query::PULL, TABLE_MODULES);
     db.addColumn(COLUMN_MOD_MAIN);
-    db.addColumn(COLUMN_CMD_ID_OFFS);
-    db.addCondition(COLUMN_LOCKED, false);
+    db.addCondition(COLUMN_MOD_NAME, modName);
     db.exec();
 
-    for (int i = 0; db.rows(); ++i)
+    return db.getData(COLUMN_MOD_MAIN).toString();
+}
+
+void CmdExecutor::loadModFile(const QString &modName)
+{
+    bool           modOk        = false;
+    QString        path         = getModFile(modName);
+    auto          *pluginLoader = new QPluginLoader(path);
+    QObject       *cmdLoaderObj = pluginLoader->instance();
+    CommandLoader *cmdLoader    = qobject_cast<CommandLoader*>(cmdLoaderObj);
+
+    if (!pluginLoader->isLoaded())
     {
-        loadModLib(db.getData(COLUMN_MOD_MAIN, i).toString(), static_cast<quint16>(db.getData(COLUMN_CMD_ID_OFFS).toUInt()));
+        qDebug() << "CmdExecutor::loadModFile() err: failed to load mod lib file: " << path << " reason: " << pluginLoader->errorString();
     }
+    else if (!cmdLoaderObj)
+    {
+        qDebug() << "CmdExecutor::loadModFile() err: failed to load mod lib file: " << path << " reason: the root component object could not be instantiated.";
+    }
+    else if (!cmdLoader)
+    {
+        qDebug() << "CmdExecutor::loadModFile() err: failed to load mod lib file: " << path << " reason: the ModCommandLoader object could not be instantiated.";
+    }
+    else if (cmdLoader->rev() < IMPORT_REV)
+    {
+        qDebug() << "CmdExecutor::loadModFile() err: failed to load mod lib file: " << path << " reason: module import rev " << cmdLoader->rev() << " not compatible with host rev " << IMPORT_REV << ".";
+    }
+    else if (!cmdLoader->hostRevOk(IMPORT_REV))
+    {
+        qDebug() << "CmdExecutor::loadModFile() err: failed to load mod lib file: " << path << " the module rejected the host import rev. reason: " << cmdLoader->lastError() << ".";
+    }
+    else
+    {
+        modOk = true;
+
+        wrCrashDebugInfo(" exe func: loadModFile()\n path: " + path + " \nmod name: " + modName + " \nnote: calling the module's modPath() function.");
+
+        cmdLoader->modPath(QFileInfo(path).path());
+
+        cmdLoaders.insert(modName, cmdLoader);
+        plugins.insert(modName, pluginLoader);
+    }
+
+    if (!modOk)
+    {
+        pluginLoader->unload();
+        pluginLoader->deleteLater();
+    }
+}
+
+void CmdExecutor::unloadModFile(const QString &modName)
+{
+    if (cmdIdsByModName.contains(modName))
+    {
+        termCommandsInList(cmdIdsByModName[modName], true);
+
+        wrCrashDebugInfo(" exe func: unloadModFile()\n mod name: " + modName + "\n note: calling the modules's aboutToDelete()");
+
+        cmdLoaders[modName]->aboutToDelete();
+        plugins[modName]->unload();
+        plugins[modName]->deleteLater();
+
+        cmdIdsByModName.remove(modName);
+        cmdLoaders.remove(modName);
+        plugins.remove(modName);
+    }
+}
+
+void CmdExecutor::addCommandToList(quint16 cmdId, const QString &cmdName, const QString &modName, ExternCommand *cmdObj)
+{
+    procInternRequest(cmdObj, cmdId, cmdName);
+
+    commands.insert(cmdId, cmdObj);
+    cmdNames.insert(cmdId, cmdName);
+
+    if (cmdIdsByModName.contains(modName))
+    {
+        cmdIdsByModName[modName].append(cmdId);
+    }
+    else
+    {
+        QList<quint16> list;
+
+        list.append(cmdId);
+        cmdIdsByModName.insert(modName, list);
+    }
+
+    emit dataToSession(ASYNC_ADD_CMD, toNEW_CMD(cmdId, cmdName, cmdObj), NEW_CMD);
 }
 
 bool CmdExecutor::allowCmdLoad(const QString &cmdName, const QString &modName, const QStringList &exemptList)
@@ -525,60 +524,39 @@ void CmdExecutor::loadInternCmd(CommandLoader *loader, const QString &cmdName, c
     if (cmdObj != nullptr)
     {
         connectInternCmd(cmdObj, id, uniqueName);
-        procInternRequest(cmdObj, id, uniqueName);
-
-        commands.insert(id, cmdObj);
-        cmdNames.insert(id, uniqueName);
-
-        emit dataToSession(ASYNC_ADD_CMD, toNEW_CMD(id, uniqueName, cmdObj), NEW_CMD);
+        addCommandToList(id, uniqueName, INTERN_MOD_NAME, cmdObj);
     }
 }
 
-void CmdExecutor::loadExternCmd(CommandLoader *loader, const QString &cmdName, const QString &uniqueName, quint16 id)
+void CmdExecutor::loadExternCmd(CommandLoader *loader, const QString &modName, const QString &cmdName, const QString &uniqueName, quint16 id)
 {
     ExternCommand *cmdObj = loader->cmdObj(cmdName);
 
     if (cmdObj != nullptr)
     {
         connectExternCmd(cmdObj, id, uniqueName);
-        procInternRequest(cmdObj, id, uniqueName);
-
-        commands.insert(id, cmdObj);
-        cmdNames.insert(id, uniqueName);
-
-        emit dataToSession(ASYNC_ADD_CMD, toNEW_CMD(id, uniqueName, cmdObj), NEW_CMD);
+        addCommandToList(id, uniqueName, modName, cmdObj);
     }
 }
 
-void CmdExecutor::addToModList(quint16 cmdId, QPluginLoader *pluginLoader)
-{
-    if (mods.contains(pluginLoader))
-    {
-        mods[pluginLoader].append(cmdId);
-    }
-    else
-    {
-        mods.insert(pluginLoader, QList<quint16>() << cmdId);
-    }
-}
-
-void CmdExecutor::loadCmd(CommandLoader *loader, quint16 cmdId, QPluginLoader *pluginLoader, const QString &cmdName, const QString &uniqueCmdName)
+void CmdExecutor::loadCmd(CommandLoader *loader, quint16 cmdId, const QString &modName, const QString &cmdName, const QString &uniqueCmdName)
 {
     wrCrashDebugInfo(" exe func: loadCmd()\n cmd id: " + QString::number(cmdId) + "\n cmd name: " + cmdName);
 
-    if (pluginLoader == nullptr)
+    if (modName == INTERN_MOD_NAME)
     {
         loadInternCmd(loader, cmdName, uniqueCmdName, cmdId);
     }
     else
     {
-        loadExternCmd(loader, cmdName, uniqueCmdName, cmdId);
-        addToModList(cmdId, pluginLoader);
+        loadExternCmd(loader, modName, cmdName, uniqueCmdName, cmdId);
     }
 }
 
-void CmdExecutor::loadCmds(CommandLoader *loader, quint16 idOffs, QPluginLoader *pluginLoader, const QString &modName)
+void CmdExecutor::loadCmds(CommandLoader *loader, quint16 idOffs, const QString &modName)
 {
+    wrCrashDebugInfo(" exe func: loadCmds()\n mod name: " + modName + "\n id offs: " + QString::number(idOffs));
+
     QStringList list   = loader->cmdList();
     QStringList pub    = loader->pubCmdList();
     QStringList exempt = loader->rankExemptList();
@@ -605,12 +583,12 @@ void CmdExecutor::loadCmds(CommandLoader *loader, quint16 idOffs, QPluginLoader 
                 {
                     if (pub.contains(list[id], Qt::CaseInsensitive))
                     {
-                        loadCmd(loader, cmdId, pluginLoader, list[id], unique);
+                        loadCmd(loader, cmdId, modName, list[id], unique);
                     }
                 }
                 else if (allowCmdLoad(list[id], modName, exempt))
                 {
-                    loadCmd(loader, cmdId, pluginLoader, list[id], unique);
+                    loadCmd(loader, cmdId, modName, list[id], unique);
                 }
             }
         }
@@ -623,8 +601,10 @@ void CmdExecutor::loadCmds(CommandLoader *loader, quint16 idOffs, QPluginLoader 
 
 void CmdExecutor::buildCommands()
 {
-    loadCmds(internalCmds, MAX_CMDS_PER_MOD, nullptr, INTERN_MOD_NAME);
-    loadMods();
+    for (auto&& loaderName : cmdLoaders.keys())
+    {
+        loadCmds(cmdLoaders[loaderName], getModIdOffs(loaderName), loaderName);
+    }
 }
 
 bool CmdExecutor::externBlockedTypeId(uchar typeId)

@@ -24,6 +24,10 @@ class ListCommands : public InternCommand
 {
     Q_OBJECT
 
+private:
+
+    bool strInRowTxt(const QString &str, const QStringList &rowTxt);
+
 public:
 
     static QString cmdName();

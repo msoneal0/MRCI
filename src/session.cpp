@@ -148,6 +148,7 @@ void Session::startAsSlave(const QStringList &args)
 
     connect(exeThr, &QThread::finished, executor, &CmdExecutor::deleteLater);
     connect(exeThr, &QThread::finished, exeThr, &QThread::deleteLater);
+    connect(exeThr, &QThread::started, executor, &CmdExecutor::buildCmdLoaders);
 
     connect(executor, &CmdExecutor::okToDelete, this, &Session::closeInstance);
     connect(executor, &CmdExecutor::okToDelete, exeThr, &QThread::quit);
@@ -921,7 +922,7 @@ void Session::backendDataIn(quint16 cmdId, const QByteArray &data)
             }
             else if (cmdId == ASYNC_DISABLE_MOD)
             {   
-                emit delayedDirDel(QFileInfo(fromTEXT(data)).absolutePath());
+                emit delayedModDel(fromTEXT(data));
             }
         }
         else
@@ -1169,6 +1170,7 @@ void Session::backendDataIn(quint16 cmdId, const QByteArray &data)
             else if (cmdId == ASYNC_ENABLE_MOD)
             {
                 emit loadModFile(fromTEXT(data));
+                emit loadCommands();
             }
             else if (cmdId == ASYNC_DISABLE_MOD)
             {

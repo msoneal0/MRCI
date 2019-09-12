@@ -97,10 +97,10 @@ This internal only async commmand doesn't carry any data. Instead, it notifies a
 This internal only async commmand doesn't carry any data. It is used to send a ```resServer()``` signal to the ```TCPServer``` object in the main process. This will cause it stop listing for clients, close all sessions, reload the host settings and start listening for clients again.
 
 ```ASYNC_ENABLE_MOD (15)```
-This internal only async commmand carry ```TEXT``` path to the main library file of a module. All ```Session``` objects will then load the module.
+This internal only async commmand carry ```TEXT``` of a module name. All ```Session``` objects that receive this will then load the requested module.
 
 ```ASYNC_DISABLE_MOD (16)```
-This internal only async commmand carry ```TEXT``` path to the main library file of a module. All ```Session``` objects will then delete all commands associated with the with this module and then unload it.
+This internal only async commmand carry ```TEXT``` of a module name. All ```Session``` objects that receive this will delete all commands associated with the with this module and then unload it.
 
 ```ASYNC_GROUP_UPDATED (17)```
 This is an internal only command that carry ```TEXT``` command line arguments to notify all ```Session``` objects that a group's host rank has changed. Example: ```-name "group_name" -rank 2```. All ```Session``` object that have matching group names to ```group_name``` will need to update the host rank to ```2```. When the session's host rank to adjusted this way, the session will need to re-check the currently loaded commands and determine if it needs to remove any commands that the user no longer have access to and add any commands that the user may have gained access to.

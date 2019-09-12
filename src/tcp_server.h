@@ -23,6 +23,30 @@
 #include "make_cert.h"
 #include "openssl/ssl.h"
 
+class ModDeleteTimer : public QTimer
+{
+    Q_OBJECT
+
+private:
+
+    QString      modName;
+    QStringList *delQueue;
+
+private slots:
+
+    void delMod();
+
+public slots:
+
+    void resetTimer(const QString &mod);
+
+public:
+
+    explicit ModDeleteTimer(const QString &mod, QStringList *queue, QObject *parent = nullptr);
+};
+
+//--------------------------
+
 class TCPServer: public QTcpServer
 {
     Q_OBJECT
@@ -32,23 +56,20 @@ private:
     QSharedMemory *sessionCounter;
     QLocalServer  *controlPipe;
     QLocalSocket  *controlSocket;
-    QTimer        *dirDelTimer;
-    QStringList    dirsToDel;
+    QStringList    modDelQueue;
     uint           flags;
 
     bool servOverloaded();
     bool inBanList(const QString &ip);
-    void syncModPath();
     void incomingConnection(qintptr socketDescriptor);
 
 private slots:
 
-    void delDir();
     void procPipeIn();
     void newPipeConnection();
     void closedPipeConnection();
     void sessionEnded();
-    void delayedDirDel(const QString &path);
+    void delayedModDel(const QString &modName);
 
 public slots:
 
@@ -64,26 +85,8 @@ public:
 signals:
 
     void connectPeers(QSharedPointer<SessionCarrier> peer);
+    void resetModDelTimer(const QString &modName);
     void endAllSessions();
-};
-
-//--------------------------------
-
-class IPCServer: public QLocalServer
-{
-    Q_OBJECT
-
-private:
-
-    uint flags;
-
-    void incomingConnection(qintptr socketDescriptor);
-
-public:
-
-    explicit IPCServer(QObject *parent = nullptr);
-
-    bool start();
 };
 
 #endif // TCP_SERVER_H

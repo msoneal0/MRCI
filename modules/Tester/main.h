@@ -23,14 +23,14 @@
 
 #include "command.h"
 
-#define IMPORT_REV 1
+#define IMPORT_REV 2
 
 // the import revision is a module compatibility version number
 // used by the host to determine if it can successfully load and
 // run this library or not. as of right now, the host supports rev1
 // and up.
 
-#define LIB_VERSION "1.0.0"
+#define LIB_VERSION "1.0.1"
 #define LIB_NAME    "MRCITestMod"
 
 // the versioning system for the library itself can be completely
@@ -38,11 +38,11 @@
 
 QString libName();
 
-class Loader : public ModCommandLoader
+class Loader : public CommandLoader
 {
     Q_OBJECT
     Q_PLUGIN_METADATA(IID "MRCI.host.module")
-    Q_INTERFACES(ModCommandLoader)
+    Q_INTERFACES(CommandLoader)
 
 public:
 

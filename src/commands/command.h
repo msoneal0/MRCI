@@ -152,31 +152,19 @@ public:
 
     virtual ~CommandLoader() {}
 
-    virtual QStringList    pubCmdList()     {return QStringList();}
-    virtual QStringList    cmdList()        {return QStringList();}
-    virtual QStringList    rankExemptList() {return QStringList();}
-    virtual ExternCommand *cmdObj(const QString &) {return nullptr;}
-};
-
-class ModCommandLoader : public CommandLoader
-{
-    Q_OBJECT
-
-public:
-
-    explicit ModCommandLoader(QObject *parent = nullptr) : CommandLoader(parent) {}
-
-    virtual ~ModCommandLoader() {}
-
-    virtual void    modPath(const QString &) {}
-    virtual void    aboutToDelete() {}
-    virtual bool    hostRevOk(quint64) {return false;}
-    virtual QString lastError()        {return "";}
-    virtual quint64 rev()              {return 0;}
+    virtual void           modPath(const QString &) {}
+    virtual void           aboutToDelete()          {}
+    virtual bool           hostRevOk(quint64)       {return false;}
+    virtual QString        lastError()              {return "";}
+    virtual quint64        rev()                    {return 0;}
+    virtual QStringList    pubCmdList()             {return QStringList();}
+    virtual QStringList    cmdList()                {return QStringList();}
+    virtual QStringList    rankExemptList()         {return QStringList();}
+    virtual ExternCommand *cmdObj(const QString &)  {return nullptr;}
 };
 
 QT_BEGIN_NAMESPACE
-Q_DECLARE_INTERFACE(ModCommandLoader, MOD_LOADER_IID)
+Q_DECLARE_INTERFACE(CommandLoader, MOD_LOADER_IID)
 QT_END_NAMESPACE
 
 #endif // EXTERN_COMMAND_H

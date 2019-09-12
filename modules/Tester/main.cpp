@@ -21,7 +21,7 @@ QString libName()
     return QString(LIB_NAME) + "_" + QString(LIB_VERSION);
 }
 
-Loader::Loader(QObject *parent) : ModCommandLoader(parent)
+Loader::Loader(QObject *parent) : CommandLoader(parent)
 {
 }
 

@@ -48,7 +48,10 @@ if [ $? -eq 0 ]; then
     mkdir -v ./build/
     mkdir -v ./build/sqldrivers
     mkdir -v ./build/lib
-    ldd ./$bin_name | grep "=> /" | awk '{print $3}' | xargs -I '{}' cp -v '{}' ./build/lib
+    ldd ./$bin_name | grep "libQt" | awk '{print $3}' | xargs -I '{}' cp -v '{}' ./build/lib
+    ldd ./$bin_name | grep "libicu" | awk '{print $3}' | xargs -I '{}' cp -v '{}' ./build/lib
+    ldd ./$bin_name | grep "libssl" | awk '{print $3}' | xargs -I '{}' cp -v '{}' ./build/lib
+    ldd ./$bin_name | grep "libcrypto" | awk '{print $3}' | xargs -I '{}' cp -v '{}' ./build/lib
     mv -v ./$bin_name ./build/$bin_name
     cp -v $qt_dir/../plugins/sqldrivers/libqsqlite.so ./build/sqldrivers
     
@@ -82,8 +85,6 @@ if [ $? -eq 0 ]; then
     echo "sudo chmod -R 755 $install_dir/sqldrivers" >> $setup_script
     echo "sudo chmod 755 /etc/systemd/system/$bin_name@$USER.service" >> $setup_script
     echo "sudo ln -sf $install_dir/$bin_name.sh $bin_dir/$bin_name" >> $setup_script
-    echo "cd $install_dir/lib" >> $setup_script
-    echo "ldd $install_dir/$bin_name | grep \"=> /\" | awk '{if (\$3 != \"not found\") print \$1}' | xargs -I '{}' sudo rm -f '{}'" >> $setup_script
     echo "sudo systemctl start $bin_name@$USER" >> $setup_script
     echo "sudo systemctl enable $bin_name@$USER" >> $setup_script
     echo "echo \"\nInstallation finished. If you ever need to uninstall this application, run this command:\n\"" >> $setup_script

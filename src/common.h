@@ -74,7 +74,7 @@
 
 #define FRAME_HEADER_SIZE   6
 #define MAX_FRAME_BITS      24
-#define IMPORT_REV          1
+#define IMPORT_REV          2
 #define LOCAL_BUFFSIZE      16777215
 #define CLIENT_INIT_TIME    5000
 #define IPC_PREP_TIME       1000
@@ -353,8 +353,6 @@ signals:
     void termAllCommands();
     void castPeerInfo();
     void reloadCommands();
-    void loadMod(const QString &path);
-    void unloadMod(const QString &path);
     void termCommandId(quint16 cmdId);
     void backendDataOut(quint16 cmdId, const QByteArray &data, uchar typeId);
 };
