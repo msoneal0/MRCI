@@ -68,7 +68,7 @@ makeself
 Linux_build.sh is a custom script designed to build this project from the source code using qmake, make and makeself. You can pass 2 optional arguments:
 
 1. The path to the QT bin folder in case you want to compile with a QT install not defined in PATH.
-2. Path of the output makeself file (usually has a .run extension). If not given, the outfile will be named mrci-1.0.0.run in the source code folder.
+2. Path of the output makeself file (usually has a .run extension). If not given, the outfile will be named mrci-1.0.1.run in the source code folder.
 
 Build:
 ```
@@ -77,8 +77,8 @@ sh ./linux_build.sh
 ```
 Install:
 ```
-chmod +x ./mrci-1.0.0.run
-./mrci-1.0.0.run
+chmod +x ./mrci-1.0.1.run
+./mrci-1.0.1.run
 ```
 
 The makeself installer not only installs the application but also installs it as a service if the target linux system supports systemd.
