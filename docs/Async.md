@@ -14,7 +14,7 @@ These are considered "virtual" commands because there is no defined command obje
 #define ASYNC_CAST               5   // internal only
 #define ASYNC_MAXSES             6   // internal only
 #define ASYNC_LOGOUT             7   // internal only
-#define ASYNC_USER_DELETED       8   // internal only
+#define ASYNC_USER_DELETED       8   
 #define ASYNC_GROUP_RENAMED      9   // internal only
 #define ASYNC_DISP_RENAMED       10  // internal only
 #define ASYNC_GRP_TRANS          11  // internal only
@@ -76,7 +76,7 @@ Internal only async command that is used by internal commands to send a ```BYTES
 This internal only async command doesn't carry any data. This is just used to notify the main process ```Session``` object that the user has logged out and should not attempt to restore authentication in case of a session crash. This doesn't actually do the logout.
 
 ```ASYNC_USER_DELETED (8)```
-This internal only async command carry ```TEXT``` data that is the user name of the user account that was deleted from the host database. All ```Session``` objects that get this command must read and match this to the user name that is currently logged in for that object. If the user name matches, the ```Session``` object must logout since the user account no longer exists.
+This async command carry ```TEXT``` data that is the user name of the user account that was deleted from the host database. All ```Session``` objects that get this command must read and match this to the user name that is currently logged in for that object. If the user name matches, the ```Session``` object must logout and forward this to the client since the user account no longer exists.
 
 ```ASYNC_GROUP_RENAMED (9)```
 Internal only async command that carry ```TEXT``` command line arguments to notify all ```Session``` objects that the a host group name has changed. Example: ```-src "old_group_name" -dst "new_group_name"```. All ```Session``` objects that have matching current group names to ```old_group_name``` must update that group name to ```new_group_name``` and also send a ```ASYNC_SYS_MSG``` containing an updated ```MY_INFO```.

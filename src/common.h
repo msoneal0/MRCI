@@ -92,7 +92,7 @@
 #define ASYNC_CAST               5   // internal only
 #define ASYNC_MAXSES             6   // internal only
 #define ASYNC_LOGOUT             7   // internal only
-#define ASYNC_USER_DELETED       8   // internal only
+#define ASYNC_USER_DELETED       8
 #define ASYNC_GROUP_RENAMED      9   // internal only
 #define ASYNC_DISP_RENAMED       10  // internal only
 #define ASYNC_GRP_TRANS          11  // internal only

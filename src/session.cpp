@@ -944,6 +944,7 @@ void Session::backendDataIn(quint16 cmdId, const QByteArray &data)
                     {
                         logout();
                         dataToClient(ASYNC_SYS_MSG, toTEXT("\nsystem: your session was forced to logout because your account was deleted.\n"), TEXT);
+                        dataToClient(ASYNC_USER_DELETED, data, TEXT);
                     }
                 }
             }
