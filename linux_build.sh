@@ -12,7 +12,13 @@ bin_dir="/usr/bin"
 tmp_dir="$HOME/.cache/mrci_build"
 user="$USER"
 
-if [ "$qt_dir" != "" ]; then
+if [ ! -d "$qt_dir" ]; then
+
+ echo "a valid path to Qt was not provided, falling back to the default: /usr/lib/x86_64-linux-gnu/qt5/bin"
+
+ qt_dir="/usr/lib/x86_64-linux-gnu/qt5/bin"
+ 
+else
 
  PATH=$qt_dir:$PATH
  
@@ -29,14 +35,12 @@ if [ -d "$tmp_dir" ]; then
  rm -rfv $tmp_dir
   
 fi
- 
-mkdir -vp $tmp_dir
-cp -rv $src_dir/. $tmp_dir
- 
-if [ $? -eq 0 ]; then
- 
+
+if [ $? -eq 0 -a -d "$qt_dir" ]; then
+
+  mkdir -vp $tmp_dir
+  cp -rv $src_dir/. $tmp_dir
   cd $tmp_dir
- 
   qmake -config release
  
   if [ $? -eq 0 ]; then
@@ -61,8 +65,10 @@ if [ $? -eq 0 ]; then
     service_file="./build/$bin_name.service"
     
     echo "#!/bin/sh" > $startup_script
-    echo "export LD_LIBRARY_PATH=$install_dir/lib" >> $startup_script
-    echo "$install_dir/$bin_name \$1 \$2 \$3 \$4 \$5 \$6 \$7 \$8 \$9 \$10" >> $startup_script
+    echo "export QTDIR=$install_dir" >> $startup_script
+    echo "export QT_PLUGIN_PATH=$install_dir" >> $startup_script
+    echo "export LD_LIBRARY_PATH=\"$install_dir/lib:\$LD_LIBRARY_PATH\"" >> $startup_script
+    echo "$install_dir/$bin_name \$1 \$2 \$3" >> $startup_script
    
     echo "#!/bin/sh" > $setup_script
     echo "if [ -f \"$install_dir/uninstall.sh\" ]; then" >> $setup_script
