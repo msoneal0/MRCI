@@ -78,7 +78,7 @@ sh ./linux_build.sh
 Install:
 ```
 chmod +x ./mrci-1.1.2.run
-./mrci-1.0.1.run
+./mrci-1.1.2.run
 ```
 
 The makeself installer not only installs the application but also installs it as a service if the target linux system supports systemd.
