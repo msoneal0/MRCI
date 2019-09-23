@@ -5,7 +5,7 @@ installer_file="$2"
 
 src_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 bin_name="mrci"
-app_version="1.0.0"
+app_version="1.1.2"
 app_name="MRCI"
 install_dir="/opt/$bin_name"
 bin_dir="/usr/bin"

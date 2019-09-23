@@ -16,6 +16,11 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
+CommandLoader *hostImport()
+{
+    return new Loader();
+}
+
 QString libName()
 {
     return QString(LIB_NAME) + "_" + QString(LIB_VERSION);
@@ -25,9 +30,30 @@ Loader::Loader(QObject *parent) : CommandLoader(parent)
 {
 }
 
-bool Loader::hostRevOk(quint64 minRev)
+bool Loader::hostRevOk(quint64 minRev, quint16 vMajor, quint16 vMinor, quint16 vPatch)
 {
-    return minRev >= IMPORT_REV;
+    Q_UNUSED(vPatch)
+
+    bool ret = false;
+
+    if (minRev < IMPORT_REV)
+    {
+        err = "This module requires the host to supprt minimum import rev " + QString::number(IMPORT_REV) + " or higher.";
+    }
+    else if (vMajor != 1)
+    {
+        err = "Host major " + QString::number(vMajor) + " not supported. expected 1.";
+    }
+    else if (vMinor < 1)
+    {
+        err = "Host minor " + QString::number(vMinor) + " not supported. expected 1 or higher.";
+    }
+    else
+    {
+        ret = true;
+    }
+
+    return ret;
 }
 
 quint64 Loader::rev()
@@ -40,6 +66,11 @@ QStringList Loader::cmdList()
     return QStringList() << "test_text" << "test_input" << "test_loop" << "test_inherit";
 }
 
+QString Loader::lastError()
+{
+    return err;
+}
+
 ExternCommand *Loader::cmdObj(const QString &name)
 {
     ExternCommand *ret = nullptr;
@@ -48,6 +79,10 @@ ExternCommand *Loader::cmdObj(const QString &name)
     else if (name == "test_input")   ret = new ModInput(this);
     else if (name == "test_loop")    ret = new ModLoop(this);
     else if (name == "test_inherit") ret = new ModInherit(this);
+    else
+    {
+        err = "Command name '" + name + "' does not exists in this module. (" + QString(LIB_NAME) + ")";
+    }
 
     return ret;
 }

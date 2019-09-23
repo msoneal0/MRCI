@@ -23,7 +23,7 @@
 
 #include "command.h"
 
-#define IMPORT_REV 2
+#define IMPORT_REV 3
 
 // the import revision is a module compatibility version number
 // used by the host to determine if it can successfully load and
@@ -36,20 +36,31 @@
 // the versioning system for the library itself can be completely
 // different from the host import revision.
 
+#if defined(MOD_TESTER)
+#  define MOD_TESTER_EXPORT Q_DECL_EXPORT
+#else
+#  define MOD_TESTER_EXPORT Q_DECL_IMPORT
+#endif
+
+extern "C" MOD_TESTER_EXPORT CommandLoader *hostImport();
+
 QString libName();
 
 class Loader : public CommandLoader
 {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID "MRCI.host.module")
-    Q_INTERFACES(CommandLoader)
+
+private:
+
+    QString err;
 
 public:
 
-    bool           hostRevOk(quint64 minRev);
+    bool           hostRevOk(quint64 minRev, quint16 vMajor, quint16 vMinor, quint16 vPatch);
     quint64        rev();
     ExternCommand *cmdObj(const QString &name);
     QStringList    cmdList();
+    QString        lastError();
 
     explicit Loader(QObject *parent = nullptr);
 };

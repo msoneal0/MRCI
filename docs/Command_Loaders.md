@@ -20,17 +20,17 @@ This funtion needs to work the same way as ```cmdList()``` except the loader can
 ```QStringList rankExemptList()```
 The loader can use this function to return a ```QStringList``` of all of command names that need to be exempt from host ranking system (section [5.2](Host_Features.md)). Commands listed here will be allowed to load/run regardless of what host rank the current user is.
 
-```bool hostRevOk(quint64 rev)```
-When the host calls this function, it will pass the import rev that it supports in the ```quint64``` parameter. Use this function to return if this rev is acceptable or not. The host will give up loading the module if the rev is not acceptable.
+```bool hostRevOk(quint64 importRev, quint16 hostMajor, quint16 hostMinor, quint16 hostPatch)```
+When the host calls this function, it will pass the import rev that it supports in the ```quint64``` parameter along with it's own version number in the next 3 ```quint16``` parameters. Use this function to return if this rev or host version is acceptable or not. The host will give up loading the module if it is not acceptable.
 
 ```quint64 rev()```
-Use this function to return the import rev that this module supports. The host will decide if it is acceptable or not.
+Use this function to return the minimum import rev that the module supports. The host will decide if it is acceptable or not.
 
 ```QString lastError()```
 The host will call this function if a command object fails to load or if ```hostRevOk()``` returns false so it can log the error message returned by it to the host database.
 
 ```void modPath(QString path)```
-The host will call this function after successfully negotiating the import rev. The ```QString``` parameter passed into this will have the absolute path to the module's install directory. You can use this path to load additional files that came bundled the module.
+The host will call this function after successfully negotiating the import rev. The ```QString``` parameter passed into this will have the absolute path to the module's install directory. You can use this path to load additional files that came bundled with the module.
 
 ```void aboutToDelete()```
 The host will call this function before calling ```deleteLater()```. All command objects at this point should already be deleted, use this opportunity to free any resources related to the loader itself. Unload any additional lib files that the loader may have used.
@@ -42,12 +42,16 @@ Here's a few notes to consider when using this class:
 
 ### 2.3 Modules ###
 
-External commands are added to the host through modules based on low level [QT plugins](https://doc.qt.io/qt-5/plugins-howto.html). Each module must define a ```CommandLoader``` class in it's main library file and the file itself must be named 'main' with a library file extension that the host platform supports (main.so, main.dll, etc..). Modules are installed using the *add_mod* internal command that supports extracting the module's library files from an archive file (.zip, .tar, etc...) or just a single library file (.so, .dll, .a, etc...).
+External commands are added to the host through modules based on C/C++ style shared library files; see [this](https://doc.qt.io/qt-5/sharedlibrary.html) to learn how to create shared library files using the Qt API. The library must export a function named ```hostImport``` that returns a pointer to a new ```CommandLoader``` object when it is called by the host. Example:
 
-In the case of an archive file, it extracts all of the files from the the archive file while preserving the directory tree so you can bundle additional files that your module depends on but as mentioned before, a library file named 'main' must be present on the base directory.
+```extern "C" LIB_EXPORT CommandLoader *hostImport();```
+
+The ```CommandLoader``` returned by this function must never get deleted at anytime; the host will handle it's life cycle externally. Modules are installed using the *add_mod* internal command that supports extracting the module's library files from an archive file (.zip, .tar, etc...) or just a single library file (.so, .dll, .a, etc...).
+
+In the case of an archive file, the host will extract all of the files from it while preserving the directory tree so you can bundle additional files that your module might depend on; however, the main library file that contains the ```hostImport``` function must be named 'main' (main.so, main.dll, etc..) and must be present in the root directory of the archive.
 
 A template and an example of a module can be found in the 'modules/Tester' directory of the source code of this project. It provides the command.cpp and command.h files that contain the ```CommandLoader``` and ```ExternCommand``` classes that are needed to create a module. Also feel free to copy the command.cpp and command.h files from 'src/commands' if you prefer.
 
 ### 2.4 The Import Rev ###
 
-The import rev is a single digit versioning system for external modules that help the host determine if it is compatible with the module it is attempting to load or not. Bumps to this rev is usually triggered by significant changes to the ```CommandLoader``` class. Compatibility negotiation is a two way communication between the host ```CmdExecutor``` and the module itself using the virtual functions described in section 2.2.
+The import rev is a single digit versioning system for external modules that help the host determine if it is compatible with the module it is attempting to load or not. Bumps to this rev is usually triggered by significant changes to the ```CommandLoader``` class or the method at which the host imports this object. Compatibility negotiation is a two way communication between the host ```CmdExecutor``` and the module itself using the virtual functions described in section 2.2.

@@ -20,6 +20,8 @@
 #include "common.h"
 #include "int_loader.h"
 
+typedef CommandLoader *(*ModImportFunc)();
+
 class CmdExecutor : public QObject
 {
     Q_OBJECT
@@ -31,7 +33,7 @@ private:
     InternalCommandLoader          *internalCmds;
     QSharedMemory                  *exeDebugInfo;
     QHash<QString, CommandLoader*>  cmdLoaders;
-    QHash<QString, QPluginLoader*>  plugins;
+    QHash<QString, QLibrary*>       plugins;
     QHash<QString, QList<quint16> > cmdIdsByModName;
     QList<quint16>                  moreInputCmds;
     QList<quint16>                  activeLoopCmds;

@@ -40,7 +40,6 @@
 #include <QSysInfo>
 #include <QFileInfoList>
 #include <QTemporaryFile>
-#include <QPluginLoader>
 #include <QChar>
 #include <QtMath>
 #include <QStorageInfo>
@@ -67,6 +66,7 @@
 #include <QTcpSocket>
 #include <QMessageLogContext>
 #include <QtGlobal>
+#include <QLibrary>
 
 #include "db.h"
 #include "shell.h"
@@ -74,7 +74,7 @@
 
 #define FRAME_HEADER_SIZE   6
 #define MAX_FRAME_BITS      24
-#define IMPORT_REV          2
+#define IMPORT_REV          3
 #define LOCAL_BUFFSIZE      16777215
 #define CLIENT_INIT_TIME    5000
 #define IPC_PREP_TIME       1000
@@ -84,6 +84,7 @@
 #define EXE_CRASH_LIMIT     5
 #define EXE_DEBUG_INFO_SIZE 512
 #define SERVER_HEADER_TAG   "MRCI"
+#define MOD_IMPORT_FUNC     "hostImport"
 
 #define ASYNC_RDY                1
 #define ASYNC_SYS_MSG            2

@@ -305,6 +305,7 @@ void CmdExecutor::close()
     for (auto cmdLoader : cmdLoaders.values())
     {
         cmdLoader->aboutToDelete();
+        cmdLoader->deleteLater();
     }
 
     for (auto plugin : plugins.values())
@@ -395,49 +396,58 @@ QString CmdExecutor::getModFile(const QString &modName)
 }
 
 void CmdExecutor::loadModFile(const QString &modName)
-{
-    bool           modOk        = false;
-    QString        path         = getModFile(modName);
-    auto          *pluginLoader = new QPluginLoader(path);
-    QObject       *cmdLoaderObj = pluginLoader->instance();
-    CommandLoader *cmdLoader    = qobject_cast<CommandLoader*>(cmdLoaderObj);
+{   
+    bool        modOk        = false;
+    QStringList ver          = QCoreApplication::applicationVersion().split('.');
+    QString     mainFilePath = getModFile(modName);
+    QString     path         = QFileInfo(mainFilePath).path();
+    auto       *lib          = new QLibrary(mainFilePath, this);
 
-    if (!pluginLoader->isLoaded())
+    lib->load();
+
+    ModImportFunc importFunc = reinterpret_cast<ModImportFunc>(lib->resolve(MOD_IMPORT_FUNC));
+
+    if (!importFunc)
     {
-        qDebug() << "CmdExecutor::loadModFile() err: failed to load mod lib file: " << path << " reason: " << pluginLoader->errorString();
-    }
-    else if (!cmdLoaderObj)
-    {
-        qDebug() << "CmdExecutor::loadModFile() err: failed to load mod lib file: " << path << " reason: the root component object could not be instantiated.";
-    }
-    else if (!cmdLoader)
-    {
-        qDebug() << "CmdExecutor::loadModFile() err: failed to load mod lib file: " << path << " reason: the ModCommandLoader object could not be instantiated.";
-    }
-    else if (cmdLoader->rev() < IMPORT_REV)
-    {
-        qDebug() << "CmdExecutor::loadModFile() err: failed to load mod lib file: " << path << " reason: module import rev " << cmdLoader->rev() << " not compatible with host rev " << IMPORT_REV << ".";
-    }
-    else if (!cmdLoader->hostRevOk(IMPORT_REV))
-    {
-        qDebug() << "CmdExecutor::loadModFile() err: failed to load mod lib file: " << path << " the module rejected the host import rev. reason: " << cmdLoader->lastError() << ".";
+        qDebug() << "CmdExecutor::loadModFile() err: failed to load mod lib file: " << mainFilePath << " reason: " << lib->errorString();
     }
     else
     {
-        modOk = true;
+        wrCrashDebugInfo(" exe func: loadModFile()\n path: " + mainFilePath + " \nmod name: " + modName + " \nnote: calling the module's import function.");
 
-        wrCrashDebugInfo(" exe func: loadModFile()\n path: " + path + " \nmod name: " + modName + " \nnote: calling the module's modPath() function.");
+        CommandLoader *cmdLoader = importFunc();
 
-        cmdLoader->modPath(QFileInfo(path).path());
+        wrCrashDebugInfo(" exe func: loadModFile()\n path: " + mainFilePath + " \nmod name: " + modName + " \nnote: running import rev negotiations.");
 
-        cmdLoaders.insert(modName, cmdLoader);
-        plugins.insert(modName, pluginLoader);
+        if (!cmdLoader)
+        {
+            qDebug() << "CmdExecutor::loadModFile() err: failed to load mod lib file: " << mainFilePath << " reason: the CommandLoader object returned by the import function is null.";
+        }
+        else if (cmdLoader->rev() < IMPORT_REV)
+        {
+            qDebug() << "CmdExecutor::loadModFile() err: failed to load mod lib file: " << mainFilePath << " reason: module import rev " << cmdLoader->rev() << " not compatible with host rev " << IMPORT_REV << ".";
+        }
+        else if (!cmdLoader->hostRevOk(IMPORT_REV, ver[0].toUShort(), ver[1].toUShort(), ver[2].toUShort()))
+        {
+            qDebug() << "CmdExecutor::loadModFile() err: failed to load mod lib file: " << mainFilePath << " the module rejected the host rev/version. reason: " << cmdLoader->lastError() << ".";
+        }
+        else
+        {
+            modOk = true;
+
+            wrCrashDebugInfo(" exe func: loadModFile()\n path: " + mainFilePath + " \nmod name: " + modName + " \nnote: calling the module's modPath() function.");
+
+            cmdLoader->modPath(path);
+
+            cmdLoaders.insert(modName, cmdLoader);
+            plugins.insert(modName, lib);
+        }
     }
 
     if (!modOk)
     {
-        pluginLoader->unload();
-        pluginLoader->deleteLater();
+        lib->unload();
+        lib->deleteLater();
     }
 }
 
@@ -447,9 +457,13 @@ void CmdExecutor::unloadModFile(const QString &modName)
     {
         termCommandsInList(cmdIdsByModName[modName], true);
 
-        wrCrashDebugInfo(" exe func: unloadModFile()\n mod name: " + modName + "\n note: calling the modules's aboutToDelete()");
+        wrCrashDebugInfo(" exe func: unloadModFile()\n mod name: " + modName + "\n note: calling the modules's aboutToDelete().");
 
         cmdLoaders[modName]->aboutToDelete();
+        cmdLoaders[modName]->deleteLater();
+
+        wrCrashDebugInfo(" exe func: unloadModFile()\n mod name: " + modName + "\n note: calling the modules's library unload function.");
+
         plugins[modName]->unload();
         plugins[modName]->deleteLater();
 

@@ -130,6 +130,7 @@ void HostInfo::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uc
         QTextStream txtOut(&txt);
 
         txtOut << "Application:    " << QCoreApplication::applicationName() << " v" << QCoreApplication::applicationVersion() << " " << QSysInfo::WordSize << "Bit" << endl;
+        txtOut << "Qt Base:        " << QT_VERSION_STR << endl;
         txtOut << "Import Rev:     " << IMPORT_REV << endl;
         txtOut << "Host Name:      " << QSysInfo::machineHostName() << endl;
         txtOut << "Host OS:        " << QSysInfo::prettyProductName() << endl;

@@ -152,15 +152,15 @@ public:
 
     virtual ~CommandLoader() {}
 
-    virtual void           modPath(const QString &) {}
-    virtual void           aboutToDelete()          {}
-    virtual bool           hostRevOk(quint64)       {return false;}
-    virtual QString        lastError()              {return "";}
-    virtual quint64        rev()                    {return 0;}
-    virtual QStringList    pubCmdList()             {return QStringList();}
-    virtual QStringList    cmdList()                {return QStringList();}
-    virtual QStringList    rankExemptList()         {return QStringList();}
-    virtual ExternCommand *cmdObj(const QString &)  {return nullptr;}
+    virtual void           modPath(const QString &)                      {}
+    virtual void           aboutToDelete()                               {}
+    virtual bool           hostRevOk(quint64, quint16, quint16, quint16) {return false;}
+    virtual QString        lastError()                                   {return "";}
+    virtual quint64        rev()                                         {return 0;}
+    virtual QStringList    pubCmdList()                                  {return QStringList();}
+    virtual QStringList    cmdList()                                     {return QStringList();}
+    virtual QStringList    rankExemptList()                              {return QStringList();}
+    virtual ExternCommand *cmdObj(const QString &)                       {return nullptr;}
 };
 
 QT_BEGIN_NAMESPACE
