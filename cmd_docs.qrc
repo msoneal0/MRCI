@@ -27,6 +27,7 @@
         <file>docs/intern_commands/fs_list.md</file>
         <file>docs/intern_commands/fs_mkpath.md</file>
         <file>docs/intern_commands/fs_move.md</file>
+        <file>docs/intern_commands/fs_tree.md</file>
         <file>docs/intern_commands/fs_upload.md</file>
         <file>docs/intern_commands/host_config.md</file>
         <file>docs/intern_commands/host_info.md</file>

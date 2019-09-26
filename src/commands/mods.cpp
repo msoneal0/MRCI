@@ -125,13 +125,11 @@ void UploadMod::procFinished(int exStatus)
     }
     else if (!libExists(modPath + "/main"))
     {
-        errTxt("\nerr: The module's main library file does not exists.\n");
+        errTxt("\nerr: The module's main library file does not exists or is not supported.\n");
         clearOnfailure();
     }
     else
     {
-        modPath = modPath + "/main";
-
         Query db(this);
 
         db.setType(Query::UPDATE, TABLE_MODULES);
@@ -229,7 +227,7 @@ void UploadMod::setup()
 
 void UploadMod::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
 {
-    Q_UNUSED(sharedObjs);
+    Q_UNUSED(sharedObjs)
 
     if (moreInputEnabled() && (dType == GEN_FILE) && (proc->state() == QProcess::NotRunning))
     {
@@ -322,7 +320,7 @@ void UploadMod::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, u
 
 void DelMod::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
 {
-    Q_UNUSED(sharedObjs);
+    Q_UNUSED(sharedObjs)
 
     if (dType == TEXT)
     {

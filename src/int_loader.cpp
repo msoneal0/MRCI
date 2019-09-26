@@ -117,6 +117,7 @@ InternalCommandLoader::InternalCommandLoader(RWSharedObjs *sharedData, QObject *
     objNames << SetGroupRank::cmdName();
     objNames << CmdInfo::cmdName();
     objNames << OwnerOverride::cmdName();
+    objNames << Tree::cmdName();
 }
 
 void InternalCommandLoader::loadSettings()
@@ -292,6 +293,7 @@ InternCommand *InternalCommandLoader::cmdObj(const QString &name)
         else if (noCaseMatch(name, SetGroupRank::cmdName()))          ret = new SetGroupRank(this);
         else if (noCaseMatch(name, CmdInfo::cmdName()))               ret = new CmdInfo(this);
         else if (noCaseMatch(name, OwnerOverride::cmdName()))         ret = new OwnerOverride(this);
+        else if (noCaseMatch(name, Tree::cmdName()))                  ret = new Tree(this);
 
         if (ret == nullptr)
         {

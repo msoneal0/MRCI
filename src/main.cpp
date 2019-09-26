@@ -77,6 +77,7 @@ int main(int argc, char *argv[])
 
     serializeThread(app.thread());
 
+    QDir::setCurrent(QDir::homePath());
     QCoreApplication::setApplicationName(APP_NAME);
     QCoreApplication::setApplicationVersion(APP_VER);
 

@@ -19,13 +19,10 @@
 
 #define TXT_CODEC      "UTF-16LE"
 #define TXT_CODEC_BITS 16
-#define MOD_LOADER_IID "MCRI.host.module"
 
 #include <QObject>
 #include <QTextCodec>
-#include <QCoreApplication>
 #include <QHash>
-#include <QPluginLoader>
 
 enum TypeID
 {
@@ -111,14 +108,14 @@ public:
 
     virtual void        procBin(const SharedObjs *, const QByteArray &, uchar) {}
     virtual void        aboutToDelete() {}
-    virtual void        term() {}
-    virtual bool        handlesGenfile() {return false;}
+    virtual void        term()          {}
     virtual bool        errState();
-    virtual QString     shortText() {return "";}
-    virtual QString     ioText()    {return "";}
-    virtual QString     longText()  {return "";}
-    virtual QString     libText()   {return "";}
-    virtual QStringList internRequest() {return QStringList();}
+    virtual bool        handlesGenfile() {return false;}
+    virtual QString     shortText()      {return "";}
+    virtual QString     ioText()         {return "";}
+    virtual QString     longText()       {return "";}
+    virtual QString     libText()        {return "";}
+    virtual QStringList internRequest()  {return QStringList();}
 
     QHash<QString, ExternCommand*> internCommands;
     quint16                        cmdId;
@@ -162,9 +159,5 @@ public:
     virtual QStringList    rankExemptList()                              {return QStringList();}
     virtual ExternCommand *cmdObj(const QString &)                       {return nullptr;}
 };
-
-QT_BEGIN_NAMESPACE
-Q_DECLARE_INTERFACE(CommandLoader, MOD_LOADER_IID)
-QT_END_NAMESPACE
 
 #endif // EXTERN_COMMAND_H

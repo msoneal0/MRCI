@@ -217,4 +217,28 @@ public:
     explicit ChangeDir(QObject *parent = nullptr);
 };
 
+//--------------------------
+
+class Tree : public InternCommand
+{
+    Q_OBJECT
+
+private:
+
+    QFileInfoList queue;
+    bool          infoFrames;
+    bool          noHidden;
+
+    void printList(const QString &path);
+
+public:
+
+    static QString cmdName();
+
+    void term();
+    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+
+    explicit Tree(QObject *parent = nullptr);
+};
+
 #endif // FS_H

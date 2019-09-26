@@ -20,11 +20,12 @@ DownloadFile::DownloadFile(QObject *parent) : InternCommand(parent) {file = new 
 UploadFile::UploadFile(QObject *parent)     : InternCommand(parent) {file = new QFile(this);}
 Delete::Delete(QObject *parent)             : InternCommand(parent) {}
 Copy::Copy(QObject *parent)                 : InternCommand(parent) {src = new QFile(this); dst = new QFile(this);}
-Move::Move(QObject *parent)                 : Copy(parent) {}
+Move::Move(QObject *parent)                 : Copy(parent)          {}
 MakePath::MakePath(QObject *parent)         : InternCommand(parent) {}
 ListFiles::ListFiles(QObject *parent)       : InternCommand(parent) {}
 FileInfo::FileInfo(QObject *parent)         : InternCommand(parent) {}
 ChangeDir::ChangeDir(QObject *parent)       : InternCommand(parent) {}
+Tree::Tree(QObject *parent)                 : InternCommand(parent) {}
 
 QString DownloadFile::cmdName() {return "fs_download";}
 QString UploadFile::cmdName()   {return "fs_upload";}
@@ -35,6 +36,7 @@ QString MakePath::cmdName()     {return "fs_mkpath";}
 QString ListFiles::cmdName()    {return "fs_list";}
 QString FileInfo::cmdName()     {return "fs_info";}
 QString ChangeDir::cmdName()    {return "fs_cd";}
+QString Tree::cmdName()         {return "fs_tree";}
 
 bool DownloadFile::handlesGenfile()
 {
@@ -74,7 +76,7 @@ void DownloadFile::sendChunk()
 
 void DownloadFile::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
 {
-    Q_UNUSED(sharedObjs);
+    Q_UNUSED(sharedObjs)
 
     if ((dType == GEN_FILE) && (moreInputEnabled() || loopEnabled()))
     {
@@ -196,7 +198,7 @@ void UploadFile::run()
 
 void UploadFile::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
 {
-    Q_UNUSED(sharedObjs);
+    Q_UNUSED(sharedObjs)
 
     if (((dType == GEN_FILE) || (dType == TEXT)) && confirm)
     {
@@ -299,7 +301,7 @@ void Delete::run()
 
 void Delete::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
 {
-    Q_UNUSED(sharedObjs);
+    Q_UNUSED(sharedObjs)
 
     if (moreInputEnabled() && (dType == TEXT))
     {
@@ -460,7 +462,7 @@ void Copy::run()
 
 void Copy::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
 {
-    Q_UNUSED(sharedObjs);
+    Q_UNUSED(sharedObjs)
 
     if (loopEnabled())
     {
@@ -652,7 +654,7 @@ bool Move::permissionsOk(bool dstExists)
 
 void MakePath::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
 {
-    Q_UNUSED(sharedObjs);
+    Q_UNUSED(sharedObjs)
 
     if (dType == TEXT)
     {
@@ -672,13 +674,14 @@ void MakePath::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uc
 
 void ListFiles::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
 {
-    Q_UNUSED(sharedObjs);
+    Q_UNUSED(sharedObjs)
 
     if (dType == TEXT)
     {
-        QStringList args      = parseArgs(binIn, 3);
+        QStringList args      = parseArgs(binIn, 4);
         QString     path      = getParam("-path", args);
         bool        infoFrame = argExists("-info_frame", args);
+        bool        noHidden  = argExists("-no_hidden", args);
 
         if (path.isEmpty())
         {
@@ -703,7 +706,15 @@ void ListFiles::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, u
         {
             QDir dir(path);
 
-            dir.setFilter(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
+            if (noHidden)
+            {
+                dir.setFilter(QDir::AllEntries | QDir::System | QDir::NoDotAndDotDot);
+            }
+            else
+            {
+                dir.setFilter(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
+            }
+
             dir.setSorting(QDir::DirsFirst | QDir::Name);
 
             QFileInfoList list = dir.entryInfoList();
@@ -729,7 +740,7 @@ void ListFiles::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, u
 
 void FileInfo::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
 {
-    Q_UNUSED(sharedObjs);
+    Q_UNUSED(sharedObjs)
 
     if (dType == TEXT)
     {
@@ -783,7 +794,7 @@ void FileInfo::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uc
 
 void ChangeDir::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
 {
-    Q_UNUSED(sharedObjs);
+    Q_UNUSED(sharedObjs)
 
     if (dType == TEXT)
     {
@@ -807,6 +818,106 @@ void ChangeDir::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, u
             QDir::setCurrent(path);
 
             mainTxt(QDir::currentPath() + "\n");
+        }
+    }
+}
+
+void Tree::term()
+{
+    queue.clear();
+
+    infoFrames = false;
+    noHidden   = false;
+}
+
+void Tree::printList(const QString &path)
+{
+    QDir dir(path);
+
+    if (noHidden)
+    {
+        dir.setFilter(QDir::AllEntries | QDir::System | QDir::NoDotAndDotDot);
+    }
+    else
+    {
+        dir.setFilter(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
+    }
+
+    dir.setSorting(QDir::DirsFirst | QDir::Name);
+
+    QFileInfoList list = dir.entryInfoList();
+
+    for (auto&& info : list)
+    {
+        if (infoFrames)
+        {
+            emit dataToClient(toFILE_INFO(info), FILE_INFO);
+        }
+        else if (info.isDir())
+        {
+            mainTxt(info.filePath() + "/" + "\n");
+        }
+        else
+        {
+            mainTxt(info.filePath() + "\n");
+        }
+
+        if (info.isDir())
+        {
+            queue.append(info);
+        }
+    }
+
+    if (queue.isEmpty())
+    {
+        term();
+
+        emit enableLoop(false);
+    }
+    else
+    {
+        emit enableLoop(true);
+    }
+}
+
+void Tree::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+{
+    Q_UNUSED(sharedObjs)
+
+    if (loopEnabled())
+    {
+        printList(queue.takeFirst().filePath());
+    }
+    else if (dType == TEXT)
+    {
+        QStringList args = parseArgs(binIn, 4);
+        QString     path = getParam("-path", args);
+
+        infoFrames = argExists("-info_frame", args);
+        noHidden   = argExists("-no_hidden", args);
+
+        if (path.isEmpty())
+        {
+            path = QDir::currentPath();
+        }
+
+        QFileInfo pathInfo(path);
+
+        if (!pathInfo.exists())
+        {
+            errTxt("err: '" + path + "' does not exists.\n");
+        }
+        else if (!pathInfo.isDir())
+        {
+            errTxt("err: '" + path + "' is not a directory.\n");
+        }
+        else if (!pathInfo.isReadable())
+        {
+            errTxt("err: Cannot read '" + path + "' permission denied.\n");
+        }
+        else
+        {
+            printList(path);
         }
     }
 }
