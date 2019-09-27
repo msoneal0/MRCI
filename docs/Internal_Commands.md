@@ -66,6 +66,8 @@ The host is extendable via 3rd party modules but the host itself have it's own i
 
 * [fs_move](intern_commands/fs_move.md) - move/rename a file system object (file,directory,symlink) from one location to another.
 
+* [fs_tree](intern_commands/fs_tree.md) - list all files and sub-directories of an entire directory tree.
+
 * [fs_upload](intern_commands/fs_upload.md) - upload a single file to the host.
 
 * [host_config](intern_commands/host_config.md) - view/change various host settings.

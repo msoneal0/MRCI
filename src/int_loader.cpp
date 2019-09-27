@@ -26,7 +26,7 @@ InternalCommandLoader::InternalCommandLoader(RWSharedObjs *sharedData, QObject *
     // This is used as an automated way to update the Internal_Commands doc for the source code documentation
     // keep it commented for release code.
 
-    // makeDocHeader("/path/to/source/docs/Internal_Commands.md");
+    //makeDocHeader("/docs/Internal_Commands.md");
 
     objNames << CloseHost::cmdName();
     objNames << RestartHost::cmdName();
@@ -307,7 +307,7 @@ InternCommand *InternalCommandLoader::cmdObj(const QString &name)
             // This is used as an automated way to update the Internal_Commands doc for the source code documentation
             // keep it commented for release code.
 
-            // appendToDoc("/path/to/source/docs/Internal_Commands.md", name, ret);
+            //appendToDoc("/docs/Internal_Commands.md", name, ret);
         }
     }
     else
