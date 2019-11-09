@@ -16,11 +16,6 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-QString sessionCountShareKey()
-{
-    return QString(APP_NAME) + ".SessionCount";
-}
-
 QString boolStr(bool state)
 {
     QString ret;
@@ -31,43 +26,11 @@ QString boolStr(bool state)
     return ret;
 }
 
-uint rdSessionLoad()
-{
-    uint ret = 0;
-
-    QSharedMemory mem(sessionCountShareKey());
-
-    if (mem.attach(QSharedMemory::ReadOnly))
-    {
-        mem.lock();
-
-        memcpy(&ret, mem.data(), 4);
-
-        mem.unlock();
-        mem.detach();
-    }
-
-    return ret;
-}
-
-void wrSessionLoad(uint value)
-{
-    QSharedMemory mem(sessionCountShareKey());
-
-    if (mem.attach(QSharedMemory::ReadWrite))
-    {
-        mem.lock();
-
-        memcpy(mem.data(), &value, 4);
-
-        mem.unlock();
-        mem.detach();
-    }
-}
-
 QString genSerialNumber()
 {
-    return QDateTime::currentDateTime().toString("yyyyMMddHHmmsszzz");
+    Serial::serialIndex++;
+
+    return QString::number(QDateTime::currentDateTime().toMSecsSinceEpoch()) + "-" + QString::number(Serial::serialIndex);
 }
 
 void serializeThread(QThread *thr)
@@ -75,142 +38,24 @@ void serializeThread(QThread *thr)
     thr->setObjectName(genSerialNumber());
 }
 
-QByteArray wrFrame(quint16 cmdId, const QByteArray &data, uchar dType)
+quint32 toCmdId32(quint16 cmdId, quint16 branchId)
 {
-    QByteArray cmdBa   = wrInt(cmdId, 16);
-    QByteArray typeBa  = wrInt(dType, 8);
-    QByteArray sizeBa  = wrInt(data.size(), MAX_FRAME_BITS);
+    quint32  ret = 0;
+    quint32 *dst = &ret;
 
-    return typeBa + cmdBa + sizeBa + data;
-}
-
-QByteArray wrInt(quint64 num, int numOfBits)
-{
-    QByteArray ret(numOfBits / 8, static_cast<char>(0));
-
-    num = qToLittleEndian(num);
-
-    memcpy(ret.data(), &num, static_cast<size_t>(ret.size()));
+    memcpy(dst, &cmdId, 2);
+    memcpy(dst + 2, &branchId, 2);
 
     return ret;
 }
 
-QByteArray wrInt(qint64 num, int numOfBits)
+quint16 toCmdId16(quint32 id)
 {
-    return wrInt(static_cast<quint64>(num), numOfBits);
-}
+    quint16 ret = 0;
 
-QByteArray wrInt(int num, int numOfBits)
-{
-    return wrInt(static_cast<quint64>(num), numOfBits);
-}
-
-QByteArray wrInt(uint num, int numOfBits)
-{
-    return wrInt(static_cast<quint64>(num), numOfBits);
-}
-
-QByteArray toFILE_INFO(const QFileInfo &info)
-{
-    // this function converts some information extracted from a QFileInfo object to
-    // a FILE_INFO frame.
-
-    // format: [1byte(flags)][8bytes(createTime)][8bytes(modTime)][8bytes(fileSize)]
-    //         [TEXT(fileName)][TEXT(symLinkTarget)]
-
-    //         note: the TEXT strings are 16bit NULL terminated meaning 2 bytes of 0x00
-    //               indicate the end of the string.
-
-    //         note: the integer data found in flags, modTime, createTime and fileSize
-    //               are formatted in little endian byte order (unsigned).
-
-    char flags = 0;
-
-    if (info.isFile())       flags |= IS_FILE;
-    if (info.isDir())        flags |= IS_DIR;
-    if (info.isSymLink())    flags |= IS_SYMLNK;
-    if (info.isReadable())   flags |= CAN_READ;
-    if (info.isWritable())   flags |= CAN_WRITE;
-    if (info.isExecutable()) flags |= CAN_EXE;
-    if (info.exists())       flags |= EXISTS;
-
-    QByteArray ret;
-    QByteArray strTerm(2, 0);
-
-    ret.append(flags);
-    ret.append(wrInt(info.birthTime().toMSecsSinceEpoch(), 64));
-    ret.append(wrInt(info.lastModified().toMSecsSinceEpoch(), 64));
-    ret.append(wrInt(info.size(), 64));
-    ret.append(toTEXT(info.fileName()) + strTerm);
-    ret.append(toTEXT(info.symLinkTarget() + strTerm));
+    memcpy(&ret, &id, 2);
 
     return ret;
-}
-
-QByteArray toFILE_INFO(const QString &path)
-{
-    return toFILE_INFO(QFileInfo(path));
-}
-
-QByteArray toPEER_INFO(const SharedObjs *sharedObjs)
-{
-    return *sharedObjs->sessionId +
-           *sharedObjs->userId    +
-            fixedToTEXT(*sharedObjs->userName, 24) +
-            fixedToTEXT(*sharedObjs->appName, 64) +
-            fixedToTEXT(*sharedObjs->displayName, 32);
-}
-
-QByteArray toNEW_CMD(quint16 cmdId, const QString &cmdName, ExternCommand *cmdObj)
-{
-    QByteArray idBa  = wrInt(cmdId, 16);
-    QByteArray genBa = wrInt(0, 8);
-
-    if (cmdObj->handlesGenfile())
-    {
-        genBa = wrInt(1, 8);
-    }
-
-    return idBa + genBa + fixedToTEXT(cmdName, 64) + fixedToTEXT(cmdObj->libText(), 64);
-}
-
-QByteArray toMY_INFO(const SharedObjs *sharedObjs)
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_USERS);
-    db.addColumn(COLUMN_EMAIL);
-    db.addColumn(COLUMN_EMAIL_VERIFIED);
-    db.addCondition(COLUMN_USERNAME, *sharedObjs->userName);
-    db.exec();
-
-    QByteArray confirmed;
-
-    if (db.getData(COLUMN_EMAIL_VERIFIED).toBool())
-    {
-        confirmed.append(static_cast<char>(0x01));
-    }
-    else
-    {
-        confirmed.append(static_cast<char>(0x00));
-    }
-
-    return toPEER_INFO(sharedObjs) +
-           fixedToTEXT(db.getData(COLUMN_EMAIL).toString(), 64) +
-           fixedToTEXT(*sharedObjs->groupName, 12) +
-           confirmed;
-}
-
-QByteArray toPEER_STAT(const QByteArray &sesId, const QByteArray &chIds, bool isDisconnecting)
-{
-    if (isDisconnecting)
-    {
-        return sesId + chIds + QByteArray(1, 0x01);
-    }
-    else
-    {
-        return sesId + chIds + QByteArray(1, 0x00);
-    }
 }
 
 QByteArray toTEXT(const QString &txt)
@@ -222,21 +67,21 @@ QByteArray toTEXT(const QString &txt)
 
 QByteArray fixedToTEXT(const QString &txt, int len)
 {
-    return toTEXT(txt.leftJustified(len, ' ', true));
+    return toTEXT(txt).leftJustified(len, 0, true);
+}
+
+QByteArray nullTermTEXT(const QString &txt)
+{
+    return toTEXT(txt) + QByteArray(2, 0x00);
 }
 
 QString fromTEXT(const QByteArray &txt)
 {
-    return QTextCodec::codecForName(TXT_CODEC)->toUnicode(txt);
-}
+    QByteArray ba = txt;
 
-quint64 rdInt(const QByteArray &bytes)
-{
-    quint64 ret = 0;
+    ba.replace(QByteArray(2, 0x00), QByteArray());
 
-    memcpy(&ret, bytes.data(), static_cast<size_t>(bytes.size()));
-
-    return qFromLittleEndian(ret);
+    return QTextCodec::codecForName(TXT_CODEC)->toUnicode(ba);
 }
 
 bool noCaseMatch(const QString &strA, const QString &strB)
@@ -275,7 +120,7 @@ bool validUserName(const QString &uName)
 {
     bool ret = false;
 
-    if ((uName.size() >= 2) && (uName.size() <= 24))
+    if ((uName.size() >= 2) && ((uName.size() * 2) <= BLKSIZE_USER_NAME))
     {
         ret = !uName.contains(' ') && !containsNewLine(uName);
     }
@@ -287,7 +132,7 @@ bool validCommonName(const QString &name)
 {
     bool ret = false;
 
-    if ((name.size() >= 1) && (name.size() <= 200))
+    if ((name.size() >= 1) && (name.size() <= 136))
     {
         ret = !name.contains(' ') && !containsNewLine(name);
     }
@@ -312,38 +157,13 @@ bool validEmailAddr(const QString &email)
     return ret;
 }
 
-bool validGroupName(const QString &grName)
+bool validCommandName(const QString &name)
 {
     bool ret = false;
 
-    if ((grName.size() >= 1) && (grName.size() <= 12))
+    if ((name.size() >= 1) && (name.size() <= 64))
     {
-        ret = !grName.contains(' ') && !containsNewLine(grName);
-    }
-
-    return ret;
-}
-
-bool validCommandName(const QString &name)
-{
-    bool ret = true;
-
-    if ((name.size() >= 1) && (name.size() <= 64) && !name.contains(' '))
-    {
-        for (auto&& chr : name)
-        {
-            if (!chr.isNumber() &&
-                !chr.isLetter() &&
-                !(chr == '_')   &&
-                !(chr == '?'))
-            {
-                ret = false; break;
-            }
-        }
-    }
-    else
-    {
-        ret = false;
+        ret = !name.contains(' ') && !containsNewLine(name);
     }
 
     return ret;
@@ -351,7 +171,7 @@ bool validCommandName(const QString &name)
 
 bool validDispName(const QString &name)
 {
-    return (name.size() <= 32) && !containsNewLine(name);
+    return ((name.size() * 2) <= BLKSIZE_DISP_NAME) && !containsNewLine(name);
 }
 
 bool validChName(const QString &name)
@@ -379,6 +199,24 @@ bool validLevel(const QString &num, bool includePub)
         else
         {
             ret = (num.toInt() >= 1) && (num.toInt() <= REGULAR);
+        }
+    }
+
+    return ret;
+}
+
+bool validModPath(const QString &modPath)
+{
+    bool    ret       = true;
+    QString forbidden = "|*:\"?<>";
+
+    for (auto&& chr : forbidden)
+    {
+        if (modPath.contains(chr))
+        {
+           ret = false;
+
+           break;
         }
     }
 
@@ -453,66 +291,65 @@ bool matchedVolume(const QString &pathA, const QString &pathB)
     return storA.device() == storB.device();
 }
 
-void mkPathForFile(const QString &path)
-{
-    mkPath(QFileInfo(path).absolutePath());
-}
-
-bool userExists(const QString &uName)
+bool userExists(const QString &uName, QByteArray *uId, QString *email)
 {
     Query db;
 
     db.setType(Query::PULL, TABLE_USERS);
-    db.addColumn(COLUMN_USERNAME);
+    db.addColumn(COLUMN_USER_ID);
+    db.addColumn(COLUMN_EMAIL);
     db.addCondition(COLUMN_USERNAME, uName);
     db.exec();
+
+    if (db.rows() && (uId != nullptr))
+    {
+        *uId = db.getData(COLUMN_USER_ID).toByteArray();
+    }
+
+    if (db.rows() && (email != nullptr))
+    {
+        *email = db.getData(COLUMN_EMAIL).toString();
+    }
 
     return db.rows();
 }
 
-bool recoverPWExists(const QString &uName)
+bool recoverPWExists(const QByteArray &uId)
 {
     Query db;
 
     db.setType(Query::PULL, TABLE_PW_RECOVERY);
-    db.addColumn(COLUMN_USERNAME);
-    db.addCondition(COLUMN_USERNAME, uName);
+    db.addColumn(COLUMN_USER_ID);
+    db.addCondition(COLUMN_USER_ID, uId);
     db.exec();
 
     return db.rows();
 }
 
-bool emailExists(const QString &email)
+bool emailExists(const QString &email, QByteArray *uId)
 {
     Query db;
 
     db.setType(Query::PULL, TABLE_USERS);
-    db.addColumn(COLUMN_EMAIL);
+    db.addColumn(COLUMN_USER_ID);
     db.addCondition(COLUMN_EMAIL, email);
     db.exec();
 
-    return db.rows();
-}
-
-bool groupExists(const QString &grName)
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_GROUPS);
-    db.addColumn(COLUMN_GRNAME);
-    db.addCondition(COLUMN_GRNAME, grName);
-    db.exec();
+    if (db.rows() && (uId != nullptr))
+    {
+        *uId = db.getData(COLUMN_USER_ID).toByteArray();
+    }
 
     return db.rows();
 }
 
-bool modExists(const QString &modName)
+bool modExists(const QString &modPath)
 {
     Query db;
 
     db.setType(Query::PULL, TABLE_MODULES);
-    db.addColumn(COLUMN_MOD_NAME);
-    db.addCondition(COLUMN_MOD_NAME, modName);
+    db.addColumn(COLUMN_MOD_MAIN);
+    db.addCondition(COLUMN_MOD_MAIN, modPath);
     db.exec();
 
     return db.rows();
@@ -532,61 +369,16 @@ bool rdOnlyFlagExists(const QString &chName, uchar subId, int level)
     return db.rows();
 }
 
-bool isLocked(const QString &uName)
+bool isLocked(const QByteArray &uId)
 {
     Query db;
 
     db.setType(Query::PULL, TABLE_USERS);
     db.addColumn(COLUMN_LOCKED);
-    db.addCondition(COLUMN_USERNAME, uName);
+    db.addCondition(COLUMN_USER_ID, uId);
     db.exec();
 
     return db.getData(COLUMN_LOCKED).toBool();
-}
-
-bool commandHasRank(const QString &cmdName)
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_CMD_RANKS);
-    db.addColumn(COLUMN_COMMAND);
-    db.addCondition(COLUMN_COMMAND, cmdName);
-    db.exec();
-
-    return db.rows();
-}
-
-bool checkRank(const QString &myGroup, const QString &targetGroup, bool equalAcceptable)
-{
-    uint myRank     = getRankForGroup(myGroup);
-    uint targetRank = getRankForGroup(targetGroup);
-    bool ret        = false;
-
-    if (equalAcceptable)
-    {
-        ret = (myRank <= targetRank);
-    }
-    else
-    {
-        ret = (myRank < targetRank);
-    }
-
-    return ret;
-}
-
-bool maxedInstalledMods()
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_MODULES);
-    db.addColumn(COLUMN_MOD_NAME);
-    db.exec();
-
-    int    installed = db.rows();
-    double max       = (qPow(2, 16) - (MAX_CMDS_PER_MOD * 2)) / MAX_CMDS_PER_MOD;
-                       //max commands - (max async commands + max internal commands) / max commands per mod
-
-    return installed >= max;
 }
 
 bool isBool(const QString &str)
@@ -611,15 +403,13 @@ bool isInt(const QString &str)
     return ret;
 }
 
-bool containsChId(const QByteArray &chId, const QByteArray &chIds)
+bool matchChs(const char *chsA, const char *chsB)
 {
     bool ret = false;
 
-    for (int i = 0; i < chIds.size(); i += 9)
+    for (int i = 0; i < MAX_OPEN_SUB_CHANNELS; i += BLKSIZE_SUB_CHANNEL)
     {
-        QByteArray id = QByteArray::fromRawData(chIds.data() + i, 9);
-
-        if (id == chId)
+        if (posOfBlock(chsA + i, chsB, MAX_OPEN_SUB_CHANNELS, BLKSIZE_SUB_CHANNEL) != -1)
         {
             ret = true;
 
@@ -630,126 +420,95 @@ bool containsChId(const QByteArray &chId, const QByteArray &chIds)
     return ret;
 }
 
-bool matchChs(const QByteArray &chsA, const QByteArray &chsB)
+void containsActiveCh(const char *subChs, char *actBlock)
 {
-    bool ret = false;
-
-    for (int i = 0; i < chsA.size(); i += 9)
+    if (globalActiveFlag())
     {
-        QByteArray id = QByteArray::fromRawData(chsA.data() + i, 9);
+        wr8BitToBlock(1, actBlock);
+    }
+    else
+    {
+        wr8BitToBlock(0, actBlock);
 
-        if (containsChId(id, chsB))
+        Query db;
+
+        for (int i = 0; i < MAX_OPEN_SUB_CHANNELS; i += BLKSIZE_SUB_CHANNEL)
         {
-            ret = true;
+            quint64 chId  = rd64BitFromBlock(subChs + i);
+            quint8  subId = rd8BitFromBlock(subChs + (i + 8));
 
-            break;
+            db.setType(Query::PULL, TABLE_SUB_CHANNELS);
+            db.addColumn(COLUMN_CHANNEL_ID);
+            db.addCondition(COLUMN_CHANNEL_ID, chId);
+            db.addCondition(COLUMN_SUB_CH_ID, subId);
+            db.addCondition(COLUMN_ACTIVE_UPDATE, true);
+            db.exec();
+
+            if (db.rows())
+            {
+                wr8BitToBlock(1, actBlock);
+
+                break;
+            }
         }
     }
-
-    return ret;
 }
 
-bool containsActiveCh(const QByteArray &chIds)
+QString defaultPw()
 {
-    bool ret = false;
-
     Query db;
 
-    for (int i = 0; i < chIds.size(); i += 9)
-    {
-        quint64 chId  = rdInt(QByteArray::fromRawData(chIds.data() + i, 8));
-        quint64 subId = rdInt(QByteArray::fromRawData(chIds.data() + (i + 8), 1));
+    db.setType(Query::PULL, TABLE_SERV_SETTINGS);
+    db.addColumn(COLUMN_DEFAULT_PASS);
+    db.exec();
 
-        db.setType(Query::PULL, TABLE_SUB_CHANNELS);
-        db.addColumn(COLUMN_CHANNEL_ID);
-        db.addCondition(COLUMN_CHANNEL_ID, chId);
-        db.addCondition(COLUMN_SUB_CH_ID, subId);
-        db.addCondition(COLUMN_ACTIVE_UPDATE, true);
-        db.exec();
-
-        if (db.rows())
-        {
-            ret = true;
-
-            break;
-        }
-    }
-
-    return ret;
+    return db.getData(COLUMN_DEFAULT_PASS).toString();
 }
 
-bool channelExists(quint64 chId)
+bool channelExists(const QString &chName, quint64 *chId)
 {
     Query db;
 
     db.setType(Query::PULL, TABLE_CHANNELS);
     db.addColumn(COLUMN_CHANNEL_ID);
-    db.addCondition(COLUMN_CHANNEL_ID, chId);
-    db.exec();
-
-    return db.rows();
-}
-
-bool channelExists(const QString &chName)
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_CHANNELS);
-    db.addColumn(COLUMN_CHANNEL_NAME);
     db.addCondition(COLUMN_CHANNEL_NAME, chName);
     db.exec();
 
+    if (db.rows() && (chId != nullptr))
+    {
+        *chId = db.getData(COLUMN_CHANNEL_ID).toULongLong();
+    }
+
     return db.rows();
 }
 
-bool channelSubExists(quint64 chId, uchar subId)
+bool channelSubExists(quint64 chId, const QString &sub, quint8 *subId)
 {
     Query db;
 
     db.setType(Query::PULL, TABLE_SUB_CHANNELS);
     db.addColumn(COLUMN_SUB_CH_ID);
     db.addCondition(COLUMN_CHANNEL_ID, chId);
-    db.addCondition(COLUMN_SUB_CH_ID, subId);
-    db.exec();
-
-    return db.rows();
-}
-
-bool channelSubExists(const QString &ch, const QString &sub)
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_SUB_CHANNELS);
-    db.addColumn(COLUMN_SUB_CH_NAME);
-    db.addCondition(COLUMN_CHANNEL_NAME, ch);
     db.addCondition(COLUMN_SUB_CH_NAME, sub);
     db.exec();
 
+    if (db.rows() && (subId != nullptr))
+    {
+        *subId = static_cast<quint8>(db.getData(COLUMN_SUB_CH_ID).toUInt());
+    }
+
     return db.rows();
 }
 
-bool inviteExists(const QString &uName, const QString &chName)
+bool inviteExists(const QByteArray &uId, quint64 chId)
 {
     Query db;
 
     db.setType(Query::PULL, TABLE_CH_MEMBERS);
-    db.addColumn(COLUMN_CHANNEL_NAME);
-    db.addCondition(COLUMN_CHANNEL_NAME, chName);
-    db.addCondition(COLUMN_USERNAME, uName);
+    db.addColumn(COLUMN_CHANNEL_ID);
+    db.addCondition(COLUMN_CHANNEL_ID, chId);
+    db.addCondition(COLUMN_USER_ID, uId);
     db.addCondition(COLUMN_PENDING_INVITE, true);
-    db.exec();
-
-    return db.rows();
-}
-
-bool memberExists(const QString &uName, const QString &chName)
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_CH_MEMBERS);
-    db.addColumn(COLUMN_CHANNEL_NAME);
-    db.addCondition(COLUMN_CHANNEL_NAME, chName);
-    db.addCondition(COLUMN_USERNAME, uName);
     db.exec();
 
     return db.rows();
@@ -766,48 +525,7 @@ bool globalActiveFlag()
     return db.getData(COLUMN_ACTIVE_UPDATE).toBool();
 }
 
-bool allowMemberDel(const SharedObjs *sharedObjs, const QString &targetUName, const QString &chName)
-{
-    bool ret = false;
-
-    if (memberExists(targetUName, chName))
-    {
-        int targetLevel = channelAccessLevel(targetUName, chName);
-
-        if (targetLevel != OWNER)
-        {
-            if (noCaseMatch(*sharedObjs->userName, targetUName))
-            {
-                ret = true;
-            }
-            else if (channelAccessLevel(sharedObjs, chName) < targetLevel)
-            {
-                ret = true;
-            }
-        }
-    }
-
-    return ret;
-}
-
-bool allowLevelChange(const SharedObjs *sharedObjs, int newLevel, const QString &chName)
-{
-    bool ret     = false;
-    int  myLevel = channelAccessLevel(*sharedObjs->userName, chName);
-
-    if ((myLevel == OWNER) && (newLevel == OWNER))
-    {
-        ret = true;
-    }
-    else if (newLevel > myLevel)
-    {
-        ret = true;
-    }
-
-    return ret;
-}
-
-bool genSubId(const QString &chName, int *newId)
+bool genSubId(quint64 chId, quint8 *newId)
 {
     bool ret = false;
 
@@ -815,16 +533,16 @@ bool genSubId(const QString &chName, int *newId)
 
     db.setType(Query::PULL, TABLE_SUB_CHANNELS);
     db.addColumn(COLUMN_SUB_CH_ID);
-    db.addCondition(COLUMN_CHANNEL_NAME, chName);
+    db.addCondition(COLUMN_CHANNEL_ID, chId);
     db.exec();
 
     if (db.rows() < maxSubChannels())
     {
-        QList<int> subList;
+        QList<quint8> subList;
 
         for (int i = 0; i < db.rows(); ++i)
         {
-            subList.append(db.getData(COLUMN_SUB_CH_ID, i).toInt());
+            subList.append(static_cast<quint8>(db.getData(COLUMN_SUB_CH_ID, i).toUInt()));
         }
 
         ret    = true;
@@ -836,104 +554,18 @@ bool genSubId(const QString &chName, int *newId)
     return ret;
 }
 
-bool isChOwner(const QString &uName)
+bool isChOwner(const QByteArray &uId)
 {
     Query db;
 
     db.setType(Query::PULL, TABLE_CH_MEMBERS);
-    db.addColumn(COLUMN_USERNAME);
-    db.addCondition(COLUMN_USERNAME, uName);
+    db.addColumn(COLUMN_USER_ID);
+    db.addCondition(COLUMN_USER_ID, uId);
     db.addCondition(COLUMN_PENDING_INVITE, false);
     db.addCondition(COLUMN_ACCESS_LEVEL, OWNER);
     db.exec();
 
     return db.rows();
-}
-
-int channelAccessLevel(const QString &uName, quint64 chId)
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_CH_MEMBERS);
-    db.addColumn(COLUMN_ACCESS_LEVEL);
-    db.addCondition(COLUMN_CHANNEL_ID, chId);
-    db.addCondition(COLUMN_USERNAME, uName);
-    db.addCondition(COLUMN_PENDING_INVITE, false);
-    db.exec();
-
-    if (db.rows())
-    {
-        return db.getData(COLUMN_ACCESS_LEVEL).toInt();
-    }
-    else
-    {
-        return PUBLIC;
-    }
-}
-
-int channelAccessLevel(const QString &uName, const QString &chName)
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_CH_MEMBERS);
-    db.addColumn(COLUMN_ACCESS_LEVEL);
-    db.addCondition(COLUMN_CHANNEL_NAME, chName);
-    db.addCondition(COLUMN_USERNAME, uName);
-    db.addCondition(COLUMN_PENDING_INVITE, false);
-    db.exec();
-
-    if (db.rows())
-    {
-        return db.getData(COLUMN_ACCESS_LEVEL).toInt();
-    }
-    else
-    {
-        return PUBLIC;
-    }
-}
-
-int channelAccessLevel(const SharedObjs *sharedObjs, const QString &chName)
-{
-    if (*sharedObjs->chOwnerOverride)
-    {
-        return OWNER;
-    }
-    else
-    {
-        return channelAccessLevel(*sharedObjs->userName, chName);
-    }
-}
-
-int channelAccessLevel(const SharedObjs *sharedObjs, quint64 chId)
-{
-    if (*sharedObjs->chOwnerOverride)
-    {
-        return OWNER;
-    }
-    else
-    {
-        return channelAccessLevel(*sharedObjs->userName, chId);
-    }
-}
-
-int lowestAcessLevel(quint64 chId, uchar subId)
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_SUB_CHANNELS);
-    db.addColumn(COLUMN_LOWEST_LEVEL);
-    db.addCondition(COLUMN_CHANNEL_ID, chId);
-    db.addCondition(COLUMN_SUB_CH_ID, subId);
-    db.exec();
-
-    if (db.rows())
-    {
-        return db.getData(COLUMN_LOWEST_LEVEL).toInt();
-    }
-    else
-    {
-        return 5000;
-    }
 }
 
 int maxSubChannels()
@@ -947,103 +579,36 @@ int maxSubChannels()
     return db.getData(COLUMN_MAX_SUB_CH).toInt();
 }
 
-quint64 getChId(const QString &chName)
+int channelAccessLevel(const QByteArray &uId, const char *override, quint64 chId)
+{
+    if (rd8BitFromBlock(override) == 1)
+    {
+        return OWNER;
+    }
+    else
+    {
+        return channelAccessLevel(uId, chId);
+    }
+}
+
+int channelAccessLevel(const QByteArray &uId, quint64 chId)
 {
     Query db;
 
-    db.setType(Query::PULL, TABLE_CHANNELS);
-    db.addColumn(COLUMN_CHANNEL_ID);
-    db.addCondition(COLUMN_CHANNEL_NAME, chName);
+    db.setType(Query::PULL, TABLE_CH_MEMBERS);
+    db.addColumn(COLUMN_ACCESS_LEVEL);
+    db.addCondition(COLUMN_CHANNEL_ID, chId);
+    db.addCondition(COLUMN_USER_ID, uId);
+    db.addCondition(COLUMN_PENDING_INVITE, false);
     db.exec();
 
-    return db.getData(COLUMN_CHANNEL_ID).toULongLong();
-}
-
-uchar getSubId(const QString &chName, const QString &subName)
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_SUB_CHANNELS);
-    db.addColumn(COLUMN_SUB_CH_ID);
-    db.addCondition(COLUMN_CHANNEL_NAME, chName);
-    db.addCondition(COLUMN_SUB_CH_NAME, subName);
-    db.exec();
-
-    return static_cast<uchar>(db.getData(COLUMN_SUB_CH_ID).toUInt());
-}
-
-int chPos(const QByteArray &id, const QByteArray &chIds)
-{
-    int ret = -1;
-
-    for (int i = 0; i < chIds.size(); i += 9)
+    if (db.rows())
     {
-        QByteArray chInList = QByteArray::fromRawData(chIds.data() + i, 9);
-
-        if (chInList == id)
-        {
-            ret = i;
-
-            break;
-        }
+        return db.getData(COLUMN_ACCESS_LEVEL).toInt();
     }
-
-    return ret;
-}
-
-int countChs(const QByteArray &chIds)
-{
-    int ret = 0;
-
-    for (int i = 0; i < chIds.size(); i += 9)
+    else
     {
-        quint64 id = rdInt(QByteArray::fromRawData(chIds.data() + i, 8));
-
-        if (id != 0)
-        {
-            ret++;
-        }
-    }
-
-    return ret;
-}
-
-int blankChPos(const QByteArray &chIds)
-{
-    int ret = -1;
-
-    for (int i = 0; i < chIds.size(); i += 9)
-    {
-        quint64 id = rdInt(QByteArray::fromRawData(chIds.data() + i, 8));
-
-        if (id == 0)
-        {
-            ret = i;
-
-            break;
-        }
-    }
-
-    return ret;
-}
-
-uint getRankForGroup(const QString &grName)
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_GROUPS);
-    db.addColumn(COLUMN_HOST_RANK);
-    db.addCondition(COLUMN_GRNAME, grName);
-    db.exec();
-
-    return db.getData(COLUMN_HOST_RANK).toUInt();
-}
-
-void uniqueAdd(quint16 id, QList<quint16> &list)
-{
-    if (!list.contains(id))
-    {
-        list.append(id);
+        return PUBLIC;
     }
 }
 
@@ -1064,18 +629,6 @@ void listDir(QList<QPair<QString, QString> > &list, const QString &srcPath, cons
     }
 }
 
-QString getUserGroup(const QString &uName)
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_USERS);
-    db.addColumn(COLUMN_GRNAME);
-    db.addCondition(COLUMN_USERNAME, uName);
-    db.exec();
-
-    return db.getData(COLUMN_GRNAME).toString();
-}
-
 QString getUserNameForEmail(const QString &email)
 {
     Query db;
@@ -1088,13 +641,25 @@ QString getUserNameForEmail(const QString &email)
     return db.getData(COLUMN_USERNAME).toString();
 }
 
-QString getEmailForUser(const QString &uName)
+QString getDispName(const QByteArray &uId)
+{
+    Query db;
+
+    db.setType(Query::PULL, TABLE_USERS);
+    db.addColumn(COLUMN_DISPLAY_NAME);
+    db.addCondition(COLUMN_USER_ID, uId);
+    db.exec();
+
+    return db.getData(COLUMN_DISPLAY_NAME).toString();
+}
+
+QString getEmailForUser(const QByteArray &uId)
 {
     Query db;
 
     db.setType(Query::PULL, TABLE_USERS);
     db.addColumn(COLUMN_EMAIL);
-    db.addCondition(COLUMN_USERNAME, uName);
+    db.addCondition(COLUMN_USER_ID, uId);
     db.exec();
 
     return db.getData(COLUMN_EMAIL).toString();
@@ -1135,307 +700,12 @@ QString escapeChars(const QString &str, const QChar &escapeChr, const QChar &chr
     return ret;
 }
 
-QList<int> genSequence(int min, int max, int len)
-{
-    QList<int> ret;
-
-    for (int i = 0; i < len; ++i)
-    {
-        ret.append(QRandomGenerator::global()->bounded(min, max));
-    }
-
-    return ret;
-}
-
-QChar genLetter()
-{
-    // generate random letter from ascii table decimal value 97-122.
-
-    return QChar(static_cast<char>(QRandomGenerator::global()->bounded(97, 122)));
-}
-
-QChar genNum()
-{
-    // generate random number from ascii table decimal value 48-57.
-
-    return QChar(static_cast<char>(QRandomGenerator::global()->bounded(48, 57)));
-}
-
-QChar genSpecialChar()
-{
-    static QString specialChars = "`~!@#$%^&*()-_+=[]{}\\|:;\"'<,>.?/";
-
-    return specialChars[QRandomGenerator::global()->bounded(0, specialChars.size() - 1)];
-}
-
-int inRange(int pos, int min, int max)
-{
-    int ret = pos;
-
-    if (pos < min) ret = min;
-    if (pos > max) ret = max;
-
-    return ret;
-}
-
-void moveCharLeft(int pos, QString &str)
-{
-    pos = inRange(pos, 0, str.size() - 1);
-
-    QChar chr = str[pos];
-
-    str.remove(pos, 1);
-
-    if (pos == 0) str.append(chr);
-    else          str.insert(pos - 1, chr);
-}
-
-void moveCharRight(int pos, QString &str)
-{
-    pos = inRange(pos, 0, str.size() - 1);
-
-    QChar chr = str[pos];
-
-    str.remove(pos, 1);
-
-    if (pos == str.size() - 1) str.insert(0, chr);
-    else                       str.insert(pos + 1, chr);
-}
-
-QString genPw()
-{
-    QString ret;
-
-    QList<int> seq = genSequence(2, 5, 4);
-
-    for (int i = 0; i < seq[0]; ++i)
-    {
-        ret.append(genLetter());
-    }
-
-    for (int i = 0; i < seq[1]; ++i)
-    {
-        ret.append(genLetter().toUpper());
-    }
-
-    for (int i = 0; i < seq[2]; ++i)
-    {
-        ret.append(genNum());
-    }
-
-    for (int i = 0; i < seq[3]; ++i)
-    {
-        ret.append(genSpecialChar());
-    }
-
-    seq = genSequence(0, ret.size() - 1, 10);
-
-    bool toggle = false;
-
-    for (int i : seq)
-    {
-        if (toggle) moveCharRight(i, ret);
-        else        moveCharLeft(i, ret);
-
-        toggle = !toggle;
-    }
-
-    return ret;
-}
-
-QString modDataPath()
-{
-    QString ret = qEnvironmentVariable(ENV_MOD_PATH, DEFAULT_MOD_PATH);
-
-    if      (ret.right(1) == '/')  ret.chop(1);
-    else if (ret.right(1) == '\\') ret.chop(1);
-
-    ret = expandEnvVariables(ret);
-
-    mkPath(ret);
-
-    return ret;
-}
-
-QString pipesPath()
-{
-    QString ret = qEnvironmentVariable(ENV_PIPE_PATH, DEFAULT_PIPE_PATH);
-
-    if      (ret.right(1) == '/')  ret.chop(1);
-    else if (ret.right(1) == '\\') ret.chop(1);
-
-    ret = expandEnvVariables(ret);
-
-    mkPath(ret);
-
-    return ret;
-}
-
-void msgHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
-{
-    Q_UNUSED(type);
-    Q_UNUSED(context);
-
-    if (!msg.contains("QSslSocket: cannot resolve"))
-    {
-        Query db;
-
-        db.setType(Query::PUSH, TABLE_DMESG);
-        db.addColumn(COLUMN_LOGENTRY, msg);
-        db.exec();
-    }
-}
-
 void mkPath(const QString &path)
 {
     if (!QDir().exists(path))
     {
         QDir().mkpath(path);
     }
-}
-
-void mkFile(const QString &path)
-{
-    mkPathForFile(path);
-
-    QFile file(path);
-
-    file.open(QFile::WriteOnly);
-    file.write(QByteArray());
-    file.close();
-}
-
-void wrOpenCh(RWSharedObjs *sharedObjs, const QByteArray &id)
-{
-    quint64 chId  = rdInt(QByteArray::fromRawData(id.data(), 8));
-    quint64 subId = rdInt(QByteArray::fromRawData(id.data() + 8, 1));
-    int     rdPos = blankChPos(*sharedObjs->chIds);
-    int     wrPos = blankChPos(*sharedObjs->wrAbleChIds);
-    int     lvl;
-
-    if (*sharedObjs->chOwnerOverride)
-    {
-        lvl = OWNER;
-    }
-    else
-    {
-        lvl = channelAccessLevel(*sharedObjs->userName, chId);
-    }
-
-    sharedObjs->chIds->replace(rdPos, 9, id);
-
-    Query db;
-
-    db.setType(Query::PULL, TABLE_RDONLY_CAST);
-    db.addColumn(COLUMN_CHANNEL_ID);
-    db.addCondition(COLUMN_CHANNEL_ID, chId);
-    db.addCondition(COLUMN_SUB_CH_ID, subId);
-    db.addCondition(COLUMN_ACCESS_LEVEL, lvl);
-    db.exec();
-
-    if (db.rows() == 0)
-    {
-        sharedObjs->wrAbleChIds->replace(wrPos, 9, id);
-    }
-
-    if (globalActiveFlag())
-    {
-        *sharedObjs->activeUpdate = true;
-    }
-    else
-    {
-        *sharedObjs->activeUpdate = containsActiveCh(*sharedObjs->chIds);
-    }
-}
-
-void wrCloseCh(RWSharedObjs *sharedObjs, const QByteArray &id, QByteArray &peerStat)
-{
-    int        rdPos        = chPos(id, *sharedObjs->chIds);
-    int        wrPos        = chPos(id, *sharedObjs->wrAbleChIds);
-    bool       needPeerStat = false;
-    QByteArray oldChIds     = *sharedObjs->chIds;
-
-    if (*sharedObjs->activeUpdate)
-    {
-        needPeerStat = true;
-    }
-
-    if (rdPos != -1)
-    {
-        sharedObjs->chIds->replace(rdPos, 9, QByteArray(9, static_cast<char>(0)));
-
-        if (wrPos != -1)
-        {
-            sharedObjs->wrAbleChIds->replace(wrPos, 9, QByteArray(9, static_cast<char>(0)));
-        }
-
-        *sharedObjs->activeUpdate = containsActiveCh(*sharedObjs->chIds);
-    }
-
-    if (needPeerStat && (oldChIds != *sharedObjs->chIds))
-    {
-        QByteArray castHeader = oldChIds + wrInt(PEER_STAT, 8);
-        QByteArray data       = toPEER_STAT(*sharedObjs->sessionId, *sharedObjs->chIds, false);
-
-        peerStat = castHeader + data;
-    }
-    else
-    {
-        peerStat.clear();
-    }
-}
-
-void wrCloseCh(RWSharedObjs *sharedObjs, quint64 chId, QByteArray &peerStat)
-{
-    QByteArray chBa         = wrInt(chId, 64);
-    QByteArray oldChIds     = *sharedObjs->chIds;
-    bool       needPeerStat = false;
-
-    if (*sharedObjs->activeUpdate)
-    {
-        needPeerStat = true;
-    }
-
-    for (int i = 0; i < sharedObjs->chIds->size(); i += 9)
-    {
-        if (chBa == QByteArray::fromRawData(sharedObjs->chIds->data() + i, 8))
-        {
-            sharedObjs->chIds->replace(i, 9, QByteArray(9, static_cast<char>(0)));
-        }
-
-        if (chBa == QByteArray::fromRawData(sharedObjs->wrAbleChIds->data() + i, 8))
-        {
-            sharedObjs->wrAbleChIds->replace(i, 9, QByteArray(9, static_cast<char>(0)));
-        }
-    }
-
-    *sharedObjs->activeUpdate = containsActiveCh(*sharedObjs->chIds);
-
-    if (needPeerStat && (oldChIds != *sharedObjs->chIds))
-    {
-        QByteArray castHeader = oldChIds + wrInt(PEER_STAT, 8);
-        QByteArray data       = toPEER_STAT(*sharedObjs->sessionId, *sharedObjs->chIds, false);
-
-        peerStat = castHeader + data;
-    }
-    else
-    {
-        peerStat.clear();
-    }
-}
-
-void wrCloseCh(RWSharedObjs *sharedObjs, const QByteArray &id)
-{
-    QByteArray unused;
-
-    wrCloseCh(sharedObjs, id, unused);
-}
-
-void wrCloseCh(RWSharedObjs *sharedObjs, quint64 chId)
-{
-    QByteArray unused;
-
-    wrCloseCh(sharedObjs, chId, unused);
 }
 
 QStringList parseArgs(const QByteArray &data, int maxArgs, int *pos)
@@ -1560,203 +830,27 @@ SessionCarrier::SessionCarrier(Session *session) : QObject()
     sessionObj = session;
 }
 
-InternCommand::InternCommand(QObject *parent) : ExternCommand(parent)
+IdleTimer::IdleTimer(QObject *parent) : QTimer(parent)
 {
-    rwSharedObjs = nullptr;
+    setSingleShot(true);
 }
 
-void InternCommand::setWritableDataShare(RWSharedObjs *sharedObjs)
+void IdleTimer::detectWrite(qint64)
 {
-    rwSharedObjs = sharedObjs;
-
-    term();
+    start();
 }
 
-bool InternCommand::loopEnabled()
+void IdleTimer::attach(QIODevice *dev, int msec)
 {
-    if (rwSharedObjs == nullptr)
-    {
-        return false;
-    }
-    else
-    {
-        return rwSharedObjs->activeLoopCmds->contains(cmdId);
-    }
-}
+    setInterval(msec);
 
-bool InternCommand::moreInputEnabled()
-{
-    if (rwSharedObjs == nullptr)
-    {
-        return false;
-    }
-    else
-    {
-        return rwSharedObjs->moreInputCmds->contains(cmdId);
-    }
-}
-
-QString InternCommand::libText()
-{
-    return INTERN_MOD_NAME;
-}
-
-QString InternCommand::parseMd(int offset)
-{
-    QFile      file(":/docs/intern_commands/" + objectName() + ".md", this);
-    QByteArray data;
-
-    if (file.open(QFile::ReadOnly))
-    {
-        data = file.readAll();
-    }
-
-    file.close();
-
-    int targetTags = offset * 6;
-    int pos        = -1;
-    int len        = 0;
-
-    for (int i = 0, tags = 0; i < data.size(); ++i)
-    {
-        if (data[i] == '#')
-        {
-            ++tags;
-
-            if (pos != -1)
-            {
-                break;
-            }
-        }
-        else if (tags == targetTags)
-        {
-            len++;
-
-            if (pos == -1)
-            {
-                pos = i;
-            }
-        }
-    }
-
-    QByteArray ret = data.mid(pos, len).trimmed();
-
-    if (offset == 2)
-    {
-        ret.chop(3);
-        ret.remove(0, 3);
-    }
-
-    return ret;
-}
-
-QString InternCommand::shortText()
-{
-    return parseMd(1);
-}
-
-QString InternCommand::ioText()
-{
-    return parseMd(2);
-}
-
-QString InternCommand::longText()
-{
-    return parseMd(3);
-}
-
-CommandOutput::CommandOutput(ExternCommand *parent) : QObject(parent)
-{
-    // this class is used by CmdExecutor to permanently attach a command id to
-    // the command object's output data and isolates that id from the object
-    // itself. this prevents objects from impersonating another object's output
-    // data.
-
-    cmdObj = parent;
-}
-
-void CommandOutput::setCmdId(quint16 id)
-{
-    cmdId = id;
-}
-
-void CommandOutput::dataFromCmdObj(const QByteArray &data, uchar typeId)
-{
-    emit dataOut(cmdId, data, typeId);
-}
-
-void CommandOutput::openChIdFromCmdObj(quint64 id, uchar subId)
-{
-    emit openChById(cmdId, id, subId);
-}
-
-void CommandOutput::openChNameFromCmdObj(const QString &ch, const QString &sub)
-{
-    emit openChByName(cmdId, ch, sub);
-}
-
-void CommandOutput::closeChIdFromCmdObj(quint64 id, uchar subId)
-{
-    emit closeChById(cmdId, id, subId);
-}
-
-void CommandOutput::closeChNameFromCmdObj(const QString &ch, const QString &sub)
-{
-    emit closeChByName(cmdId, ch, sub);
-}
-
-void CommandOutput::enableLoopFromCmdObj(bool state)
-{
-    cmdObj->inLoopMode = state;
-
-    emit enableLoop(cmdId, state);
-}
-
-void CommandOutput::enableMoreInputFromCmdObj(bool state)
-{
-    cmdObj->inMoreInputMode = state;
-
-    emit enableMoreInput(cmdId, state);
-}
-
-void CommandOutput::finished()
-{
-    cmdObj->inMoreInputMode = false;
-    cmdObj->inLoopMode      = false;
-
-    emit cmdFinished(cmdId);
-}
-
-RWSharedObjs::RWSharedObjs(QObject *parent) : QObject(parent)
-{
-    commands        = nullptr;
-    cmdNames        = nullptr;
-    chList          = nullptr;
-    chIds           = nullptr;
-    wrAbleChIds     = nullptr;
-    sessionAddr     = nullptr;
-    userName        = nullptr;
-    groupName       = nullptr;
-    displayName     = nullptr;
-    appName         = nullptr;
-    clientMajor     = nullptr;
-    clientMinor     = nullptr;
-    clientPatch     = nullptr;
-    sessionId       = nullptr;
-    moreInputCmds   = nullptr;
-    activeLoopCmds  = nullptr;
-    pausedCmds      = nullptr;
-    p2pAccepted     = nullptr;
-    p2pPending      = nullptr;
-    activeUpdate    = nullptr;
-    chOwnerOverride = nullptr;
-    hostRank        = nullptr;
+    connect(dev, SIGNAL(readyRead()), this, SLOT(start()));
+    connect(dev, SIGNAL(bytesWritten(qint64)), this, SLOT(detectWrite(qint64)));
 }
 
 ShellIPC::ShellIPC(const QStringList &args, QObject *parent) : QLocalSocket(parent)
 {
     arguments = args;
-    pipeName  = pipesPath() + "/" + QString(APP_NAME) + ".TCPServer.Control";
 
     connect(this, SIGNAL(connected()), this, SLOT(hostConnected()));
     connect(this, SIGNAL(disconnected()), this, SIGNAL(closeInstance()));
@@ -1765,7 +859,7 @@ ShellIPC::ShellIPC(const QStringList &args, QObject *parent) : QLocalSocket(pare
 
 bool ShellIPC::connectToHost()
 {
-    connectToServer(pipeName);
+    connectToServer(HOST_CONTROL_PIPE);
 
     if (!waitForConnected())
     {
@@ -1786,3 +880,5 @@ void ShellIPC::dataIn()
 
     emit closeInstance();
 }
+
+quint64 Serial::serialIndex = 0;

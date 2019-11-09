@@ -1,6 +1,6 @@
 ### Summary ###
 
-change your account password.
+update your account password.
 
 ### IO ###
 
@@ -8,4 +8,4 @@ change your account password.
 
 ### Description ###
 
-this changes the password on your own account. this command will instantly hook the input and await a new password to be entered.
+this changes the password on your own account. during execution, this command will ask for a new password to be entered.

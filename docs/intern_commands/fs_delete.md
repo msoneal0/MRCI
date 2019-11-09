@@ -1,6 +1,6 @@
 ### Summary ###
 
-attempt to delete a file system object (file,directory,symlink) in the host.
+delete a file or directory in the host file system.
 
 ### IO ###
 

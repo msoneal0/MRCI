@@ -40,58 +40,57 @@ win32 {
 }
 
 SOURCES += src/main.cpp \
+           src/async_funcs.cpp \
+           src/cmd_object.cpp \
+           src/cmd_proc.cpp \
            src/commands/channels.cpp \
            src/commands/cmd_ranks.cpp \
            src/commands/p2p.cpp \
+           src/mem_share.cpp \
+           src/module.cpp \
            src/session.cpp \
            src/db.cpp \
            src/make_cert.cpp \
-           src/int_loader.cpp \
            src/tcp_server.cpp \
            src/unix_signal.cpp \
-           src/cmd_executor.cpp \
            src/common.cpp \
            src/shell.cpp \
            src/db_setup.cpp \
            src/commands/users.cpp \
            src/commands/mods.cpp \
            src/commands/info.cpp \
-           src/commands/groups.cpp \
            src/commands/cast.cpp \
            src/commands/bans.cpp \
            src/commands/admin.cpp \
            src/commands/auth.cpp \
-           src/commands/command.cpp \
-           src/commands/cmd_state.cpp \
            src/commands/acct_recovery.cpp \
            src/commands/table_viewer.cpp \
            src/commands/fs.cpp \
            src/commands/certs.cpp
 
 HEADERS += \
+           src/cmd_object.h \
+           src/cmd_proc.h \
            src/commands/channels.h \
            src/commands/cmd_ranks.h \
            src/commands/p2p.h \
+           src/mem_share.h \
+           src/module.h \
            src/session.h \
            src/db.h \
            src/make_cert.h \
-           src/int_loader.h \
            src/tcp_server.h \
            src/unix_signal.h \
-           src/cmd_executor.h \
            src/common.h \
            src/shell.h \
            src/db_setup.h \
            src/commands/users.h \
            src/commands/mods.h \
            src/commands/info.h \
-           src/commands/groups.h \
            src/commands/cast.h \
            src/commands/bans.h \
            src/commands/admin.h \
            src/commands/auth.h \
-           src/commands/command.h \
-           src/commands/cmd_state.h \
            src/commands/acct_recovery.h \
            src/commands/table_viewer.h \
            src/commands/fs.h \

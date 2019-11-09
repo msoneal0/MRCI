@@ -16,17 +16,22 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-Cast::Cast(QObject *parent)                         : InternCommand(parent) {}
-OpenSubChannel::OpenSubChannel(QObject *parent)     : InternCommand(parent) {}
-CloseSubChannel::CloseSubChannel(QObject *parent)   : InternCommand(parent) {}
-LsOpenChannels::LsOpenChannels(QObject *parent)     : InternCommand(parent) {}
-PingPeers::PingPeers(QObject *parent)               : InternCommand(parent) {}
-AddRDOnlyFlag::AddRDOnlyFlag(QObject *parent)       : InternCommand(parent) {}
-RemoveRDOnlyFlag::RemoveRDOnlyFlag(QObject *parent) : InternCommand(parent) {}
+Cast::Cast(QObject *parent)                         : CmdObject(parent) {}
+OpenSubChannel::OpenSubChannel(QObject *parent)     : CmdObject(parent) {}
+CloseSubChannel::CloseSubChannel(QObject *parent)   : CmdObject(parent) {}
+LsOpenChannels::LsOpenChannels(QObject *parent)     : CmdObject(parent) {}
+PingPeers::PingPeers(QObject *parent)               : CmdObject(parent) {}
+AddRDOnlyFlag::AddRDOnlyFlag(QObject *parent)       : CmdObject(parent) {}
+RemoveRDOnlyFlag::RemoveRDOnlyFlag(QObject *parent) : CmdObject(parent) {}
 
 ListRDonlyFlags::ListRDonlyFlags(QObject *parent) : TableViewer(parent)
 {
-    setParams(TABLE_RDONLY_CAST, QStringList() << COLUMN_SUB_CH_ID << COLUMN_ACCESS_LEVEL << COLUMN_CHANNEL_NAME, false);
+    setParams(TABLE_RDONLY_CAST, false);
+    addJointColumn(TABLE_CHANNELS, COLUMN_CHANNEL_ID);
+    addTableColumn(TABLE_CHANNELS, COLUMN_CHANNEL_NAME);
+    addTableColumn(TABLE_RDONLY_CAST, COLUMN_CHANNEL_ID);
+    addTableColumn(TABLE_RDONLY_CAST, COLUMN_SUB_CH_ID);
+    addTableColumn(TABLE_RDONLY_CAST, COLUMN_ACCESS_LEVEL);
 }
 
 QString Cast::cmdName()             {return "cast";}
@@ -38,22 +43,48 @@ QString AddRDOnlyFlag::cmdName()    {return "add_rdonly_flag";}
 QString RemoveRDOnlyFlag::cmdName() {return "rm_rdonly_flag";}
 QString ListRDonlyFlags::cmdName()  {return "ls_rdonly_flags";}
 
-void Cast::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+bool canOpenSubChannel(const QByteArray &uId, const char *override, quint64 chId, quint8 subId)
 {
-    Q_UNUSED(sharedObjs);
+    int uLevel = channelAccessLevel(uId, override, chId);
+    int sLevel = lowestAcessLevel(chId, subId);
 
-    emit castToPeers(binIn, dType);
+    return uLevel <= sLevel;
 }
 
-void OpenSubChannel::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+int lowestAcessLevel(quint64 chId, quint8 subId)
 {
-    Q_UNUSED(sharedObjs);
+    int ret = 5000;
 
+    Query db;
+
+    db.setType(Query::PULL, TABLE_SUB_CHANNELS);
+    db.addColumn(COLUMN_LOWEST_LEVEL);
+    db.addCondition(COLUMN_CHANNEL_ID, chId);
+    db.addCondition(COLUMN_SUB_CH_ID, subId);
+    db.exec();
+
+    if (db.rows())
+    {
+        ret = db.getData(COLUMN_LOWEST_LEVEL).toInt();
+    }
+
+    return ret;
+}
+
+void Cast::procIn(const QByteArray &binIn, quint8 dType)
+{
+    async(ASYNC_CAST, dType, binIn);
+}
+
+void OpenSubChannel::procIn(const QByteArray &binIn, quint8 dType)
+{
     if (dType == TEXT)
     {
         QStringList args = parseArgs(binIn, 4);
         QString     ch   = getParam("-ch_name", args);
         QString     sub  = getParam("-sub_name", args);
+        quint64     chId;
+        quint8      subId;
 
         if (ch.isEmpty())
         {
@@ -63,22 +94,34 @@ void OpenSubChannel::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
         {
             errTxt("err: Sub-Channel name (-sub_name) argument not found or is empty.\n");
         }
+        else if (!channelExists(ch, &chId))
+        {
+            errTxt("err: The requested channel does not exists.\n");
+        }
+        else if (!channelSubExists(chId, sub, &subId))
+        {
+            errTxt("err: The requested sub-channel does not exists.\n");
+        }
+        else if (!canOpenSubChannel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId, subId))
+        {
+            errTxt("err: Access denied.\n");
+        }
         else
         {
-            emit openChByName(ch, sub);
+            async(ASYNC_OPEN_SUBCH, PRIV_IPC, wrInt(chId, 64) + wrInt(subId, 8));
         }
     }
 }
 
-void CloseSubChannel::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void CloseSubChannel::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs);
-
     if (dType == TEXT)
     {
         QStringList args = parseArgs(binIn, 4);
         QString     ch   = getParam("-ch_name", args);
         QString     sub  = getParam("-sub_name", args);
+        quint64     chId;
+        quint8      subId;
 
         if (ch.isEmpty())
         {
@@ -88,16 +131,24 @@ void CloseSubChannel::procBin(const SharedObjs *sharedObjs, const QByteArray &bi
         {
             errTxt("err: Sub-Channel name (-sub_name) argument not found or is empty.\n");
         }
+        else if (!channelExists(ch, &chId))
+        {
+            errTxt("err: The requested channel does not exists.\n");
+        }
+        else if (!channelSubExists(chId, sub, &subId))
+        {
+            errTxt("err: The requested sub-channel does not exists.\n");
+        }
         else
         {
-            emit closeChByName(ch, sub);
+            async(ASYNC_CLOSE_SUBCH, PRIV_IPC, wrInt(chId, 64) + wrInt(subId, 8));
         }
     }
 }
 
-void LsOpenChannels::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void LsOpenChannels::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(binIn);
+    Q_UNUSED(binIn)
 
     if (dType == TEXT)
     {
@@ -115,29 +166,29 @@ void LsOpenChannels::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
         tableData.append(QStringList() << COLUMN_CHANNEL_NAME << COLUMN_SUB_CH_NAME << COLUMN_CHANNEL_ID << COLUMN_SUB_CH_ID << "read_only");
         tableData.append(separators);
 
-        for (int i = 0; i < sharedObjs->chIds->size(); i += 9)
+        for (int i = 0; i < MAX_OPEN_SUB_CHANNELS; i += BLKSIZE_SUB_CHANNEL)
         {
-            quint64 chId  = rdInt(QByteArray::fromRawData(sharedObjs->chIds->data() + i, 8));
-            quint64 subId = rdInt(QByteArray::fromRawData(sharedObjs->chIds->data() + (i + 8), 1));
+            quint64 chId  = rd64BitFromBlock(openSubChs + i);
+            quint8  subId = rd8BitFromBlock(openSubChs + (i + 8));
 
             if (chId)
             {
                 QStringList columnData;
 
-                db.setType(Query::PULL, TABLE_SUB_CHANNELS);
-                db.addColumn(COLUMN_SUB_CH_NAME);
-                db.addColumn(COLUMN_CHANNEL_NAME);
+                db.setType(Query::INNER_JOIN_PULL, TABLE_SUB_CHANNELS);
+                db.addTableColumn(TABLE_SUB_CHANNELS, COLUMN_SUB_CH_NAME);
+                db.addTableColumn(TABLE_CHANNELS, COLUMN_CHANNEL_NAME);
+                db.addJoinCondition(COLUMN_CHANNEL_ID, TABLE_CHANNELS);
                 db.addCondition(COLUMN_CHANNEL_ID, chId);
                 db.addCondition(COLUMN_SUB_CH_ID, subId);
                 db.exec();
 
-                QByteArray subCh   = QByteArray::fromRawData(sharedObjs->chIds->data() + i, 9);
-                QString    chName  = db.getData(COLUMN_CHANNEL_NAME).toString();
-                QString    subName = db.getData(COLUMN_SUB_CH_NAME).toString();
-                QString    rdOnly;
+                QString chName  = db.getData(COLUMN_CHANNEL_NAME).toString();
+                QString subName = db.getData(COLUMN_SUB_CH_NAME).toString();
+                QString rdOnly;
 
-                if (chPos(subCh, *sharedObjs->wrAbleChIds) != -1)
-                {
+                if (posOfBlock(openSubChs + i, openWritableSubChs, MAX_OPEN_SUB_CHANNELS, BLKSIZE_SUB_CHANNEL) == -1)
+                {   
                     rdOnly = "1";
                 }
                 else
@@ -166,7 +217,7 @@ void LsOpenChannels::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
         {
             for (int i = 0; i < row.size(); ++i)
             {
-                mainTxt(row[i].leftJustified(justLens[i] + 2, ' '));
+                mainTxt(row[i].leftJustified(justLens[i] + 4, ' '));
             }
 
             mainTxt("\n");
@@ -174,27 +225,24 @@ void LsOpenChannels::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
     }
 }
 
-void PingPeers::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void PingPeers::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(binIn);
+    Q_UNUSED(binIn)
 
     if (dType == TEXT)
     {
-        if (!(*sharedObjs->activeUpdate))
+        if (rd8BitFromBlock(activeUpdate) == 0)
         {
             errTxt("err: You don't currently have any active update sub-channels open. sending a ping request is pointless because peers won't be able to respond.\n");
         }
         else
         {
-            QByteArray castHeader = *sharedObjs->chIds + wrInt(PING_PEERS, 8);
-            QByteArray data       = toPEER_INFO(sharedObjs);
-
-            emit backendDataOut(ASYNC_LIMITED_CAST, castHeader + data, PUB_IPC);
+            async(ASYNC_PING_PEERS, PUB_IPC);
         }
     }
 }
 
-void AddRDOnlyFlag::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void AddRDOnlyFlag::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
@@ -202,6 +250,7 @@ void AddRDOnlyFlag::procBin(const SharedObjs *sharedObjs, const QByteArray &binI
         QString     chName = getParam("-ch_name", args);
         QString     subId  = getParam("-sub_id", args);
         QString     level  = getParam("-level", args);
+        quint64     chId;
 
         if (chName.isEmpty())
         {
@@ -227,34 +276,36 @@ void AddRDOnlyFlag::procBin(const SharedObjs *sharedObjs, const QByteArray &binI
         {
             errTxt("err: Invalid privilage level. valid range (1-5).\n");
         }
-        else if (!channelExists(chName))
+        else if (!channelExists(chName, &chId))
         {
             errTxt("err: Channel name '" + chName + "' does not exists.\n");
         }
-        else if (channelAccessLevel(sharedObjs, chName) > ADMIN)
+        else if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) > ADMIN)
         {
             errTxt("err: Access denied.\n");
         }
-        else if (rdOnlyFlagExists(chName, static_cast<uchar>(subId.toInt()), level.toInt()))
+        else if (rdOnlyFlagExists(chName, static_cast<quint8>(subId.toInt()), level.toInt()))
         {
-            errTxt("err: A read only flag for sub-id: " + QString::number(subId.toInt()) + " level: " + QString::number(level.toInt()) + " already exists.\n");
+            errTxt("err: A read only flag for sub_id: " + QString::number(subId.toInt()) + " level: " + QString::number(level.toInt()) + " already exists.\n");
         }
         else
-        {   
+        {
+            QByteArray frame = wrInt(chId, 64) + wrInt(subId.toUInt(), 8) + wrInt(level.toUInt(), 8);
+
             Query db(this);
 
             db.setType(Query::PUSH, TABLE_RDONLY_CAST);
-            db.addColumn(COLUMN_CHANNEL_NAME, chName);
+            db.addColumn(COLUMN_CHANNEL_ID, chId);
             db.addColumn(COLUMN_SUB_CH_ID, subId.toInt());
             db.addColumn(COLUMN_ACCESS_LEVEL, level.toInt());
             db.exec();
 
-            emit backendDataOut(ASYNC_ADD_RDONLY, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_ADD_RDONLY, PUB_IPC_WITH_FEEDBACK, frame);
         }
     }
 }
 
-void RemoveRDOnlyFlag::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void RemoveRDOnlyFlag::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
@@ -262,6 +313,7 @@ void RemoveRDOnlyFlag::procBin(const SharedObjs *sharedObjs, const QByteArray &b
         QString     chName = getParam("-ch_name", args);
         QString     subId  = getParam("-sub_id", args);
         QString     level  = getParam("-level", args);
+        quint64     chId;
 
         if (chName.isEmpty())
         {
@@ -287,45 +339,48 @@ void RemoveRDOnlyFlag::procBin(const SharedObjs *sharedObjs, const QByteArray &b
         {
             errTxt("err: Invalid privilage level. valid range (1-5).\n");
         }
-        else if (!channelExists(chName))
+        else if (!channelExists(chName, &chId))
         {
             errTxt("err: Channel name '" + chName + "' does not exists.\n");
         }
-        else if (channelAccessLevel(sharedObjs, chName) > ADMIN)
+        else if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) > ADMIN)
         {
             errTxt("err: Access denied.\n");
         }
-        else if (!rdOnlyFlagExists(chName, static_cast<uchar>(subId.toInt()), level.toInt()))
+        else if (!rdOnlyFlagExists(chName, static_cast<quint8>(subId.toInt()), level.toInt()))
         {
-            errTxt("err: A read only flag for sub-id: " + QString::number(subId.toInt()) + " level: " + QString::number(level.toInt()) + " does not exists.\n");
+            errTxt("err: A read only flag for sub_id: " + QString::number(subId.toInt()) + " level: " + QString::number(level.toInt()) + " does not exists.\n");
         }
         else
         {
+            QByteArray frame = wrInt(chId, 64) + wrInt(subId.toUInt(), 8) + wrInt(level.toUInt(), 8);
+
             Query db(this);
 
             db.setType(Query::DEL, TABLE_RDONLY_CAST);
-            db.addCondition(COLUMN_CHANNEL_NAME, chName);
+            db.addCondition(COLUMN_CHANNEL_ID, chId);
             db.addCondition(COLUMN_SUB_CH_ID, subId.toInt());
             db.addCondition(COLUMN_ACCESS_LEVEL, level.toInt());
             db.exec();
 
-            emit backendDataOut(ASYNC_RM_RDONLY, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_RM_RDONLY, PUB_IPC_WITH_FEEDBACK, frame);
         }
     }
 }
 
-void ListRDonlyFlags::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void ListRDonlyFlags::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        if (moreInputEnabled())
+        if (flags & MORE_INPUT)
         {
-            TableViewer::procBin(sharedObjs, binIn, dType);
+            TableViewer::procIn(binIn, dType);
         }
         else
         {
             QStringList args   = parseArgs(binIn, 2);
             QString     chName = getParam("-ch_name", args);
+            quint64     chId;
 
             if (chName.isEmpty())
             {
@@ -335,19 +390,19 @@ void ListRDonlyFlags::procBin(const SharedObjs *sharedObjs, const QByteArray &bi
             {
                 errTxt("err: Invalid channel name.\n");
             }
-            else if (!channelExists(chName))
+            else if (!channelExists(chName, &chId))
             {
                 errTxt("err: Channel name '" + chName + "' does not exists.\n");
             }
             else
             {
-                if (channelAccessLevel(sharedObjs, chName) > REGULAR)
+                if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) > REGULAR)
                 {
-                    TableViewer::procBin(sharedObjs, toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName + " -" + QString(COLUMN_LOWEST_LEVEL) + " " + QString::number(PUBLIC)), dType);
+                    TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName + " -" + QString(COLUMN_LOWEST_LEVEL) + " " + QString::number(PUBLIC)), dType);
                 }
                 else
                 {
-                    TableViewer::procBin(sharedObjs, toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName), dType);
+                    TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName), dType);
                 }
             }
         }

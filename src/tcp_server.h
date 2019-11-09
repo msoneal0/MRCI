@@ -22,30 +22,7 @@
 #include "session.h"
 #include "make_cert.h"
 #include "openssl/ssl.h"
-
-class ModDeleteTimer : public QTimer
-{
-    Q_OBJECT
-
-private:
-
-    QString      modName;
-    QStringList *delQueue;
-
-private slots:
-
-    void delMod();
-
-public slots:
-
-    void resetTimer(const QString &mod);
-
-public:
-
-    explicit ModDeleteTimer(const QString &mod, QStringList *queue, QObject *parent = nullptr);
-};
-
-//--------------------------
+#include "unix_signal.h"
 
 class TCPServer: public QTcpServer
 {
@@ -53,14 +30,18 @@ class TCPServer: public QTcpServer
 
 private:
 
-    QSharedMemory *sessionCounter;
+    QSharedMemory *hostSharedMem;
     QLocalServer  *controlPipe;
     QLocalSocket  *controlSocket;
-    QStringList    modDelQueue;
-    uint           flags;
+    char          *hostLoad;
+    QStringList    banList;
+    QString        controlPipePath;
+    QString        hostKey;
+    quint32        maxSessions;
+    quint32        flags;
 
     bool servOverloaded();
-    bool inBanList(const QString &ip);
+    bool createPipe();
     void incomingConnection(qintptr socketDescriptor);
 
 private slots:
@@ -69,7 +50,8 @@ private slots:
     void newPipeConnection();
     void closedPipeConnection();
     void sessionEnded();
-    void delayedModDel(const QString &modName);
+    void updateBanList();
+    void setMaxSessions(quint32 value);
 
 public slots:
 
@@ -85,7 +67,6 @@ public:
 signals:
 
     void connectPeers(QSharedPointer<SessionCarrier> peer);
-    void resetModDelTimer(const QString &modName);
     void endAllSessions();
 };
 

@@ -18,8 +18,13 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "../common.h"
+#include "../cmd_object.h"
 
-class DownloadFile : public InternCommand
+QByteArray toFILE_INFO(const QString &path);
+QByteArray toFILE_INFO(const QFileInfo &info);
+void       mkPathForFile(const QString &path);
+
+class DownloadFile : public CmdObject
 {
     Q_OBJECT
 
@@ -29,7 +34,6 @@ private:
     qint64 buffSize;
     qint64 len;
     qint64 dataSent;
-    bool   ssMode;
 
     void sendChunk();
 
@@ -37,16 +41,15 @@ public:
 
     static QString cmdName();
 
-    bool handlesGenfile();
-    void term();
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void clear();
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit DownloadFile(QObject *parent = nullptr);
 };
 
 //-----------------------
 
-class UploadFile : public InternCommand
+class UploadFile : public CmdObject
 {
     Q_OBJECT
 
@@ -68,16 +71,15 @@ public:
 
     static QString cmdName();
 
-    bool handlesGenfile();
-    void term();
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void clear();
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit UploadFile(QObject *parent = nullptr);
 };
 
 //-----------------------
 
-class Delete : public InternCommand
+class Delete : public CmdObject
 {
     Q_OBJECT
 
@@ -92,15 +94,14 @@ public:
 
     static QString cmdName();
 
-    void term();
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, uchar dType);
 
     explicit Delete(QObject *parent = nullptr);
 };
 
 //------------------------
 
-class Copy : public InternCommand
+class Copy : public CmdObject
 {
     Q_OBJECT
 
@@ -130,8 +131,8 @@ public:
 
     static QString cmdName();
 
-    void term();
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void clear();
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit Copy(QObject *parent = nullptr);
 };
@@ -159,7 +160,7 @@ public:
 
 //-----------------------
 
-class MakePath : public InternCommand
+class MakePath : public CmdObject
 {
     Q_OBJECT
 
@@ -167,14 +168,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit MakePath(QObject *parent = nullptr);
 };
 
 //-----------------------
 
-class ListFiles : public InternCommand
+class ListFiles : public CmdObject
 {
     Q_OBJECT
 
@@ -182,14 +183,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit ListFiles(QObject *parent = nullptr);
 };
 
 //-----------------------
 
-class FileInfo : public InternCommand
+class FileInfo : public CmdObject
 {
     Q_OBJECT
 
@@ -197,14 +198,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit FileInfo(QObject *parent = nullptr);
 };
 
 //-----------------------
 
-class ChangeDir : public InternCommand
+class ChangeDir : public CmdObject
 {
     Q_OBJECT
 
@@ -212,14 +213,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit ChangeDir(QObject *parent = nullptr);
 };
 
 //--------------------------
 
-class Tree : public InternCommand
+class Tree : public CmdObject
 {
     Q_OBJECT
 
@@ -235,8 +236,8 @@ public:
 
     static QString cmdName();
 
-    void term();
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void clear();
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit Tree(QObject *parent = nullptr);
 };

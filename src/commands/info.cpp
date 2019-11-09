@@ -18,103 +18,130 @@
 
 IPHist::IPHist(QObject *parent) : TableViewer(parent)
 {
-    setParams(TABLE_IPHIST, QStringList() << COLUMN_TIME << COLUMN_IPADDR << COLUMN_SESSION_ID << COLUMN_CLIENT_VER << COLUMN_LOGENTRY, true);
+    setParams(TABLE_IPHIST, true);
+    addTableColumn(TABLE_IPHIST, COLUMN_TIME);
+    addTableColumn(TABLE_IPHIST, COLUMN_IPADDR);
+    addTableColumn(TABLE_IPHIST, COLUMN_APP_NAME);
+    addTableColumn(TABLE_IPHIST, COLUMN_SESSION_ID);
+    addTableColumn(TABLE_IPHIST, COLUMN_LOGENTRY);
 }
 
 ListDBG::ListDBG(QObject *parent) : TableViewer(parent)
 {
-    setParams(TABLE_DMESG, QStringList() << COLUMN_TIME << COLUMN_LOGENTRY, true);
+    setParams(TABLE_DMESG, true);
+    addTableColumn(TABLE_DMESG, COLUMN_TIME);
+    addTableColumn(TABLE_DMESG, COLUMN_LOGENTRY);
 }
 
-ListCommands::ListCommands(QObject *parent) : InternCommand(parent) {}
-HostInfo::HostInfo(QObject *parent)         : InternCommand(parent) {}
-MyInfo::MyInfo(QObject *parent)             : InternCommand(parent) {}
-CmdInfo::CmdInfo(QObject *parent)           : InternCommand(parent) {}
-
-QString ListCommands::cmdName() {return "ls_cmds";}
-QString HostInfo::cmdName()     {return "host_info";}
-QString IPHist::cmdName()       {return "ls_act_log";}
-QString ListDBG::cmdName()      {return "ls_dbg";}
-QString MyInfo::cmdName()       {return "my_info";}
-QString CmdInfo::cmdName()      {return "cmd_info";}
-
-bool ListCommands::strInRowTxt(const QString &str, const QStringList &rowTxt)
+ListCommands::ListCommands(const QStringList &cmdList, const QStringList &gen, QObject *parent) : CmdObject(parent)
 {
-    bool ret = false;
+    list        = cmdList;
+    genfileList = gen;
+}
 
-    for (auto&& strInList : rowTxt)
+HostInfo::HostInfo(QObject *parent) : CmdObject(parent) {}
+MyInfo::MyInfo(QObject *parent)     : CmdObject(parent) {}
+
+QString HostInfo::cmdName() {return "host_info";}
+QString IPHist::cmdName()   {return "ls_act_log";}
+QString ListDBG::cmdName()  {return "ls_dbg";}
+QString MyInfo::cmdName()   {return "my_info";}
+
+QString ListCommands::parseMd(const QString &cmdName, int offset)
+{
+    QFile      file(":/docs/intern_commands/" + cmdName + ".md", this);
+    QByteArray data;
+
+    if (!file.open(QFile::ReadOnly))
     {
-        if (strInList.contains(str, Qt::CaseInsensitive))
-        {
-            ret = true;
-
-            break;
-        }
+        qDebug() << "err: internal command: " << cmdName << " does not have a document file.";
     }
-
-    return ret;
-}
-
-void ListCommands::procBin(const SharedObjs *sharedObjs, const QByteArray &data, uchar dType)
-{
-    Q_UNUSED(sharedObjs);
-
-    if (dType == TEXT)
+    else
     {
-        QString            find     = getParam("-find", parseArgs(data, 2));
-        QStringList        cmdNames = sharedObjs->cmdNames->values();
-        QList<QStringList> tableData;
-        QStringList        separators;
-        QList<int>         justLens;
+        data = file.readAll();
 
-        for (int i = 0; i < 3; ++i)
+        int targetTags = offset * 6;
+        int pos        = -1;
+        int len        = 0;
+
+        for (int i = 0, tags = 0; i < data.size(); ++i)
         {
-            justLens.append(12);
-            separators.append("-------");
-        }
-
-        cmdNames.sort(Qt::CaseInsensitive);
-        tableData.append(QStringList() << "command_id" << "command_name" << "summary");
-        tableData.append(separators);
-
-        for (auto&& cmdName: cmdNames)
-        {
-            QStringList rowData;
-            quint16     id = sharedObjs->cmdNames->key(cmdName);
-
-            rowData.append(QString::number(id));
-            rowData.append(cmdName);
-            rowData.append(rwSharedObjs->commands->value(id)->shortText());
-
-            if (find.isEmpty() || strInRowTxt(find, rowData))
+            if (data[i] == '#')
             {
-                for (int k = 0; k < justLens.size(); ++k)
+                ++tags;
+
+                if (pos != -1)
                 {
-                    if (justLens[k] < rowData[k].size()) justLens[k] = rowData[k].size();
+                    break;
                 }
-
-                tableData.append(rowData);
             }
-        }
-
-        mainTxt("\n");
-
-        for (auto&& row : tableData)
-        {
-            for (int i = 0; i < row.size(); ++i)
+            else if (tags == targetTags)
             {
-                mainTxt(row[i].leftJustified(justLens[i] + 2, ' '));
-            }
+                len++;
 
-            mainTxt("\n");
+                if (pos == -1)
+                {
+                    pos = i;
+                }
+            }
         }
+
+        data = data.mid(pos, len).trimmed();
+
+        if (offset == 2)
+        {
+            data.chop(3);
+            data.remove(0, 3);
+        }
+    }
+
+    file.close();
+
+    return data;
+}
+
+QString ListCommands::shortText(const QString &cmdName)
+{
+    return parseMd(cmdName, 1);
+}
+
+QString ListCommands::ioText(const QString &cmdName)
+{
+    return parseMd(cmdName, 2);
+}
+
+QString ListCommands::longText(const QString &cmdName)
+{
+    return parseMd(cmdName, 3);
+}
+
+void ListCommands::onIPCConnected()
+{
+    for (auto&& cmdName : list)
+    {
+        QByteArray frame;
+        QByteArray boolByte = QByteArray(1, 0x00);
+
+        if (genfileList.contains(cmdName))
+        {
+            boolByte = QByteArray(1, 0x01);
+        }
+
+        frame.append(QByteArray(2, 0x00));
+        frame.append(boolByte);
+        frame.append(fixedToTEXT(cmdName, BLKSIZE_CMD_NAME));
+        frame.append(fixedToTEXT(libName(), BLKSIZE_LIB_NAME));
+        frame.append(nullTermTEXT(shortText(cmdName)));
+        frame.append(nullTermTEXT(ioText(cmdName)));
+        frame.append(nullTermTEXT(longText(cmdName)));
+
+        emit procOut(frame, NEW_CMD);
     }
 }
 
-void HostInfo::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void HostInfo::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(binIn);
-    Q_UNUSED(sharedObjs);
+    Q_UNUSED(binIn)
 
     if (dType == TEXT)
     {
@@ -129,12 +156,18 @@ void HostInfo::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uc
         QString     txt;
         QTextStream txtOut(&txt);
 
-        txtOut << "Application:    " << QCoreApplication::applicationName() << " v" << QCoreApplication::applicationVersion() << " " << QSysInfo::WordSize << "Bit" << endl;
+        hostSharedMem->lock();
+
+        quint32 sesCount = rd32BitFromBlock(hostLoad);
+        quint32 maxSes   = db.getData(COLUMN_MAXSESSIONS).toUInt();
+
+        hostSharedMem->unlock();
+
+        txtOut << "Application:    " << libName() << endl;
         txtOut << "Qt Base:        " << QT_VERSION_STR << endl;
-        txtOut << "Import Rev:     " << IMPORT_REV << endl;
         txtOut << "Host Name:      " << QSysInfo::machineHostName() << endl;
         txtOut << "Host OS:        " << QSysInfo::prettyProductName() << endl;
-        txtOut << "Load:           " << rdSessionLoad() << "/" << db.getData(COLUMN_MAXSESSIONS).toUInt() << endl;
+        txtOut << "Load:           " << sesCount << "/" << maxSes << endl;
         txtOut << "Listening Addr: " << db.getData(COLUMN_IPADDR).toString() << endl;
         txtOut << "Listening Port: " << db.getData(COLUMN_PORT).toUInt() << endl;
 
@@ -142,103 +175,46 @@ void HostInfo::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uc
     }
 }
 
-void MyInfo::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void MyInfo::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(binIn);
+    Q_UNUSED(binIn)
 
     if (dType == TEXT)
     {
         QString     txt;
         QTextStream txtOut(&txt);
 
-        txtOut << "Session id:     " << sharedObjs->sessionId->toHex()            << endl;
-        txtOut << "IP Address:     " << *sharedObjs->sessionAddr                  << endl;
-        txtOut << "Logged-in:      " << boolStr(!sharedObjs->userName->isEmpty()) << endl;
-        txtOut << "App Name:       " << *sharedObjs->appName                      << endl;
+        QString sesId = rdFromBlock(sessionId, BLKSIZE_SESSION_ID).toHex();
+        QString ip    = rdStringFromBlock(clientIp, BLKSIZE_CLIENT_IP);
+        QString app   = rdStringFromBlock(appName, BLKSIZE_APP_NAME);
 
-        if (!sharedObjs->userName->isEmpty())
+        txtOut << "Session id:     " << sesId << endl;
+        txtOut << "IP Address:     " << ip    << endl;
+        txtOut << "App Name:       " << app   << endl;
+
+        if (!isEmptyBlock(userId, BLKSIZE_USER_ID))
         {
+            QByteArray uId = rdFromBlock(userId, BLKSIZE_USER_ID);
+
             Query db(this);
 
             db.setType(Query::PULL, TABLE_USERS);
             db.addColumn(COLUMN_EMAIL);
             db.addColumn(COLUMN_TIME);
             db.addColumn(COLUMN_EMAIL_VERIFIED);
-            db.addCondition(COLUMN_USERNAME, *sharedObjs->userName);
+            db.addCondition(COLUMN_USER_ID, uId);
             db.exec();
 
-            txtOut << "User Name:      " << *sharedObjs->userName                               << endl;
-            txtOut << "Group Name:     " << *sharedObjs->groupName                              << endl;
-            txtOut << "Display Name:   " << *sharedObjs->displayName                            << endl;
-            txtOut << "User ID:        " << sharedObjs->userId->toHex()                         << endl;
+            txtOut << "User Name:      " << rdStringFromBlock(userName, BLKSIZE_USER_NAME)      << endl;
+            txtOut << "Display Name:   " << rdStringFromBlock(displayName, BLKSIZE_DISP_NAME)   << endl;
+            txtOut << "User id:        " << uId.toHex()                                         << endl;
             txtOut << "Email:          " << db.getData(COLUMN_EMAIL).toString()                 << endl;
             txtOut << "Register Date:  " << db.getData(COLUMN_TIME).toString()                  << endl;
             txtOut << "Email Verified: " << boolStr(db.getData(COLUMN_EMAIL_VERIFIED).toBool()) << endl;
-            txtOut << "Owner Override: " << boolStr(*sharedObjs->chOwnerOverride)               << endl;
-            txtOut << "Host Rank:      " << *sharedObjs->hostRank                               << endl;
+            txtOut << "Owner Override: " << boolStr(rd8BitFromBlock(chOwnerOverride))           << endl;
+            txtOut << "Host Rank:      " << rd32BitFromBlock(hostRank)                          << endl;
         }
 
         mainTxt(txt);
-    }
-}
-
-void CmdInfo::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
-{
-    if (dType == TEXT)
-    {
-        QStringList args  = parseArgs(binIn, 2);
-        QString     name  = getParam("-cmd_name", args);
-        QString     cmdId = getParam("-cmd_id", args);
-
-        if (name.isEmpty() && cmdId.isEmpty())
-        {
-            errTxt("err: Command name (-cmd_name) of command id (-cmd_id) parameter not found or is empty.\n");
-        }
-        else if (!name.isEmpty() && !validCommandName(name))
-        {
-            errTxt("err: Command name '" + name + "' is not valid.\n");
-        }
-        else if (!cmdId.isEmpty() && !isInt(cmdId))
-        {
-            errTxt("err: Command id '" + cmdId + "' is not a valid integer.\n");
-        }
-        else if (!name.isEmpty() && !sharedObjs->cmdNames->values().contains(name.toLower()))
-        {
-            errTxt("err: No such command name '" + name + "'\n");
-        }
-        else if (!cmdId.isEmpty() && !sharedObjs->cmdNames->contains(cmdId.toUShort()))
-        {
-            errTxt("err: No such command id '" + cmdId + "'\n");
-        }
-        else
-        {   
-            if (!name.isEmpty())
-            {
-                cmdId = QString::number(sharedObjs->cmdNames->key(name));
-            }
-
-            if (!cmdId.isEmpty())
-            {
-                name = sharedObjs->cmdNames->value(cmdId.toUShort());
-            }
-
-            QString     txt;
-            QTextStream txtOut(&txt);
-
-            ExternCommand *cmdObj = rwSharedObjs->commands->value(cmdId.toUShort());
-
-            txtOut << "Command name: " << name                              << endl;
-            txtOut << "Command id:   " << cmdId                             << endl;
-            txtOut << "Gen file:     " << boolStr(cmdObj->handlesGenfile()) << endl << endl;
-
-            txtOut << "IO:"               << endl << endl;
-            txtOut << cmdObj->ioText()    << endl << endl;
-            txtOut << "Summary:"          << endl << endl;
-            txtOut << cmdObj->shortText() << endl << endl;
-            txtOut << "Details:"          << endl << endl;
-
-            mainTxt(txt);
-            bigTxt(cmdObj->longText());
-        }
     }
 }

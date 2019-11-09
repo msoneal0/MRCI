@@ -8,4 +8,4 @@ remove a sub-channel within a channel.
 
 ### Description ###
 
-remove a sub-channel given in -sub_name for the channel given in -ch_name. only the channel owner-level(1) and admin-level(2) is allowed to do this. only the channel owner-level(1) and admin-level(2) is allowed to do this.
+remove a sub-channel given in -sub_name for the channel given in -ch_name. only the channel owner-level(1) and admin-level(2) is allowed to do this. all sessions that currently have this sub-channel open will be forced to close it.

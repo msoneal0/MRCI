@@ -1,6 +1,6 @@
 ### Summary ###
 
-accept the p2p request you may have received from another client connected to the host.
+accept the p2p request you may have received from another peer connected to the host.
 
 ### IO ###
 

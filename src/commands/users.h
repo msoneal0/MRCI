@@ -18,7 +18,10 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "../common.h"
+#include "../cmd_object.h"
 #include "table_viewer.h"
+
+bool canModifyUser(const QByteArray &uId, quint32 myRank, bool equalAcceptable);
 
 class ListUsers : public TableViewer
 {
@@ -33,7 +36,7 @@ public:
 
 //------------------------------------
 
-class LockUser : public InternCommand
+class LockUser : public CmdObject
 {
     Q_OBJECT
 
@@ -41,14 +44,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit LockUser(QObject *parent = nullptr);
 };
 
 //------------------------------------
 
-class CreateUser : public InternCommand
+class CreateUser : public CmdObject
 {
     Q_OBJECT
 
@@ -62,21 +65,21 @@ public:
 
     static QString cmdName();
 
-    void term();
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void clear();
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit CreateUser(QObject *parent = nullptr);
 };
 
 //-----------------------------------
 
-class RemoveUser : public InternCommand
+class RemoveUser : public CmdObject
 {
     Q_OBJECT
 
 private:
 
-    QString uName;
+    QByteArray uId;
 
     void rm();
     void ask();
@@ -85,15 +88,14 @@ public:
 
     static QString cmdName();
 
-    void term();
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit RemoveUser(QObject *parent = nullptr);
 };
 
 //-----------------------------------
 
-class ChangeGroup : public InternCommand
+class ChangeUserRank : public CmdObject
 {
     Q_OBJECT
 
@@ -101,14 +103,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
-    explicit ChangeGroup(QObject *parent = nullptr);
+    explicit ChangeUserRank(QObject *parent = nullptr);
 };
 
 //---------------------------------
 
-class ChangePassword : public InternCommand
+class ChangePassword : public CmdObject
 {
     Q_OBJECT
 
@@ -116,14 +118,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit ChangePassword(QObject *parent = nullptr);
 };
 
 //-------------------------------
 
-class ChangeUsername : public InternCommand
+class ChangeUsername : public CmdObject
 {
     Q_OBJECT
 
@@ -131,14 +133,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit ChangeUsername(QObject *parent = nullptr);
 };
 
 //-----------------------------
 
-class ChangeDispName : public InternCommand
+class ChangeDispName : public CmdObject
 {
     Q_OBJECT
 
@@ -146,26 +148,26 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit ChangeDispName(QObject *parent = nullptr);
 };
 
 //-----------------------------
 
-class OverWriteEmail : public InternCommand
+class OverWriteEmail : public CmdObject
 {
     Q_OBJECT
 
 protected:
 
-    void procArgs(const QString &uName, const QString &newEmail, bool sameRank, const SharedObjs *sharedObjs);
+    void procArgs(const QString &uName, const QString &newEmail, bool sameRank);
 
 public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit OverWriteEmail(QObject *parent = nullptr);
 };
@@ -180,37 +182,43 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit ChangeEmail(QObject *parent = nullptr);
 };
 
 //-----------------------------
 
-class PasswordChangeRequest : public InternCommand
+class PasswordChangeRequest : public CmdObject
 {
     Q_OBJECT
+
+protected:
+
+    virtual void exec(const QByteArray &uId, bool req);
 
 public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit PasswordChangeRequest(QObject *parent = nullptr);
 };
 
 //----------------------------
 
-class NameChangeRequest : public InternCommand
+class NameChangeRequest : public PasswordChangeRequest
 {
     Q_OBJECT
+
+private:
+
+    void exec(const QByteArray &uId, bool req);
 
 public:
 
     static QString cmdName();
-
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
 
     explicit NameChangeRequest(QObject *parent = nullptr);
 };

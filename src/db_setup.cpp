@@ -25,6 +25,8 @@ bool setupDb(QString *errMsg)
     Query query(QThread::currentThread());
     Query defaults(QThread::currentThread());
 
+    QString randPw;
+
     if (query.inErrorstate())
     {
         ret = false;
@@ -38,8 +40,8 @@ bool setupDb(QString *errMsg)
         query.setType(Query::CREATE_TABLE, TABLE_IPHIST);
         query.addColumn(COLUMN_IPADDR);
         query.addColumn(COLUMN_TIME);
-        query.addColumn(COLUMN_CLIENT_VER);
         query.addColumn(COLUMN_SESSION_ID);
+        query.addColumn(COLUMN_APP_NAME);
         query.addColumn(COLUMN_LOGENTRY);
 
         ret = query.exec();
@@ -48,12 +50,7 @@ bool setupDb(QString *errMsg)
     if (ret)
     {
         query.setType(Query::CREATE_TABLE, TABLE_MODULES);
-        query.addColumn(COLUMN_MOD_NAME);
         query.addColumn(COLUMN_MOD_MAIN);
-        query.addColumn(COLUMN_LOCKED);
-        query.addColumn(COLUMN_CMD_ID_OFFS);
-        query.setPrimary(COLUMN_MOD_NAME);
-        query.addUnique(COLUMN_MOD_NAME);
         query.addUnique(COLUMN_MOD_MAIN);
 
         ret = query.exec();
@@ -75,9 +72,7 @@ bool setupDb(QString *errMsg)
         query.setType(Query::CREATE_TABLE, TABLE_CMD_RANKS);
         query.addColumn(COLUMN_COMMAND);
         query.addColumn(COLUMN_HOST_RANK);
-        query.addColumn(COLUMN_MOD_NAME);
-        query.setPrimary(COLUMN_COMMAND);
-        query.addUnique(COLUMN_COMMAND);
+        query.addColumn(COLUMN_MOD_MAIN);
 
         ret = query.exec();
     }
@@ -116,39 +111,9 @@ bool setupDb(QString *errMsg)
 
     if (ret)
     {
-        query.setType(Query::CREATE_TABLE, TABLE_GROUPS);
-        query.addColumn(COLUMN_GRNAME);
-        query.addColumn(COLUMN_HOST_RANK);
-        query.setPrimary(COLUMN_GRNAME);
-        query.addUnique(COLUMN_GRNAME);
-
-        ret = query.exec();
-
-        if (query.createExecuted())
-        {
-            query.setType(Query::PUSH, TABLE_GROUPS);
-            query.addColumn(COLUMN_GRNAME, ROOT_USER);
-            query.addColumn(COLUMN_HOST_RANK, 1);
-
-            ret = query.exec();
-
-            if (ret)
-            {
-                query.setType(Query::PUSH, TABLE_GROUPS);
-                query.addColumn(COLUMN_GRNAME, DEFAULT_UGROUP);
-                query.addColumn(COLUMN_HOST_RANK, 2);
-
-                ret = query.exec();
-            }
-        }
-    }
-
-    if (ret)
-    {
         query.setType(Query::CREATE_TABLE, TABLE_USERS);
         query.addColumn(COLUMN_USERNAME);
         query.addColumn(COLUMN_USER_ID);
-        query.addColumn(COLUMN_GRNAME);
         query.addColumn(COLUMN_EMAIL);
         query.addColumn(COLUMN_HASH);
         query.addColumn(COLUMN_SALT);
@@ -158,31 +123,34 @@ bool setupDb(QString *errMsg)
         query.addColumn(COLUMN_LOCKED);
         query.addColumn(COLUMN_EMAIL_VERIFIED);
         query.addColumn(COLUMN_DISPLAY_NAME);
-        query.setPrimary(COLUMN_USERNAME);
+        query.addColumn(COLUMN_HOST_RANK);
+        query.setPrimary(COLUMN_USER_ID);
         query.addUnique(COLUMN_USERNAME);
         query.addUnique(COLUMN_EMAIL);
         query.addUnique(COLUMN_USER_ID);
-        query.addForeign(COLUMN_GRNAME, TABLE_GROUPS, COLUMN_GRNAME, Query::RESTRICT, Query::CASCADE);
 
         ret = query.exec();
 
         if (query.createExecuted())
         {
+            QByteArray uId = genUniqueHash();
+
             query.setType(Query::PUSH, TABLE_USERS);
             query.addColumn(COLUMN_USERNAME, ROOT_USER);
-            query.addColumn(COLUMN_GRNAME, ROOT_USER);
+            query.addColumn(COLUMN_HOST_RANK, 1);
             query.addColumn(COLUMN_NEED_PASS, true);
             query.addColumn(COLUMN_NEED_NAME, false);
             query.addColumn(COLUMN_LOCKED, false);
             query.addColumn(COLUMN_EMAIL_VERIFIED, false);
-            query.addColumn(COLUMN_USER_ID, genUniqueHash());
+            query.addColumn(COLUMN_USER_ID, uId);
             query.addRandBlob(COLUMN_SALT, 128);
 
             ret = query.exec();
 
             if (ret)
             {
-                ret = updatePassword(ROOT_USER, DEFAULT_PASSWRD, TABLE_USERS, true);
+                randPw = genPw();
+                ret    = updatePassword(uId, randPw, TABLE_USERS, true);
             }
         }
     }
@@ -192,12 +160,11 @@ bool setupDb(QString *errMsg)
         query.setType(Query::CREATE_TABLE, TABLE_AUTH_LOG);
         query.addColumn(COLUMN_IPADDR);
         query.addColumn(COLUMN_TIME);
-        query.addColumn(COLUMN_USERNAME);
+        query.addColumn(COLUMN_USER_ID);
         query.addColumn(COLUMN_AUTH_ATTEMPT);
         query.addColumn(COLUMN_RECOVER_ATTEMPT);
         query.addColumn(COLUMN_ACCEPTED);
         query.addColumn(COLUMN_COUNT);
-        query.addForeign(COLUMN_USERNAME, TABLE_USERS, COLUMN_USERNAME, Query::CASCADE, Query::CASCADE);
 
         ret = query.exec();
     }
@@ -206,16 +173,10 @@ bool setupDb(QString *errMsg)
     {
         query.setType(Query::CREATE_TABLE, TABLE_PW_RECOVERY);
         query.addColumn(COLUMN_TIME);
-        query.addColumn(COLUMN_USERNAME);
-        query.addColumn(COLUMN_EMAIL);
         query.addColumn(COLUMN_HASH);
         query.addColumn(COLUMN_SALT);
         query.addColumn(COLUMN_USER_ID);
-        query.addUnique(COLUMN_USERNAME);
-        query.addUnique(COLUMN_EMAIL);
-        query.addForeign(COLUMN_USER_ID, TABLE_USERS, COLUMN_USER_ID, Query::CASCADE, Query::RESTRICT);
-        query.addForeign(COLUMN_USERNAME, TABLE_USERS, COLUMN_USERNAME, Query::CASCADE, Query::CASCADE);
-        query.addForeign(COLUMN_EMAIL, TABLE_USERS, COLUMN_EMAIL, Query::CASCADE, Query::CASCADE);
+        query.addForeign(COLUMN_USER_ID, TABLE_USERS, COLUMN_USER_ID, Query::CASCADE, Query::CASCADE);
 
         ret = query.exec();
     }
@@ -224,13 +185,11 @@ bool setupDb(QString *errMsg)
     {
         query.setType(Query::CREATE_TABLE, TABLE_CH_MEMBERS);
         query.addColumn(COLUMN_CHANNEL_ID);
-        query.addColumn(COLUMN_CHANNEL_NAME);
-        query.addColumn(COLUMN_USERNAME);
+        query.addColumn(COLUMN_USER_ID);
         query.addColumn(COLUMN_PENDING_INVITE);
         query.addColumn(COLUMN_ACCESS_LEVEL);
         query.addForeign(COLUMN_CHANNEL_ID, TABLE_CHANNELS, COLUMN_CHANNEL_ID, Query::CASCADE, Query::CASCADE);
-        query.addForeign(COLUMN_CHANNEL_NAME, TABLE_CHANNELS, COLUMN_CHANNEL_NAME, Query::CASCADE, Query::CASCADE);
-        query.addForeign(COLUMN_USERNAME, TABLE_USERS, COLUMN_USERNAME, Query::CASCADE, Query::CASCADE);
+        query.addForeign(COLUMN_USER_ID, TABLE_USERS, COLUMN_USER_ID, Query::CASCADE, Query::CASCADE);
 
         ret = query.exec();
     }
@@ -241,11 +200,9 @@ bool setupDb(QString *errMsg)
         query.addColumn(COLUMN_CHANNEL_ID);
         query.addColumn(COLUMN_SUB_CH_NAME);
         query.addColumn(COLUMN_SUB_CH_ID);
-        query.addColumn(COLUMN_CHANNEL_NAME);
         query.addColumn(COLUMN_LOWEST_LEVEL);
         query.addColumn(COLUMN_ACTIVE_UPDATE);
         query.addForeign(COLUMN_CHANNEL_ID, TABLE_CHANNELS, COLUMN_CHANNEL_ID, Query::CASCADE, Query::CASCADE);
-        query.addForeign(COLUMN_CHANNEL_NAME, TABLE_CHANNELS, COLUMN_CHANNEL_NAME, Query::CASCADE, Query::CASCADE);
 
         ret = query.exec();
     }
@@ -254,11 +211,9 @@ bool setupDb(QString *errMsg)
     {
         query.setType(Query::CREATE_TABLE, TABLE_RDONLY_CAST);
         query.addColumn(COLUMN_CHANNEL_ID);
-        query.addColumn(COLUMN_CHANNEL_NAME);
         query.addColumn(COLUMN_SUB_CH_ID);
         query.addColumn(COLUMN_ACCESS_LEVEL);
         query.addForeign(COLUMN_CHANNEL_ID, TABLE_CHANNELS, COLUMN_CHANNEL_ID, Query::CASCADE, Query::CASCADE);
-        query.addForeign(COLUMN_CHANNEL_NAME, TABLE_CHANNELS, COLUMN_CHANNEL_NAME, Query::CASCADE, Query::CASCADE);
     }
 
     if (ret)
@@ -273,7 +228,7 @@ bool setupDb(QString *errMsg)
         query.addColumn(COLUMN_ZIPBIN);
         query.addColumn(COLUMN_ZIPCOMPRESS);
         query.addColumn(COLUMN_ZIPEXTRACT);
-        query.addColumn(COLUMN_INITGROUP);
+        query.addColumn(COLUMN_INITRANK);
         query.addColumn(COLUMN_MAILERBIN);
         query.addColumn(COLUMN_MAIL_SEND);
         query.addColumn(COLUMN_CONFIRM_SUBJECT);
@@ -284,9 +239,14 @@ bool setupDb(QString *errMsg)
         query.addColumn(COLUMN_ENABLE_PW_RESET);
         query.addColumn(COLUMN_ACTIVE_UPDATE);
         query.addColumn(COLUMN_MAX_SUB_CH);
-        query.addForeign(COLUMN_INITGROUP, TABLE_GROUPS, COLUMN_GRNAME, Query::RESTRICT, Query::CASCADE);
+        query.addColumn(COLUMN_DEFAULT_PASS);
 
         ret = query.exec();
+
+        if (randPw.isEmpty())
+        {
+            randPw = genPw();
+        }
 
         if (query.createExecuted())
         {
@@ -297,10 +257,7 @@ bool setupDb(QString *errMsg)
             query.addColumn(COLUMN_LOCK_LIMIT, DEFAULT_LOCK_LIMIT);
             query.addColumn(COLUMN_MAXSESSIONS, DEFAULT_MAXSESSIONS);
             query.addColumn(COLUMN_PUB_USERS, false);
-            query.addColumn(COLUMN_ZIPBIN, DEFAULT_ZIPBIN);
-            query.addColumn(COLUMN_ZIPCOMPRESS, DEFAULT_ZIPCOMPRESS);
-            query.addColumn(COLUMN_ZIPEXTRACT, DEFAULT_ZIPEXTRACT);
-            query.addColumn(COLUMN_INITGROUP, DEFAULT_UGROUP);
+            query.addColumn(COLUMN_INITRANK, DEFAULT_INIT_RANK);
             query.addColumn(COLUMN_MAILERBIN, DEFAULT_MAILBIN);
             query.addColumn(COLUMN_MAIL_SEND, DEFAULT_MAIL_SEND);
             query.addColumn(COLUMN_CONFIRM_SUBJECT, DEFAULT_CONFIRM_SUBJECT);
@@ -311,6 +268,7 @@ bool setupDb(QString *errMsg)
             query.addColumn(COLUMN_ENABLE_PW_RESET, true);
             query.addColumn(COLUMN_ACTIVE_UPDATE, true);
             query.addColumn(COLUMN_MAX_SUB_CH, DEFAULT_MAX_SUBS);
+            query.addColumn(COLUMN_DEFAULT_PASS, randPw);
 
             ret = query.exec();
         }
@@ -326,7 +284,7 @@ bool setupDb(QString *errMsg)
             query.addColumn(COLUMN_ZIPBIN);
             query.addColumn(COLUMN_ZIPCOMPRESS);
             query.addColumn(COLUMN_ZIPEXTRACT);
-            query.addColumn(COLUMN_INITGROUP);
+            query.addColumn(COLUMN_INITRANK);
             query.addColumn(COLUMN_MAILERBIN);
             query.addColumn(COLUMN_MAIL_SEND);
             query.addColumn(COLUMN_CONFIRM_SUBJECT);
@@ -337,6 +295,7 @@ bool setupDb(QString *errMsg)
             query.addColumn(COLUMN_ENABLE_PW_RESET);
             query.addColumn(COLUMN_ACTIVE_UPDATE);
             query.addColumn(COLUMN_MAX_SUB_CH);
+            query.addColumn(COLUMN_DEFAULT_PASS);
 
             ret = query.exec();
 
@@ -350,10 +309,7 @@ bool setupDb(QString *errMsg)
                 if (query.getData(COLUMN_LOCK_LIMIT).isNull())      defaults.addColumn(COLUMN_LOCK_LIMIT, DEFAULT_LOCK_LIMIT);
                 if (query.getData(COLUMN_MAXSESSIONS).isNull())     defaults.addColumn(COLUMN_MAXSESSIONS, DEFAULT_MAXSESSIONS);
                 if (query.getData(COLUMN_PUB_USERS).isNull())       defaults.addColumn(COLUMN_PUB_USERS, false);
-                if (query.getData(COLUMN_ZIPBIN).isNull())          defaults.addColumn(COLUMN_ZIPBIN, DEFAULT_ZIPBIN);
-                if (query.getData(COLUMN_ZIPCOMPRESS).isNull())     defaults.addColumn(COLUMN_ZIPCOMPRESS, DEFAULT_ZIPCOMPRESS);
-                if (query.getData(COLUMN_ZIPEXTRACT).isNull())      defaults.addColumn(COLUMN_ZIPEXTRACT, DEFAULT_ZIPEXTRACT);
-                if (query.getData(COLUMN_INITGROUP).isNull())       defaults.addColumn(COLUMN_INITGROUP, DEFAULT_UGROUP);
+                if (query.getData(COLUMN_INITRANK).isNull())        defaults.addColumn(COLUMN_INITRANK, DEFAULT_INIT_RANK);
                 if (query.getData(COLUMN_MAILERBIN).isNull())       defaults.addColumn(COLUMN_MAILERBIN, DEFAULT_MAILBIN);
                 if (query.getData(COLUMN_MAIL_SEND).isNull())       defaults.addColumn(COLUMN_MAIL_SEND, DEFAULT_MAIL_SEND);
                 if (query.getData(COLUMN_CONFIRM_SUBJECT).isNull()) defaults.addColumn(COLUMN_CONFIRM_SUBJECT, DEFAULT_CONFIRM_SUBJECT);
@@ -364,6 +320,7 @@ bool setupDb(QString *errMsg)
                 if (query.getData(COLUMN_ENABLE_PW_RESET).isNull()) defaults.addColumn(COLUMN_ENABLE_PW_RESET, true);
                 if (query.getData(COLUMN_ACTIVE_UPDATE).isNull())   defaults.addColumn(COLUMN_ACTIVE_UPDATE, true);
                 if (query.getData(COLUMN_MAX_SUB_CH).isNull())      defaults.addColumn(COLUMN_MAX_SUB_CH, DEFAULT_MAX_SUBS);
+                if (query.getData(COLUMN_DEFAULT_PASS).isNull())    defaults.addColumn(COLUMN_DEFAULT_PASS, randPw);
 
                 if (defaults.columns())
                 {

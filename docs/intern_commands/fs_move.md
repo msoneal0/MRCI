@@ -1,6 +1,6 @@
 ### Summary ###
 
-move/rename a file system object (file,directory,symlink) from one location to another.
+move/rename a file or directory in the host file system.
 
 ### IO ###
 

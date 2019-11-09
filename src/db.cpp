@@ -26,9 +26,9 @@ QString columnType(const QString &column)
     QString ret;
 
     if ((column == COLUMN_IPADDR)       || (column == COLUMN_LOGENTRY)     || (column == COLUMN_USERNAME)     ||
-        (column == COLUMN_GRNAME)       || (column == COLUMN_EMAIL)        || (column == COLUMN_INITGROUP)    ||
+        (column == COLUMN_CHANNEL_NAME) || (column == COLUMN_EMAIL)        || (column == COLUMN_SUB_CH_NAME)  ||
         (column == COLUMN_COMMAND)      || (column == COLUMN_CLIENT_VER)   || (column == COLUMN_COMMON_NAME)  ||
-        (column == COLUMN_DISPLAY_NAME) || (column == COLUMN_CHANNEL_NAME) || (column == COLUMN_SUB_CH_NAME))
+        (column == COLUMN_DISPLAY_NAME))
     {
         ret = "TEXT COLLATE NOCASE";
     }
@@ -43,14 +43,14 @@ QString columnType(const QString &column)
     else if ((column == COLUMN_TEMP_PW_MSG) || (column == COLUMN_ZIPBIN)     || (column == COLUMN_CONFIRM_SUBJECT) ||
              (column == COLUMN_ZIPCOMPRESS) || (column == COLUMN_ZIPEXTRACT) || (column == COLUMN_TEMP_PW_SUBJECT) ||
              (column == COLUMN_MAILERBIN)   || (column == COLUMN_MAIL_SEND)  || (column == COLUMN_CONFIRM_MSG)     ||
-             (column == COLUMN_MOD_NAME)    || (column == COLUMN_MOD_MAIN))
+             (column == COLUMN_MOD_MAIN))
     {
         ret = "TEXT";
     }
     else if ((column == COLUMN_LOCK_LIMIT)   || (column == COLUMN_PORT)        || (column == COLUMN_BAN_LIMIT)    ||
              (column == COLUMN_HOST_RANK)    || (column == COLUMN_MAXSESSIONS) || (column == COLUMN_LOWEST_LEVEL) ||
              (column == COLUMN_ACCESS_LEVEL) || (column == COLUMN_CHANNEL_ID)  || (column == COLUMN_SUB_CH_ID)    ||
-             (column == COLUMN_MAX_SUB_CH)   || (column == COLUMN_CMD_ID_OFFS))
+             (column == COLUMN_MAX_SUB_CH)   || (column == COLUMN_INITRANK))
     {
         ret = "INTEGER";
     }
@@ -91,78 +91,185 @@ QString sqlDataPath()
     return ret;
 }
 
-QString initGroup()
+QList<int> genSequence(int min, int max, int len)
+{
+    QList<int> ret;
+
+    for (int i = 0; i < len; ++i)
+    {
+        ret.append(QRandomGenerator::global()->bounded(min, max));
+    }
+
+    return ret;
+}
+
+QChar genLetter()
+{
+    // generate random letter from ascii table decimal value 97-122.
+
+    return QChar(static_cast<char>(QRandomGenerator::global()->bounded(97, 122)));
+}
+
+QChar genNum()
+{
+    // generate random number from ascii table decimal value 48-57.
+
+    return QChar(static_cast<char>(QRandomGenerator::global()->bounded(48, 57)));
+}
+
+QChar genSpecialChar()
+{
+    static QString specialChars = "`~!@#$%^&*()-_+=[]{}\\|:;\"'<,>.?/";
+
+    return specialChars[QRandomGenerator::global()->bounded(0, specialChars.size() - 1)];
+}
+
+int inRange(int pos, int min, int max)
+{
+    int ret = pos;
+
+    if (pos < min) ret = min;
+    if (pos > max) ret = max;
+
+    return ret;
+}
+
+void moveCharLeft(int pos, QString &str)
+{
+    pos = inRange(pos, 0, str.size() - 1);
+
+    QChar chr = str[pos];
+
+    str.remove(pos, 1);
+
+    if (pos == 0) str.append(chr);
+    else          str.insert(pos - 1, chr);
+}
+
+void moveCharRight(int pos, QString &str)
+{
+    pos = inRange(pos, 0, str.size() - 1);
+
+    QChar chr = str[pos];
+
+    str.remove(pos, 1);
+
+    if (pos == str.size() - 1) str.insert(0, chr);
+    else                       str.insert(pos + 1, chr);
+}
+
+QString genPw()
+{
+    QString ret;
+
+    QList<int> seq = genSequence(2, 5, 4);
+
+    for (int i = 0; i < seq[0]; ++i)
+    {
+        ret.append(genLetter());
+    }
+
+    for (int i = 0; i < seq[1]; ++i)
+    {
+        ret.append(genLetter().toUpper());
+    }
+
+    for (int i = 0; i < seq[2]; ++i)
+    {
+        ret.append(genNum());
+    }
+
+    for (int i = 0; i < seq[3]; ++i)
+    {
+        ret.append(genSpecialChar());
+    }
+
+    seq = genSequence(0, ret.size() - 1, 10);
+
+    bool toggle = false;
+
+    for (int i : seq)
+    {
+        if (toggle) moveCharRight(i, ret);
+        else        moveCharLeft(i, ret);
+
+        toggle = !toggle;
+    }
+
+    return ret;
+}
+
+quint32 initHostRank()
 {
     Query db;
 
     db.setType(Query::PULL, TABLE_SERV_SETTINGS);
-    db.addColumn(COLUMN_INITGROUP);
+    db.addColumn(COLUMN_INITRANK);
     db.exec();
 
-    return db.getData(COLUMN_INITGROUP).toString();
+    return db.getData(COLUMN_INITRANK).toUInt();
 }
 
-QByteArray getSalt(const QString &userName, const QString &table)
+QByteArray getSalt(const QByteArray &uId, const QString &table)
 {
     Query db;
 
     db.setType(Query::PULL, table);
     db.addColumn(COLUMN_SALT);
-    db.addColumn(COLUMN_USER_ID);
-    db.addCondition(COLUMN_USERNAME, userName);
+    db.addCondition(COLUMN_USER_ID, uId);
     db.exec();
 
-    return db.getData(COLUMN_SALT).toByteArray() + db.getData(COLUMN_USER_ID).toByteArray();
+    return db.getData(COLUMN_SALT).toByteArray();
 }
 
 bool createUser(const QString &userName, const QString &email, const QString &dispName, const QString &password)
 {
     bool ret = false;
 
-    Query db;
+    Query      db;
+    QByteArray newUId = genUniqueHash();
 
     db.setType(Query::PUSH, TABLE_USERS);
     db.addColumn(COLUMN_USERNAME, userName);
     db.addColumn(COLUMN_EMAIL, email);
-    db.addColumn(COLUMN_GRNAME, initGroup());
+    db.addColumn(COLUMN_HOST_RANK, initHostRank());
     db.addColumn(COLUMN_DISPLAY_NAME, dispName);
     db.addColumn(COLUMN_EMAIL_VERIFIED, false);
     db.addColumn(COLUMN_NEED_PASS, false);
     db.addColumn(COLUMN_NEED_NAME, false);
-    db.addColumn(COLUMN_USER_ID, genUniqueHash());
+    db.addColumn(COLUMN_USER_ID, newUId);
     db.addRandBlob(COLUMN_SALT, 128);
 
     if (db.exec())
     {
-        ret = updatePassword(userName, password, TABLE_USERS);
+        ret = updatePassword(newUId, password, TABLE_USERS);
     }
 
     return ret;
 }
 
-bool createTempPw(const QString &userName, const QString &email, const QString &password)
+bool createTempPw(const QByteArray &uId, const QString &password)
 {
     bool ret = false;
 
     Query db;
 
     db.setType(Query::PUSH, TABLE_PW_RECOVERY);
-    db.addColumn(COLUMN_USERNAME, userName);
-    db.addColumn(COLUMN_EMAIL, email);
+    db.addColumn(COLUMN_USER_ID, uId);
     db.addRandBlob(COLUMN_SALT, 128);
 
     if (db.exec())
     {
-        ret = updatePassword(userName, password, TABLE_PW_RECOVERY);
+        ret = updatePassword(uId, password, TABLE_PW_RECOVERY);
     }
 
     return ret;
 }
 
-bool updatePassword(const QString &userName, const QString &password, const QString &table, bool requireNewPass)
+bool updatePassword(const QByteArray &uId, const QString &password, const QString &table, bool requireNewPass)
 {
     bool       ret  = false;
-    QByteArray salt = getSalt(userName, table);
+    QByteArray salt = getSalt(uId, table);
 
     if (!salt.isEmpty())
     {
@@ -175,7 +282,7 @@ bool updatePassword(const QString &userName, const QString &password, const QStr
         db.setType(Query::UPDATE, table);
         db.addColumn(COLUMN_HASH, hasher.result());
         db.addColumn(COLUMN_NEED_PASS, requireNewPass);
-        db.addCondition(COLUMN_USERNAME, userName);
+        db.addCondition(COLUMN_USER_ID, uId);
 
         ret = db.exec();
     }
@@ -183,10 +290,10 @@ bool updatePassword(const QString &userName, const QString &password, const QStr
     return ret;
 }
 
-bool auth(const QString &userName, const QString &password, const QString &table)
+bool auth(const QByteArray &uId, const QString &password, const QString &table)
 {
     bool       ret  = false;
-    QByteArray salt = getSalt(userName, table);
+    QByteArray salt = getSalt(uId, table);
 
     if (!salt.isEmpty())
     {
@@ -198,7 +305,7 @@ bool auth(const QString &userName, const QString &password, const QString &table
 
         db.setType(Query::PULL, table);
         db.addColumn(COLUMN_HASH);
-        db.addCondition(COLUMN_USERNAME, userName);
+        db.addCondition(COLUMN_USER_ID, uId);
         db.exec();
 
         if (db.rows())
@@ -214,7 +321,7 @@ Query::Query(QObject *parent) : QObject(parent)
 {
     // this class is an SQL database interface that will be used to store
     // all persistent data for this application. it works by building
-    // a query string (qStr + wStr + limit) to be executed by the
+    // a query string (qStr + jStr + wStr + limit) to be executed by the
     // QSqlQuery object in the exec() function.
 
     // QT's QSqlQuery in a multi-threaded app will only work if the
@@ -254,11 +361,17 @@ Query::Query(QObject *parent) : QObject(parent)
 QString Query::errDetail()
 {
     QString ret;
+    QString errTxt = "none";
+
+    if (!lastErr.isEmpty())
+    {
+        errTxt = lastErr;
+    }
 
     QTextStream txtOut(&ret);
 
-    txtOut << "     driver error: " << lastErr << endl;
-    txtOut << "     query:        " << qStr << endl;
+    txtOut << "     driver error: " << errTxt << endl;
+    txtOut << "     query:        " << qStr << jStr << wStr << limit << endl;
     txtOut << "     db path:      " << sqlDataPath() << endl;
 
     QFileInfo info = QFileInfo(QFileInfo(sqlDataPath()).path());
@@ -335,6 +448,7 @@ void Query::setType(QueryType qType, const QString &tbl)
 
     qStr.clear();
     wStr.clear();
+    jStr.clear();
     limit.clear();
     columnList.clear();
     bindValues.clear();
@@ -354,7 +468,7 @@ void Query::setType(QueryType qType, const QString &tbl)
 
         break;
     }
-    case PULL:
+    case PULL: case INNER_JOIN_PULL:
     {
         txt << "SELECT %columns% FROM " << tbl;
 
@@ -392,7 +506,7 @@ void Query::setType(QueryType qType, const QString &tbl)
 
 void Query::setQueryLimit(uint value, uint offset)
 {
-    if (type == PULL)
+    if ((type == PULL) || (type == INNER_JOIN_PULL))
     {
         limit = " LIMIT " + QString::number(value) + " OFFSET " + QString::number(offset);
     }
@@ -454,6 +568,16 @@ void Query::addColumn(const QString &column, const QVariant &dataIn)
     columnsAsPassed.append(column);
 }
 
+void Query::addTableColumn(const QString &table, const QString &column)
+{
+    if ((type == INNER_JOIN_PULL) || (type == PULL))
+    {
+        columnList.append(table + "." + column);
+    }
+
+    columnsAsPassed.append(column);
+}
+
 void Query::addRandBlob(const QString &column, int len)
 {
     if ((type == PUSH) || (type == UPDATE))
@@ -476,9 +600,41 @@ void Query::addRandBlob(const QString &column, int len)
     columnsAsPassed.append(column);
 }
 
-void Query::addCondition(const QString &column, const QVariant &data, Condition cond)
+void Query::addJoinCondition(const QString &column, const QString &joinTable, Condition cond)
 {
-    if ((type == PULL) || (type == UPDATE) || (type == DEL))
+    if (type == INNER_JOIN_PULL)
+    {
+        QTextStream txt(&jStr);
+
+        if (jStr.contains(joinTable))
+        {
+            txt << " AND ";
+        }
+        else
+        {
+            txt << " INNER JOIN " << joinTable << " ON ";
+        }
+
+        if (cond == NOT_EQUAL)
+        {
+            txt << table << "." << column << " != " << joinTable << "." << column;
+        }
+        else if (cond == EQUAL)
+        {
+            txt << table << "." << column << " = " << joinTable << "." << column;
+        }
+    }
+}
+
+void Query::clearConditions()
+{
+    wStr.clear();
+    whereBinds.clear();
+}
+
+void Query::addCondition(const QString &column, const QVariant &data, Condition cond, const QString &tbl)
+{
+    if ((type == PULL) || (type == UPDATE) || (type == DEL) || (type == INNER_JOIN_PULL))
     {
         QTextStream txt(&wStr);
 
@@ -487,13 +643,27 @@ void Query::addCondition(const QString &column, const QVariant &data, Condition 
 
         if (cond == NOT_EQUAL)
         {
-            txt << column << " != :where" << whereBinds.size();
+            if (tbl.isEmpty())
+            {
+                txt << column << " != :where" << whereBinds.size();
+            }
+            else
+            {
+                txt << tbl << "." << column << " != :where" << whereBinds.size();
+            }
 
             whereBinds.append(data);
         }
         else if (cond == EQUAL)
         {
-            txt << column << " = :where" << whereBinds.size();
+            if (tbl.isEmpty())
+            {
+                txt << column << " = :where" << whereBinds.size();
+            }
+            else
+            {
+                txt << tbl << "." << column << " = :where" << whereBinds.size();
+            }
 
             whereBinds.append(data);
         }
@@ -520,18 +690,15 @@ void Query::addCondition(const QString &column, const QVariant &data, Condition 
                 escapedData.insert(0, "%");
             }
 
-            txt << "LIKE('" << escapedData << "', " << column << ", '" << escape << "') > 0";
+            if (tbl.isEmpty())
+            {
+                txt << "LIKE('" << escapedData << "', " << column << ", '" << escape << "') > 0";
+            }
+            else
+            {
+                txt << "LIKE('" << escapedData << "', " << tbl << "." << column << ", '" << escape << "') > 0";
+            }
         }
-    }
-}
-
-void Query::addComma(QString &str, bool *toggle)
-{
-    if (!*toggle)
-    {
-        str.append(",");
-
-        *toggle = true;
     }
 }
 
@@ -600,6 +767,7 @@ void Query::preExec()
     QString columnsStr = QStringList(columnList).join(", ");
 
     qStr.replace("%columns%", columnsStr);
+    data.clear();
 
     if (type == PUSH)
     {
@@ -660,7 +828,7 @@ bool Query::exec()
 
         QSqlQuery query(getDatabase());
 
-        query.prepare(qStr + wStr + limit + ";");
+        query.prepare(qStr + jStr + wStr + limit + ";");
 
         for (int i = 0; i < bindValues.size(); ++i)
         {
@@ -702,6 +870,11 @@ bool Query::exec()
     return queryOk;
 }
 
+QList<QList<QVariant> > &Query::allData()
+{
+    return data;
+}
+
 QVariant Query::getData(const QString &column, int row)
 {
     QVariant ret;
@@ -723,8 +896,14 @@ int Query::rows()
 {
     int ret = 0;
 
-    if (type == PULL) ret = data.size();
-    else              ret = rowsAffected;
+    if ((type == PULL) || (type == INNER_JOIN_PULL))
+    {
+        ret = data.size();
+    }
+    else
+    {
+        ret = rowsAffected;
+    }
 
     return ret;
 }

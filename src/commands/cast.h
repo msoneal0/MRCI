@@ -18,9 +18,13 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "../common.h"
+#include "../cmd_object.h"
 #include "table_viewer.h"
 
-class Cast : public InternCommand
+bool canOpenSubChannel(const QByteArray &uId, const char *override, quint64 chId, quint8 subId);
+int  lowestAcessLevel(quint64 chId, quint8 subId);
+
+class Cast : public CmdObject
 {
     Q_OBJECT
 
@@ -28,14 +32,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit Cast(QObject *parent = nullptr);
 };
 
 //----------------------------------
 
-class OpenSubChannel : public InternCommand
+class OpenSubChannel : public CmdObject
 {
     Q_OBJECT
 
@@ -43,14 +47,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit OpenSubChannel(QObject *parent = nullptr);
 };
 
 //-----------------------------------
 
-class CloseSubChannel : public InternCommand
+class CloseSubChannel : public CmdObject
 {
     Q_OBJECT
 
@@ -58,14 +62,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit CloseSubChannel(QObject *parent = nullptr);
 };
 
 //----------------------------------
 
-class LsOpenChannels : public InternCommand
+class LsOpenChannels : public CmdObject
 {
     Q_OBJECT
 
@@ -73,14 +77,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit LsOpenChannels(QObject *parent = nullptr);
 };
 
 //----------------------------------
 
-class PingPeers : public InternCommand
+class PingPeers : public CmdObject
 {
     Q_OBJECT
 
@@ -88,14 +92,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit PingPeers(QObject *parent = nullptr);
 };
 
 //---------------------------------
 
-class AddRDOnlyFlag : public InternCommand
+class AddRDOnlyFlag : public CmdObject
 {
     Q_OBJECT
 
@@ -103,14 +107,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit AddRDOnlyFlag(QObject *parent = nullptr);
 };
 
 //-------------------------------
 
-class RemoveRDOnlyFlag : public InternCommand
+class RemoveRDOnlyFlag : public CmdObject
 {
     Q_OBJECT
 
@@ -118,7 +122,7 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit RemoveRDOnlyFlag(QObject *parent = nullptr);
 };
@@ -133,7 +137,7 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit ListRDonlyFlags(QObject *parent = nullptr);
 };

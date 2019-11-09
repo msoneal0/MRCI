@@ -16,32 +16,31 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-CloseHost::CloseHost(QObject *parent)       : InternCommand(parent) {}
-RestartHost::RestartHost(QObject *parent)   : InternCommand(parent) {}
-ServSettings::ServSettings(QObject *parent) : InternCommand(parent) {}
+CloseHost::CloseHost(QObject *parent)       : CmdObject(parent) {}
+RestartHost::RestartHost(QObject *parent)   : CmdObject(parent) {}
+ServSettings::ServSettings(QObject *parent) : CmdObject(parent) {}
 
 QString CloseHost::cmdName()    {return "close_host";}
 QString RestartHost::cmdName()  {return "restart_host";}
 QString ServSettings::cmdName() {return "host_config";}
 
-void CloseHost::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void CloseHost::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs);
-
     if (dType == TEXT)
     {
-        if (moreInputEnabled())
+        if (flags & MORE_INPUT)
         {
             QString input = fromTEXT(binIn);
 
             if (input == "CLOSE")
             {
-                emit enableMoreInput(false);
-                emit backendDataOut(ASYNC_EXIT, QByteArray(), PRIV_IPC);
+                flags &= ~MORE_INPUT;
+
+                async(ASYNC_EXIT, PRIV_IPC);
             }
             else if (input.isEmpty())
             {
-                emit enableMoreInput(false);
+                flags &= ~MORE_INPUT;
             }
             else
             {
@@ -51,31 +50,30 @@ void CloseHost::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, u
         }
         else
         {
-            emit enableMoreInput(true);
+            flags |= MORE_INPUT;
 
             mainTxt("You are about to shutdown the host instance, type: 'CLOSE' to proceed or leave blank to cancel: ");
         }
     }
 }
 
-void RestartHost::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void RestartHost::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs);
-
     if (dType == TEXT)
     {
-        if (moreInputEnabled())
+        if (flags & MORE_INPUT)
         {
             QString input = fromTEXT(binIn);
 
             if (input == "RESTART")
             {
-                emit enableMoreInput(false);
-                emit backendDataOut(ASYNC_RESTART, QByteArray(), PRIV_IPC);
+                flags &= ~MORE_INPUT;
+
+                async(ASYNC_RESTART, PRIV_IPC);
             }
             else if (input.isEmpty())
             {
-                emit enableMoreInput(false);
+                flags &= ~MORE_INPUT;
             }
             else if (!input.isEmpty())
             {
@@ -85,19 +83,11 @@ void RestartHost::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn,
         }
         else
         {
-            emit enableMoreInput(true);
+            flags |= MORE_INPUT;
 
             mainTxt("You are about to re-start the host instance, type: 'RESTART' to proceed or leave blank to cancel: ");
         }
     }
-}
-
-void ServSettings::term()
-{
-    emit enableMoreInput(false);
-
-    level  = 0;
-    select = 0;
 }
 
 void ServSettings::printSettings()
@@ -109,10 +99,7 @@ void ServSettings::printSettings()
     db.addColumn(COLUMN_BAN_LIMIT);
     db.addColumn(COLUMN_LOCK_LIMIT);
     db.addColumn(COLUMN_MAXSESSIONS);
-    db.addColumn(COLUMN_ZIPBIN);
-    db.addColumn(COLUMN_ZIPCOMPRESS);
-    db.addColumn(COLUMN_ZIPEXTRACT);
-    db.addColumn(COLUMN_INITGROUP);
+    db.addColumn(COLUMN_INITRANK);
     db.addColumn(COLUMN_MAILERBIN);
     db.addColumn(COLUMN_MAIL_SEND);
     db.addColumn(COLUMN_ENABLE_CONFIRM);
@@ -137,12 +124,8 @@ void ServSettings::printSettings()
     txtOut << "Autoban Threshold:              " << db.getData(COLUMN_BAN_LIMIT).toUInt()     << endl;
     txtOut << "Autolock Threshold:             " << db.getData(COLUMN_LOCK_LIMIT).toUInt()    << endl;
     txtOut << "Maximum Sub-Channels:           " << db.getData(COLUMN_MAX_SUB_CH).toUInt()    << endl;
-    txtOut << "Initial Group:                  " << db.getData(COLUMN_INITGROUP).toString()   << endl;
+    txtOut << "Initial Host Rank:              " << db.getData(COLUMN_INITRANK).toUInt()      << endl;
     txtOut << "Database Path:                  " << sqlDataPath()                             << endl;
-    txtOut << "Modules Install Path:           " << modDataPath()                             << endl;
-    txtOut << "Archiver Executable:            " << db.getData(COLUMN_ZIPBIN).toString()      << endl;
-    txtOut << "Archiver Compress Command:      " << db.getData(COLUMN_ZIPCOMPRESS).toString() << endl;
-    txtOut << "Archiver Extract Command:       " << db.getData(COLUMN_ZIPEXTRACT).toString()  << endl;
     txtOut << "Mailer Executable:              " << db.getData(COLUMN_MAILERBIN).toString()   << endl;
     txtOut << "Mailer Command:                 " << db.getData(COLUMN_MAIL_SEND).toString()   << endl << endl;
 
@@ -158,12 +141,10 @@ void ServSettings::printOptions()
 
         txtOut << "[01] Autoban Threshold  [02] Autolock Threshold"  << endl;
         txtOut << "[03] Max Sessions       [04] Public Registration" << endl;
-        txtOut << "[05] Initial Group      [06] Archiver Exe"        << endl;
-        txtOut << "[07] Compress Command   [08] Extract Command"     << endl;
-        txtOut << "[09] Mailer Exe         [10] Mailer Command"      << endl;
-        txtOut << "[11] Password Resets    [12] Email Verify"        << endl;
-        txtOut << "[13] Active Update      [14] Max Sub-Channels"    << endl;
-        txtOut << "[00] Exit"                                        << endl << endl;
+        txtOut << "[05] Initial Rank       [06] Mailer Exe"          << endl;
+        txtOut << "[07] Mailer Command     [08] Password Resets"     << endl;
+        txtOut << "[09] Email Verify       [10] Active Update"       << endl;
+        txtOut << "[11] Max Sub-Channels   [00] Exit"                << endl << endl;
         txtOut << "Select an option: ";
 
         level = 1;
@@ -182,13 +163,11 @@ void ServSettings::returnToStart()
     printOptions();
 }
 
-void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void ServSettings::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs);
-
     if (dType == TEXT)
     {
-        if (moreInputEnabled())
+        if (flags & MORE_INPUT)
         {
             if (level == 1)
             {
@@ -212,7 +191,7 @@ void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
                 else if ((select == 2) && ok)
                 {
                     txtOut << ""                                                                                          << endl;
-                    txtOut << "The autolock threshold is an integar value that determines how many"                       << endl;
+                    txtOut << "The autolock threshold is an integer value that determines how many"                       << endl;
                     txtOut << "failed login attempts can be made before the user account is locked"                       << endl;
                     txtOut << "by the host."                                                                              << endl << endl;
                     txtOut << "note: the " << ROOT_USER << " user never gets locked. instead, the offenders are blocked"  << endl;
@@ -244,48 +223,15 @@ void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
                 }
                 else if ((select == 5) && ok)
                 {
-                    txtOut << ""                                                                   << endl;
-                    txtOut << "The initial group is the group any new user rergistered using the"  << endl;
-                    txtOut << "new_user command is attached to. the group must already exists and" << endl;
-                    txtOut << "will not be allowed to get deleted as long as it is the initial"    << endl;
-                    txtOut << "group."                                                             << endl << endl;
-                    txtOut << "Enter a new group (leave blank to cancel): ";
+                    txtOut << ""                                                                       << endl;
+                    txtOut << "The initial host rank is the rank all new user accounts are registered" << endl;
+                    txtOut << "with when created. the host rank itself is an integer value that"       << endl;
+                    txtOut << "determine what commands each user can or cannot run."                   << endl << endl;
+                    txtOut << "Enter a new value (leave blank to cancel): ";
 
                     level = 2;
                 }
                 else if ((select == 6) && ok)
-                {
-                    txtOut << ""                                                               << endl;
-                    txtOut << "This is the path to zip archiver's executable file that the"    << endl;
-                    txtOut << "host can call when it needs to extract or create archive files" << endl;
-                    txtOut << "like .zip, .tar, etc.."                                         << endl << endl;
-                    txtOut << "Enter a new path (leave blank to cancel): ";
-
-                    level = 2;
-                }
-                else if ((select == 7) && ok)
-                {
-                    txtOut << ""                                                                         << endl;
-                    txtOut << "This is the command line the host will use when calling the archiver"     << endl;
-                    txtOut << "to create a zip file. it must contain the keywords " << OUTPUT_DIR_SUB    << endl;
-                    txtOut << "and " << INPUT_DIR_SUB << ". the host will substitute these keywords for" << endl;
-                    txtOut << "for the actual input/output directories when calling the command."        << endl << endl;
-                    txtOut << "Enter a new command line (leave blank to cancel): ";
-
-                    level = 2;
-                }
-                else if ((select == 8) && ok)
-                {
-                    txtOut << ""                                                                         << endl;
-                    txtOut << "This is the command line the host will use when calling the archiver"     << endl;
-                    txtOut << "to extract a zip file. it must contain the keywords " << OUTPUT_DIR_SUB   << endl;
-                    txtOut << "and " << INPUT_DIR_SUB << ". the host will substitute these keywords for" << endl;
-                    txtOut << "for the actual input/output directories when calling the command."        << endl << endl;
-                    txtOut << "Enter a new command line (leave blank to cancel): ";
-
-                    level = 2;
-                }
-                else if ((select == 9) && ok)
                 {
                     txtOut << ""                                                              << endl;
                     txtOut << "This is the path to the command line email client executable"  << endl;
@@ -296,7 +242,7 @@ void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
 
                     level = 2;
                 }
-                else if ((select == 10) && ok)
+                else if ((select == 7) && ok)
                 {
                     txtOut << ""                                                                                       << endl;
                     txtOut << "This is the command line that will be used with the email client"                       << endl;
@@ -308,7 +254,7 @@ void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
 
                     level = 2;
                 }
-                else if ((select == 11) && ok)
+                else if ((select == 8) && ok)
                 {
                     txtOut << ""                                                              << endl;
                     txtOut << "This enables automated password resets via email so users can" << endl;
@@ -321,7 +267,7 @@ void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
 
                     level = 2;
                 }
-                else if ((select == 12) && ok)
+                else if ((select == 9) && ok)
                 {
                     txtOut << ""                                                           << endl;
                     txtOut << "This enables automated email confirmations. this tells the" << endl;
@@ -332,7 +278,7 @@ void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
 
                     level = 2;
                 }
-                else if ((select == 13) && ok)
+                else if ((select == 10) && ok)
                 {
                     txtOut << ""                                                                       << endl;
                     txtOut << "This option tells the host if all sub-channels should be considered"    << endl;
@@ -347,7 +293,7 @@ void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
 
                     level = 2;
                 }
-                else if ((select == 14) && ok)
+                else if ((select == 11) && ok)
                 {
                     txtOut << ""                                                                     << endl;
                     txtOut << "This option sets the maximum amount of sub-channels each channel can" << endl;
@@ -358,7 +304,7 @@ void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
                 }
                 else if ((select == 0) && ok)
                 {
-                    term();
+                    flags &= ~MORE_INPUT;
                 }
                 else
                 {
@@ -378,10 +324,10 @@ void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
                 }
                 else
                 {
-                    if ((select == 1) || (select == 2) || (select == 3))
+                    if ((select == 1) || (select == 2) || (select == 3) || (select == 5))
                     {
-                        bool ok;
-                        uint num = value.toUInt(&ok, 10);
+                        bool    ok;
+                        quint32 num = value.toUInt(&ok, 10);
 
                         if (!ok)
                         {
@@ -401,19 +347,20 @@ void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
 
                             if      (select == 1) db.addColumn(COLUMN_BAN_LIMIT, num);
                             else if (select == 2) db.addColumn(COLUMN_LOCK_LIMIT, num);
-                            else                  db.addColumn(COLUMN_MAXSESSIONS, num);
+                            else if (select == 3) db.addColumn(COLUMN_MAXSESSIONS, num);
+                            else                  db.addColumn(COLUMN_INITRANK, num);
 
                             db.exec();
 
-                            if (select == 5)
+                            if (select == 3)
                             {
-                                emit backendDataOut(ASYNC_MAXSES, wrInt(num, 32), PRIV_IPC);
+                                async(ASYNC_MAXSES, PRIV_IPC, wrInt(num, BLKSIZE_HOST_LOAD * 8));
                             }
 
                             returnToStart();
                         }
                     }
-                    else if ((select == 4) || (select == 11) || (select == 12) || (select == 13))
+                    else if ((select == 4) || (select == 8) || (select == 9) || (select == 10))
                     {
                         if (!isBool(value))
                         {
@@ -424,10 +371,10 @@ void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
                         {
                             QString column;
 
-                            if      (select == 4)  column = COLUMN_PUB_USERS;
-                            else if (select == 11) column = COLUMN_ENABLE_PW_RESET;
-                            else if (select == 12) column = COLUMN_ENABLE_CONFIRM;
-                            else                   column = COLUMN_ACTIVE_UPDATE;
+                            if      (select == 4) column = COLUMN_PUB_USERS;
+                            else if (select == 8) column = COLUMN_ENABLE_PW_RESET;
+                            else if (select == 9) column = COLUMN_ENABLE_CONFIRM;
+                            else                  column = COLUMN_ACTIVE_UPDATE;
 
                             Query db(this);
 
@@ -438,30 +385,7 @@ void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
                             returnToStart();
                         }
                     }
-                    else if (select == 5)
-                    {
-                        if (!validGroupName(value))
-                        {
-                            errTxt("err: Invalid group name.\n");
-                            mainTxt("Enter a new group (leave blank to cancel): ");
-                        }
-                        else if (!groupExists(value))
-                        {
-                            errTxt("err: '" + value + "' does not exists.\n");
-                            mainTxt("Enter a new group (leave blank to cancel): ");
-                        }
-                        else
-                        {
-                            Query db(this);
-
-                            db.setType(Query::UPDATE, TABLE_SERV_SETTINGS);
-                            db.addColumn(COLUMN_INITGROUP, value);
-                            db.exec();
-
-                            returnToStart();
-                        }
-                    }
-                    else if ((select == 6) || (select == 9))
+                    else if (select == 6)
                     {
                         if (!QFile::exists(expandEnvVariables(value)))
                         {
@@ -472,51 +396,14 @@ void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
                         {
                             Query db(this);
 
-                            QString column;
-
-                            if (select == 6) column = COLUMN_ZIPBIN;
-                            else             column = COLUMN_MAILERBIN;
-
                             db.setType(Query::UPDATE, TABLE_SERV_SETTINGS);
-                            db.addColumn(column, value);
+                            db.addColumn(COLUMN_MAILERBIN, value);
                             db.exec();
 
                             returnToStart();
                         }
                     }
-                    else if ((select == 7) || (select == 8))
-                    {
-                        if (!value.contains(INPUT_DIR_SUB, Qt::CaseInsensitive))
-                        {
-                            errTxt("err: The '" + QString(INPUT_DIR_SUB) + "' keyword is missing.\n");
-                            mainTxt("Enter a new command line (leave blank to cancel): ");
-                        }
-                        else if (!value.contains(OUTPUT_DIR_SUB, Qt::CaseInsensitive))
-                        {
-                            errTxt("err: The '" + QString(OUTPUT_DIR_SUB) + "' keyword is missing.\n");
-                            mainTxt("Enter a new command line (leave blank to cancel): ");
-                        }
-                        else
-                        {
-                            Query db(this);
-
-                            db.setType(Query::UPDATE, TABLE_SERV_SETTINGS);
-
-                            if (select == 7)
-                            {
-                                db.addColumn(COLUMN_ZIPCOMPRESS, value);
-                            }
-                            else
-                            {
-                                db.addColumn(COLUMN_ZIPEXTRACT, value);
-                            }
-
-                            db.exec();
-
-                            returnToStart();
-                        }
-                    }
-                    else if (select == 10)
+                    else if (select == 7)
                     {
                         if (!value.contains(SUBJECT_SUB, Qt::CaseInsensitive))
                         {
@@ -544,7 +431,7 @@ void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
                             returnToStart();
                         }
                     }
-                    else if (select == 14)
+                    else if (select == 11)
                     {
                         if (!isInt(value))
                         {
@@ -572,7 +459,9 @@ void ServSettings::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
         }
         else
         {
-            emit enableMoreInput(true);
+            select = 0;
+            level  = 0;
+            flags |= MORE_INPUT;
 
             printSettings();
             printOptions();

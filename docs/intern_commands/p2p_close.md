@@ -1,6 +1,6 @@
 ### Summary ###
 
-close the p2p connection with the client given in this command or decline a p2p request.
+close the p2p connection with the peer given in this command or decline a p2p request.
 
 ### IO ###
 

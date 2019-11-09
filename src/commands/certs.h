@@ -18,6 +18,7 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "../common.h"
+#include "../cmd_object.h"
 #include "../make_cert.h"
 #include "table_viewer.h"
 
@@ -34,7 +35,7 @@ public:
 
 //--------------------------
 
-class CertInfo : public InternCommand
+class CertInfo : public CmdObject
 {
     Q_OBJECT
 
@@ -42,14 +43,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit CertInfo(QObject *parent = nullptr);
 };
 
 //----------------------------
 
-class AddCert : public InternCommand
+class AddCert : public CmdObject
 {
     Q_OBJECT
 
@@ -67,15 +68,14 @@ public:
 
     static QString cmdName();
 
-    void term();
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit AddCert(QObject *parent = nullptr);
 };
 
 //-----------------------------
 
-class RemoveCert : public InternCommand
+class RemoveCert : public CmdObject
 {
     Q_OBJECT
 
@@ -90,8 +90,7 @@ public:
 
     static QString cmdName();
 
-    void term();
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit RemoveCert(QObject *parent = nullptr);
 };

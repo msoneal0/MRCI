@@ -16,16 +16,63 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-DownloadFile::DownloadFile(QObject *parent) : InternCommand(parent) {file = new QFile(this);}
-UploadFile::UploadFile(QObject *parent)     : InternCommand(parent) {file = new QFile(this);}
-Delete::Delete(QObject *parent)             : InternCommand(parent) {}
-Copy::Copy(QObject *parent)                 : InternCommand(parent) {src = new QFile(this); dst = new QFile(this);}
-Move::Move(QObject *parent)                 : Copy(parent)          {}
-MakePath::MakePath(QObject *parent)         : InternCommand(parent) {}
-ListFiles::ListFiles(QObject *parent)       : InternCommand(parent) {}
-FileInfo::FileInfo(QObject *parent)         : InternCommand(parent) {}
-ChangeDir::ChangeDir(QObject *parent)       : InternCommand(parent) {}
-Tree::Tree(QObject *parent)                 : InternCommand(parent) {}
+QByteArray toFILE_INFO(const QFileInfo &info)
+{
+    // this function converts some information extracted from a QFileInfo object to
+    // a FILE_INFO frame.
+
+    // format: [1byte(flags)][8bytes(createTime)][8bytes(modTime)][8bytes(fileSize)]
+    //         [TEXT(fileName)][TEXT(symLinkTarget)]
+
+    //         note: the TEXT strings are 16bit NULL terminated meaning 2 bytes of 0x00
+    //               indicate the end of the string.
+
+    //         note: the integer data found in flags, modTime, createTime and fileSize
+    //               are formatted in little endian byte order (unsigned).
+
+    char flags = 0;
+
+    if (info.isFile())       flags |= IS_FILE;
+    if (info.isDir())        flags |= IS_DIR;
+    if (info.isSymLink())    flags |= IS_SYMLNK;
+    if (info.isReadable())   flags |= CAN_READ;
+    if (info.isWritable())   flags |= CAN_WRITE;
+    if (info.isExecutable()) flags |= CAN_EXE;
+    if (info.exists())       flags |= EXISTS;
+
+    QByteArray ret;
+    QByteArray strTerm(2, 0);
+
+    ret.append(flags);
+    ret.append(wrInt(info.birthTime().toMSecsSinceEpoch(), 64));
+    ret.append(wrInt(info.lastModified().toMSecsSinceEpoch(), 64));
+    ret.append(wrInt(info.size(), 64));
+    ret.append(toTEXT(info.fileName()) + strTerm);
+    ret.append(toTEXT(info.symLinkTarget() + strTerm));
+
+    return ret;
+}
+
+QByteArray toFILE_INFO(const QString &path)
+{
+    return toFILE_INFO(QFileInfo(path));
+}
+
+void mkPathForFile(const QString &path)
+{
+    mkPath(QFileInfo(path).absolutePath());
+}
+
+DownloadFile::DownloadFile(QObject *parent) : CmdObject(parent) {file = new QFile(this);}
+UploadFile::UploadFile(QObject *parent)     : CmdObject(parent) {file = new QFile(this);}
+Delete::Delete(QObject *parent)             : CmdObject(parent) {}
+Copy::Copy(QObject *parent)                 : CmdObject(parent) {src = new QFile(this); dst = new QFile(this);}
+Move::Move(QObject *parent)                 : Copy(parent)      {}
+MakePath::MakePath(QObject *parent)         : CmdObject(parent) {}
+ListFiles::ListFiles(QObject *parent)       : CmdObject(parent) {}
+FileInfo::FileInfo(QObject *parent)         : CmdObject(parent) {}
+ChangeDir::ChangeDir(QObject *parent)       : CmdObject(parent) {}
+Tree::Tree(QObject *parent)                 : CmdObject(parent) {}
 
 QString DownloadFile::cmdName() {return "fs_download";}
 QString UploadFile::cmdName()   {return "fs_upload";}
@@ -38,22 +85,14 @@ QString FileInfo::cmdName()     {return "fs_info";}
 QString ChangeDir::cmdName()    {return "fs_cd";}
 QString Tree::cmdName()         {return "fs_tree";}
 
-bool DownloadFile::handlesGenfile()
-{
-    return true;
-}
-
-void DownloadFile::term()
+void DownloadFile::clear()
 {
     file->close();
 
-    buffSize  = static_cast<qint64>(qPow(2, MAX_FRAME_BITS) - 1);
-    ssMode    = false;
-    dataSent  = 0;
-    len       = 0;
-
-    emit enableLoop(false);
-    emit enableMoreInput(false);
+    buffSize = static_cast<qint64>(qPow(2, MAX_FRAME_BITS) - 1);
+    dataSent = 0;
+    len      = 0;
+    flags    = 0;
 }
 
 void DownloadFile::sendChunk()
@@ -64,26 +103,26 @@ void DownloadFile::sendChunk()
 
     dataSent += data.size();
 
-    emit dataToClient(data, GEN_FILE);
+    emit procOut(data, GEN_FILE);
 
     mainTxt(QString::number(dataSent) + "/" + QString::number(len) + "\n");
 
     if ((dataSent >= len) || file->atEnd())
     {
-        term();
+        clear();
     }
 }
 
-void DownloadFile::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void DownloadFile::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs)
-
-    if ((dType == GEN_FILE) && (moreInputEnabled() || loopEnabled()))
+    if ((dType == GEN_FILE) && (flags & (MORE_INPUT | LOOPING)))
     {
         sendChunk();
     }
     else if (dType == GEN_FILE)
     {
+        clear();
+
         QStringList args   = parseArgs(binIn, 11);
         QString     path   = getParam("-remote_file", args);
         QString     offStr = getParam("-offset", args);
@@ -119,8 +158,8 @@ void DownloadFile::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
         {
             QString genfileRet = "-from_host";
 
-            ssMode = argExists("-single_step", args);
             len    = lenStr.toLongLong();
+            flags |= MORE_INPUT;
 
             if ((len == 0) || (len > file->size()))
             {
@@ -129,33 +168,28 @@ void DownloadFile::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
                 len = file->size();
             }
 
+            if (!argExists("-single_step", args))
+            {
+                flags |= LOOPING;
+            }
+
             file->seek(offStr.toLongLong());
 
-            emit enableMoreInput(true);
-            emit enableLoop(!ssMode);
-            emit dataToClient(toTEXT(genfileRet), GEN_FILE);
+            emit procOut(toTEXT(genfileRet), GEN_FILE);
         }
     }
 }
 
-bool UploadFile::handlesGenfile()
-{
-    return true;
-}
-
-void UploadFile::term()
+void UploadFile::clear()
 {
     file->close();
 
     force        = false;
     confirm      = false;
-    ssMode       = false;
     dataReceived = 0;
     len          = 0;
+    flags        = 0;
     mode         = nullptr;
-
-    emit enableLoop(false);
-    emit enableMoreInput(false);
 }
 
 void UploadFile::wrToFile(const QByteArray &data)
@@ -168,11 +202,11 @@ void UploadFile::wrToFile(const QByteArray &data)
 
     if (dataReceived >= len)
     {
-        term();
+        clear();
     }
-    else if (ssMode)
+    else if (flags & SINGLE_STEP_MODE)
     {
-        emit dataToClient(QByteArray(), GEN_FILE);
+        emit procOut(QByteArray(), GEN_FILE);
     }
 }
 
@@ -187,19 +221,17 @@ void UploadFile::run()
 {
     if (file->open(mode))
     {
-        emit dataToClient(QByteArray(), GEN_FILE);
+        emit procOut(QByteArray(), GEN_FILE);
     }
     else
     {
         errTxt("err: Unable to open the remote file for writing. reason: " + file->errorString() + "\n");
-        term();
+        clear();
     }
 }
 
-void UploadFile::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void UploadFile::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs)
-
     if (((dType == GEN_FILE) || (dType == TEXT)) && confirm)
     {
         QString ans = fromTEXT(binIn);
@@ -212,19 +244,21 @@ void UploadFile::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, 
         }
         else if (noCaseMatch("n", ans))
         {
-            term();
+            clear();
         }
         else
         {
             ask();
         }
     }
-    else if ((dType == GEN_FILE) && moreInputEnabled())
+    else if ((dType == GEN_FILE) && (flags & MORE_INPUT))
     {
         wrToFile(binIn);
     }
     else if (dType == GEN_FILE)
     {
+        clear();
+
         QStringList args   = parseArgs(binIn, 11);
         QString     lenStr = getParam("-len", args);
         QString     offStr = getParam("-offset", args);
@@ -233,8 +267,19 @@ void UploadFile::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, 
 
         file->setFileName(dst);
 
-        if (argExists("-truncate", args)) mode = QFile::ReadWrite | QFile::Truncate;
-        else                              mode = QFile::ReadWrite;
+        if (argExists("-truncate", args))
+        {
+            mode = QFile::ReadWrite | QFile::Truncate;
+        }
+        else
+        {
+            mode = QFile::ReadWrite;
+        }
+
+        if (argExists("-single_step", args))
+        {
+            flags |= SINGLE_STEP_MODE;
+        }
 
         if (dst.isEmpty())
         {
@@ -254,14 +299,13 @@ void UploadFile::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, 
         }
         else
         {
-            ssMode = argExists("-single_step", args);
             force  = argExists("-force", args);
             len    = lenStr.toLongLong();
+            flags |= MORE_INPUT;
 
             file->seek(offStr.toLongLong());
 
-            emit enableMoreInput(true);
-            emit dataToClient(toTEXT("-to_host"), GEN_FILE);
+            emit procOut(toTEXT("-to_host"), GEN_FILE);
 
             if (exists && !force) ask();
             else                  run();
@@ -269,16 +313,9 @@ void UploadFile::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, 
     }
 }
 
-void Delete::term()
-{
-    emit enableMoreInput(false);
-
-    path.clear();
-}
-
 void Delete::ask()
 {
-    emit enableMoreInput(true);
+    flags |= MORE_INPUT;
 
     mainTxt("Are you sure you want to delete the object? (y/n): ");
 }
@@ -287,7 +324,9 @@ void Delete::run()
 {
     bool ok;
 
-    if (QFileInfo(path).isFile() || QFileInfo(path).isSymLink())
+    QFileInfo info(path);
+
+    if (info.isFile() || info.isSymLink())
     {
         ok = QFile::remove(path);
     }
@@ -296,26 +335,35 @@ void Delete::run()
         ok = QDir(path).removeRecursively();
     }
 
-    if (!ok) errTxt("err: Could not delete '" + path + "' for an unknown reason.\n");
+    if (!ok && !info.exists())
+    {
+        errTxt("err: '" + path + "' already does not exists.\n");
+    }
+    else if (!ok && info.isWritable())
+    {
+        errTxt("err: Could not delete '" + path + "' for an unknown reason.\n");
+    }
+    else if (!ok)
+    {
+        errTxt("err: Could not delete '" + path + ".' permission denied.\n");
+    }
 }
 
-void Delete::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void Delete::procIn(const QByteArray &binIn, uchar dType)
 {
-    Q_UNUSED(sharedObjs)
-
-    if (moreInputEnabled() && (dType == TEXT))
+    if ((flags & MORE_INPUT) && (dType == TEXT))
     {
         QString ans = fromTEXT(binIn);
 
         if (noCaseMatch("y", ans))
         {
-            emit enableMoreInput(false);
+            flags &= ~MORE_INPUT;
 
             run();
         }
         else if (noCaseMatch("n", ans))
         {
-            term();
+            flags &= ~MORE_INPUT;
         }
         else
         {
@@ -348,12 +396,13 @@ void Delete::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, ucha
     }
 }
 
-void Copy::term()
+void Copy::clear()
 {
     fromQueue   = false;
     procedAFile = false;
     yToAll      = false;
     nToAll      = false;
+    flags       = 0;
 
     src->close();
     dst->close();
@@ -362,14 +411,11 @@ void Copy::term()
     srcPath.clear();
     dstPath.clear();
     oriSrcPath.clear();
-
-    emit enableLoop(false);
-    emit enableMoreInput(false);
 }
 
 void Copy::ask()
 {
-    emit enableMoreInput(true);
+    flags |= MORE_INPUT;
 
     QString opts;
 
@@ -427,7 +473,7 @@ void Copy::run()
         else
         {
             errTxt("err: Unable to re-create the source symlink at the destination path. writing to the path is not possible/denied.\n");
-            term();
+            clear();
         }
     }
     else if (QFileInfo(srcPath).isDir())
@@ -435,19 +481,19 @@ void Copy::run()
         mkPath(dstPath);
         listDir(queue, srcPath, dstPath);
 
-        emit enableLoop(true);
+        flags |= LOOPING;
     }
     else
     {
         if (!dst->open(QFile::WriteOnly | QFile::Truncate))
         {
             errTxt("err: Unable to open the destination file '" + dstPath + "' for writing. reason: " + dst->errorString() + "\n");
-            term();
+            clear();
         }
         else if (!src->open(QFile::ReadOnly))
         {
             errTxt("err: Unable to open the source file '" + srcPath + "' for reading. reason: " + src->errorString() + "\n");
-            term();
+            clear();
         }
         else
         {
@@ -455,16 +501,14 @@ void Copy::run()
 
             mainTxt("'" + srcPath + "' --> '" + dstPath + "'\n\n");
 
-            emit enableLoop(true);
+            flags |= LOOPING;
         }
     }
 }
 
-void Copy::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void Copy::procIn(const QByteArray &binIn, uchar dType)
 {
-    Q_UNUSED(sharedObjs)
-
-    if (loopEnabled())
+    if (flags & LOOPING)
     {
         if (src->isOpen() || dst->isOpen())
         {
@@ -497,7 +541,7 @@ void Copy::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar 
 
             if (exists && !yToAll && !nToAll)
             {
-                enableLoop(false);
+                flags &= ~LOOPING;
 
                 ask();
             }
@@ -509,43 +553,50 @@ void Copy::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar 
         else
         {
             preFinish();
-            term();
+            clear();
         }
     }
-    else if ((dType == TEXT) && moreInputEnabled())
+    else if ((dType == TEXT) && (flags & MORE_INPUT))
     {
         QString ans = fromTEXT(binIn);
 
         if (noCaseMatch("y", ans))
         {
-            emit enableLoop(fromQueue);
-            emit enableMoreInput(false);
+            if (fromQueue) flags |= LOOPING;
+
+            flags &= ~MORE_INPUT;
 
             run();
         }
         else if (noCaseMatch("n", ans))
         {
-            emit enableLoop(fromQueue);
-            emit enableMoreInput(false);
+            flags &= ~MORE_INPUT;
 
-            if (!loopEnabled()) term();
+            if (fromQueue)
+            {
+                flags |= LOOPING;
+            }
+            else
+            {
+                clear();
+            }
         }
         else if (fromQueue)
         {
             if (noCaseMatch("y-all", ans))
             {
-                emit enableLoop(fromQueue);
-                emit enableMoreInput(false);
+                if (fromQueue) flags |= LOOPING;
 
+                flags &= ~MORE_INPUT;
                 yToAll = true;
 
                 run();
             }
             else if (noCaseMatch("n-all", ans))
             {
-                emit enableLoop(fromQueue);
-                emit enableMoreInput(false);
+                if (fromQueue) flags |= LOOPING;
 
+                flags &= ~MORE_INPUT;
                 nToAll = true;
             }
             else
@@ -560,6 +611,8 @@ void Copy::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar 
     }
     else if (dType == TEXT)
     {
+        clear();
+
         QStringList args  = parseArgs(binIn, 5);
         bool        force = argExists("-force", args);
 
@@ -574,19 +627,19 @@ void Copy::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar 
 
         if (srcPath.isEmpty())
         {
-            errTxt("err: The source file (-src) argument was not found or is empty.\n");
+            errTxt("err: The source (-src) argument was not found or is empty.\n");
         }
         else if (dstPath.isEmpty())
         {
-            errTxt("err: The destination file (-dst) argument was not found or is empty.\n");
+            errTxt("err: The destination (-dst) argument was not found or is empty.\n");
         }
         else if (!QFileInfo(srcPath).exists())
         {
-            errTxt("err: The source file does not exists.\n");
+            errTxt("err: The source does not exists.\n");
         }
         else if (dstExists && !matchedFsObjTypes(srcPath, dstPath))
         {
-            errTxt("err: The existing destination object type does not match the source object type.\n");
+            errTxt("err: The existing destination object type (file,dir,symmlink) does not match the source object type.\n");
         }
         else if (permissionsOk(dstExists))
         {
@@ -615,7 +668,7 @@ void Move::runOnMatchingVolume()
     if (!QFile::rename(srcPath, dstPath))
     {
         errTxt("err: Unable to do move operation. it's likely the command failed to remove the existing destination object or writing to the path is not possible/denied.\n");
-        term();
+        clear();
     }
 }
 
@@ -652,10 +705,8 @@ bool Move::permissionsOk(bool dstExists)
     return ret;
 }
 
-void MakePath::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void MakePath::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs)
-
     if (dType == TEXT)
     {
         QStringList args = parseArgs(binIn, 2);
@@ -672,10 +723,8 @@ void MakePath::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uc
     }
 }
 
-void ListFiles::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void ListFiles::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs)
-
     if (dType == TEXT)
     {
         QStringList args      = parseArgs(binIn, 4);
@@ -723,7 +772,7 @@ void ListFiles::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, u
             {
                 if (infoFrame)
                 {
-                    emit dataToClient(toFILE_INFO(info), FILE_INFO);
+                    emit procOut(toFILE_INFO(info), FILE_INFO);
                 }
                 else if (info.isDir())
                 {
@@ -738,10 +787,8 @@ void ListFiles::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, u
     }
 }
 
-void FileInfo::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void FileInfo::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs)
-
     if (dType == TEXT)
     {
         QStringList args      = parseArgs(binIn, 3);
@@ -762,7 +809,7 @@ void FileInfo::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uc
         {
             if (infoFrame)
             {
-                emit dataToClient(toFILE_INFO(info), FILE_INFO);
+                emit procOut(toFILE_INFO(info), FILE_INFO);
             }
             else
             {
@@ -792,10 +839,8 @@ void FileInfo::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uc
     }
 }
 
-void ChangeDir::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void ChangeDir::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs)
-
     if (dType == TEXT)
     {
         QStringList args = parseArgs(binIn, 3);
@@ -818,14 +863,16 @@ void ChangeDir::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, u
             QDir::setCurrent(path);
 
             mainTxt(QDir::currentPath() + "\n");
+            async(ASYNC_SET_DIR, PRIV_IPC, toTEXT(path));
         }
     }
 }
 
-void Tree::term()
+void Tree::clear()
 {
     queue.clear();
 
+    flags      = 0;
     infoFrames = false;
     noHidden   = false;
 }
@@ -851,7 +898,7 @@ void Tree::printList(const QString &path)
     {
         if (infoFrames)
         {
-            emit dataToClient(toFILE_INFO(info), FILE_INFO);
+            emit procOut(toFILE_INFO(info), FILE_INFO);
         }
         else if (info.isDir())
         {
@@ -870,21 +917,17 @@ void Tree::printList(const QString &path)
 
     if (queue.isEmpty())
     {
-        term();
-
-        emit enableLoop(false);
+        clear();
     }
     else
     {
-        emit enableLoop(true);
+        flags |= LOOPING;
     }
 }
 
-void Tree::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void Tree::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs)
-
-    if (loopEnabled())
+    if (flags & LOOPING)
     {
         printList(queue.takeFirst().filePath());
     }

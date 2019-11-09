@@ -1,6 +1,6 @@
 ### Summary ###
 
-display debug messages from the host instance and all session instances.
+display all debug log messages.
 
 ### IO ###
 

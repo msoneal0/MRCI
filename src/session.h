@@ -18,112 +18,108 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "common.h"
-#include "int_loader.h"
+#include "module.h"
 #include "make_cert.h"
-#include "cmd_executor.h"
+#include "cmd_proc.h"
 
-class Session : public QObject
+QByteArray wrFrame(quint32 cmdId, const QByteArray &data, uchar dType);
+
+class Session : public MemShare
 {
     Q_OBJECT
 
 private:
 
-    QList<QByteArray> p2pAccepted;
-    QList<QByteArray> p2pPending;
-    QList<QString>    chList;
-    QSharedMemory    *exeDebugInfo;
-    QLocalServer     *ipcServ;
-    QLocalSocket     *ipcLink;
-    QSslSocket       *tcpSocket;
-    QProcess         *slaveProc;
-    RWSharedObjs     *rwShared;
-    SharedObjs       *shared;
-    CmdExecutor      *executor;
-    QTime             lastExeCrash;
-    QString           peerIp;
-    QString           pipeName;
-    QString           userName;
-    QString           groupName;
-    QString           displayName;
-    QString           appName;
-    ushort            clientMajor;
-    ushort            clientMinor;
-    ushort            clientPatch;
-    QByteArray        chIds;
-    QByteArray        wrAbleChIds;
-    QByteArray        sessionId;
-    QByteArray        userId;
-    uint              hostRank;
-    uint              flags;
-    uint              ipcFrameSize;
-    uint              tcpFrameSize;
-    uchar             ipcFrameType;
-    uchar             tcpFrameType;
-    quint16           ipcFrameCmdId;
-    quint16           tcpFrameCmdId;
-    bool              activeUpdate;
-    bool              chOwnerOverride;
-    int               exeCrashCount;
+    QSslSocket                        *tcpSocket;
+    QString                            currentDir;
+    QHash<QString, QStringList>        modCmdNames;
+    QHash<quint32, QList<QByteArray> > frameQueue;
+    QHash<quint32, CmdProcess*>        cmdProcesses;
+    QHash<quint16, QString>            cmdUniqueNames;
+    QHash<quint16, QString>            cmdRealNames;
+    QHash<quint16, QString>            cmdAppById;
+    QList<quint16>                     cmdIds;
+    quint32                            flags;
+    quint32                            tcpPayloadSize;
+    quint32                            tcpFrameCmdId;
+    quint8                             tcpFrameType;
 
-    void genSessionId();
-    void castPeerInfo();
-    void sendLocalInfo();
-    void rdExeDebug();
-    void addIpAction(const QString &action);
-    void modLoadCrashCheck(const QString &crashInfo);
+    void        castPingForPeers();
+    void        sendLocalInfo();
+    void        loadCmds();
+    void        closeByChId(const QByteArray &chId, bool peerCast);
+    void        castPeerInfo(quint8 typeId);
+    void        login(const QByteArray &uId);
+    void        logout(const QByteArray &uId, bool reload);
+    void        startCmdProc(quint32 cmdId);
+    void        startModProc(const QString &modApp);
+    void        addIpAction(const QString &action);
+    void        castPeerStat(const QByteArray &oldSubIds, bool isDisconnecting);
+    ModProcess *initModProc(const QString &modApp);
+    QByteArray  genSessionId();
+
+    // async_funcs.cpp ----
+
+    void openSubChannel(const QByteArray &data);
+    void closeSubChannel(const QByteArray &data);
+    void acctDeleted(const QByteArray &data);
+    void acctEdited(const QByteArray &data);
+    void acctRenamed(const QByteArray &data);
+    void acctDispChanged(const QByteArray &data);
+    void castCatch(const QByteArray &data);
+    void directDataFromPeer(const QByteArray &data);
+    void p2p(const QByteArray &data);
+    void closeP2P(const QByteArray &data);
+    void limitedCastCatch(const QByteArray &data);
+    void updateRankViaUser(const QByteArray &data);
+    void addModule(const QByteArray &data);
+    void rmModule(const QByteArray &data);
+    void userAddedToChannel(quint16 cmdId, const QByteArray &data);
+    void userRemovedFromChannel(const QByteArray &data);
+    void channelDeleted(const QByteArray &data);
+    void channelMemberLevelUpdated(const QByteArray &data);
+    void channelRenamed(const QByteArray &data);
+    void channelActiveFlagUpdated(const QByteArray &data);
+    void subChannelAdded(quint16 cmdId, const QByteArray &data);
+    void subChannelUpdated(quint16 cmdId, const QByteArray &data);
+
+    //---------------------
 
 private slots:
 
-    void logout();
-    void newIPCLink();
-    void ipcConnected();
-    void ipcDisconnected();
     void dataFromClient();
-    void dataFromIPC();
     void payloadDeleted();
-    void sendStdout();
-    void sendStderr();
-    void exeStarted();
-    void closeInstance();
-    void authOk();
-    void ipcOk();
-    void newIPCTimeout();
-    void exeFinished(int ret, QProcess::ExitStatus status);
-    void exeError(QProcess::ProcessError err);
-    void ipcError(QLocalSocket::LocalSocketError socketError);
-    void dataToClient(quint16 cmdId, const QByteArray &data, uchar typeId);
+    void cmdProcFinished(quint32 cmdId);
+    void cmdProcStarted(quint32 cmdId, CmdProcess *obj);
+    void asyncToClient(quint16 cmdId, const QByteArray &data, quint8 typeId);
+    void dataToClient(quint32 cmdId, const QByteArray &data, quint8 typeId);
+    void dataToCmd(quint32 cmdId, const QByteArray &data, quint8 typeId);
 
 public:
 
-    explicit Session(QObject *parent = nullptr);
-
-    void initAsMain(QSslSocket *tcp);
-    void startAsSlave(const QStringList &args);
-    bool isSlave();
-    bool isMain();
+    explicit Session(const QString &hostKey, QSslSocket *tcp, QObject *parent = nullptr);
 
 public slots:
 
-    void backendDataIn(quint16 cmdId, const QByteArray &data);
-    void peersDataIn(quint16 cmdId, const QByteArray &data);
+    void pubAsyncDataIn(quint16 cmdId, const QByteArray &data);
+    void privAsyncDataIn(quint16 cmdId, const QByteArray &data);
     void connectToPeer(const QSharedPointer<SessionCarrier> &peer);
     void endSession();
-    void run();
+    void sesRdy();
+    void init();
 
 signals:
 
-    void dataToCommand(quint16 cmdId, const QByteArray &data, uchar dType);
-    void backendToPeers(quint16 cmdId, const QByteArray data);
+    void killCmd16(quint16 cmdId);
+    void killCmd32(quint32 cmdId);
+    void asyncToPeers(quint16 cmdId, const QByteArray data);
     void connectPeers(QSharedPointer<SessionCarrier> peer);
-    void setMaxSessions(uint value);
-    void unloadModFile(const QString &modName);
-    void loadModFile(const QString &modName);
-    void delayedModDel(const QString &modName);
+    void setMaxSessions(quint32 value);
     void ended();
-    void closeExe();
     void closeServer();
     void resServer();
-    void loadCommands();
+    void updateBanList();
+    void killMods();
 };
 
 #endif // SOCKET_H

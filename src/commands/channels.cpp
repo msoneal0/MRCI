@@ -16,39 +16,57 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-CreateChannel::CreateChannel(QObject *parent)       : InternCommand(parent) {}
-RemoveChannel::RemoveChannel(QObject *parent)       : InternCommand(parent) {}
-RenameChannel::RenameChannel(QObject *parent)       : InternCommand(parent) {}
-SetActiveState::SetActiveState(QObject *parent)     : InternCommand(parent) {}
-CreateSubCh::CreateSubCh(QObject *parent)           : InternCommand(parent) {}
-RemoveSubCh::RemoveSubCh(QObject *parent)           : InternCommand(parent) {}
-RenameSubCh::RenameSubCh(QObject *parent)           : InternCommand(parent) {}
-InviteToCh::InviteToCh(QObject *parent)             : InternCommand(parent) {}
-DeclineChInvite::DeclineChInvite(QObject *parent)   : InternCommand(parent) {}
-AcceptChInvite::AcceptChInvite(QObject *parent)     : InternCommand(parent) {}
-RemoveChMember::RemoveChMember(QObject *parent)     : InternCommand(parent) {}
-SetMemberLevel::SetMemberLevel(QObject *parent)     : InternCommand(parent) {}
-SetSubAcessLevel::SetSubAcessLevel(QObject *parent) : InternCommand(parent) {}
-OwnerOverride::OwnerOverride(QObject *parent)       : InternCommand(parent) {}
+CreateChannel::CreateChannel(QObject *parent)       : CmdObject(parent) {}
+RemoveChannel::RemoveChannel(QObject *parent)       : CmdObject(parent) {}
+RenameChannel::RenameChannel(QObject *parent)       : CmdObject(parent) {}
+SetActiveState::SetActiveState(QObject *parent)     : CmdObject(parent) {}
+CreateSubCh::CreateSubCh(QObject *parent)           : CmdObject(parent) {}
+RemoveSubCh::RemoveSubCh(QObject *parent)           : CmdObject(parent) {}
+RenameSubCh::RenameSubCh(QObject *parent)           : CmdObject(parent) {}
+InviteToCh::InviteToCh(QObject *parent)             : CmdObject(parent) {}
+DeclineChInvite::DeclineChInvite(QObject *parent)   : CmdObject(parent) {}
+AcceptChInvite::AcceptChInvite(QObject *parent)     : CmdObject(parent) {}
+RemoveChMember::RemoveChMember(QObject *parent)     : CmdObject(parent) {}
+SetMemberLevel::SetMemberLevel(QObject *parent)     : CmdObject(parent) {}
+SetSubAcessLevel::SetSubAcessLevel(QObject *parent) : CmdObject(parent) {}
+OwnerOverride::OwnerOverride(QObject *parent)       : CmdObject(parent) {}
 
 ListChannels::ListChannels(QObject *parent) : TableViewer(parent)
 {
-    setParams(TABLE_CH_MEMBERS, QStringList() << COLUMN_CHANNEL_ID << COLUMN_CHANNEL_NAME << COLUMN_PENDING_INVITE << COLUMN_ACCESS_LEVEL << COLUMN_USERNAME, false);
+    setParams(TABLE_CH_MEMBERS, false);
+    addTableColumn(TABLE_CH_MEMBERS, COLUMN_CHANNEL_ID);
+    addTableColumn(TABLE_CHANNELS, COLUMN_CHANNEL_NAME);
+    addTableColumn(TABLE_CH_MEMBERS, COLUMN_PENDING_INVITE);
+    addTableColumn(TABLE_CH_MEMBERS, COLUMN_ACCESS_LEVEL);
+    addJointColumn(TABLE_CHANNELS, COLUMN_CHANNEL_ID);
+    addJointColumn(TABLE_USERS, COLUMN_USER_ID);
 }
 
 ListSubCh::ListSubCh(QObject *parent) : TableViewer(parent)
 {
-    setParams(TABLE_SUB_CHANNELS, QStringList() << COLUMN_CHANNEL_NAME << COLUMN_CHANNEL_ID << COLUMN_SUB_CH_ID << COLUMN_SUB_CH_NAME << COLUMN_LOWEST_LEVEL << COLUMN_ACTIVE_UPDATE, false);
+    setParams(TABLE_SUB_CHANNELS, false);
+    addTableColumn(TABLE_SUB_CHANNELS, COLUMN_SUB_CH_ID);
+    addTableColumn(TABLE_SUB_CHANNELS, COLUMN_SUB_CH_NAME);
+    addTableColumn(TABLE_SUB_CHANNELS, COLUMN_LOWEST_LEVEL);
+    addTableColumn(TABLE_SUB_CHANNELS, COLUMN_ACTIVE_UPDATE);
 }
 
 SearchChannels::SearchChannels(QObject *parent) : TableViewer(parent)
 {
-    setParams(TABLE_CHANNELS, QStringList() << COLUMN_CHANNEL_ID << COLUMN_CHANNEL_NAME, false);
+    setParams(TABLE_CHANNELS, false);
+    addTableColumn(TABLE_CHANNELS, COLUMN_CHANNEL_ID);
+    addTableColumn(TABLE_CHANNELS, COLUMN_CHANNEL_NAME);
 }
 
 ListMembers::ListMembers(QObject *parent) : TableViewer(parent)
 {
-    setParams(TABLE_CH_MEMBERS, QStringList() << COLUMN_CHANNEL_ID << COLUMN_CHANNEL_NAME << COLUMN_PENDING_INVITE << COLUMN_ACCESS_LEVEL << COLUMN_USERNAME, false);
+    setParams(TABLE_CH_MEMBERS, false);
+    addTableColumn(TABLE_CH_MEMBERS, COLUMN_CHANNEL_ID);
+    addTableColumn(TABLE_USERS, COLUMN_USERNAME);
+    addTableColumn(TABLE_USERS, COLUMN_DISPLAY_NAME);
+    addTableColumn(TABLE_CH_MEMBERS, COLUMN_PENDING_INVITE);
+    addTableColumn(TABLE_CH_MEMBERS, COLUMN_ACCESS_LEVEL);
+    addJointColumn(TABLE_USERS, COLUMN_USER_ID);
 }
 
 QString CreateChannel::cmdName()    {return "add_ch";}
@@ -70,26 +88,51 @@ QString SetSubAcessLevel::cmdName() {return "set_sub_ch_level";}
 QString ListMembers::cmdName()      {return "ls_ch_members";}
 QString OwnerOverride::cmdName()    {return "ch_owner_override";}
 
-void ListChannels::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+QByteArray createChMemberAsyncFrame(quint64 chId, const QByteArray &userId, bool invite, quint8 level, const QString &userName, const QString &dispName, const QString &chName)
 {
-    Q_UNUSED(binIn);
+    QByteArray ret;
 
-    if (moreInputEnabled())
+    ret.append(wrInt(chId, 64));
+    ret.append(userId);
+
+    if (invite)
     {
-        TableViewer::procBin(sharedObjs, binIn, dType);
+        ret.append(wrInt(1, 8));
     }
     else
     {
-        TableViewer::procBin(sharedObjs, toTEXT("-" + QString(COLUMN_USERNAME) + " " + *sharedObjs->userName), dType);
+        ret.append(wrInt(0, 8));
+    }
+
+    ret.append(wrInt(level, 8));
+    ret.append(nullTermTEXT(userName));
+    ret.append(nullTermTEXT(dispName));
+    ret.append(nullTermTEXT(chName));
+
+    return ret;
+}
+
+void ListChannels::procIn(const QByteArray &binIn, quint8 dType)
+{
+    Q_UNUSED(binIn)
+
+    if (flags & MORE_INPUT)
+    {
+        TableViewer::procIn(binIn, dType);
+    }
+    else
+    {
+        TableViewer::procIn(toTEXT("-" + QString(COLUMN_USERNAME) + " " + rdStringFromBlock(userName, BLKSIZE_USER_NAME)), dType);
     }
 }
 
-void ListSubCh::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void ListSubCh::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
         QStringList args   = parseArgs(binIn, 2);
         QString     chName = getParam("-ch_name", args);
+        quint64     chId;
 
         if (chName.isEmpty())
         {
@@ -99,31 +142,31 @@ void ListSubCh::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, u
         {
             errTxt("err: Invalid channel name.\n");
         }
-        else if (!channelExists(chName))
+        else if (!channelExists(chName, &chId))
         {
             errTxt("err: Channel name '" + chName + "' does not exists.\n");
         }
         else
         {
-            if (channelAccessLevel(sharedObjs, getChId(chName)) > REGULAR)
+            if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) > REGULAR)
             {
-                TableViewer::procBin(sharedObjs, toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName + " -" + QString(COLUMN_LOWEST_LEVEL) + " " + QString::number(PUBLIC)), dType);
+                TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName + " -" + QString(COLUMN_LOWEST_LEVEL) + " " + QString::number(PUBLIC)), dType);
             }
             else
             {
-                TableViewer::procBin(sharedObjs, toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName), dType);
+                TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName), dType);
             }
         }
     }
 }
 
-void SearchChannels::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void SearchChannels::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        if (moreInputEnabled())
+        if (flags & MORE_INPUT)
         {
-            TableViewer::procBin(sharedObjs, binIn, dType);
+            TableViewer::procIn(binIn, dType);
         }
         else
         {
@@ -141,33 +184,35 @@ void SearchChannels::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
             }
             else if (!name.isEmpty())
             {
-                TableViewer::procBin(sharedObjs, toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + name), dType);
+                TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + name), dType);
             }
             else if (!chId.isEmpty())
             {
-                TableViewer::procBin(sharedObjs, toTEXT("-" + QString(COLUMN_CHANNEL_ID) + " " + chId), dType);
+                TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_ID) + " " + chId), dType);
             }
             else
             {
-                TableViewer::procBin(sharedObjs, QByteArray(), dType);
+                TableViewer::procIn(QByteArray(), dType);
             }
         }
     }
 }
 
-void ListMembers::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void ListMembers::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        if (moreInputEnabled())
+        if (flags & MORE_INPUT)
         {
-            TableViewer::procBin(sharedObjs, binIn, dType);
+            TableViewer::procIn(binIn, dType);
         }
         else
         {
-            QStringList args     = parseArgs(binIn, 2);
+            QStringList args     = parseArgs(binIn, 6);
             QString     chName   = getParam("-ch_name", args);
-            QString     userFind = getParam("-find", args);
+            QString     userFind = getParam("-user_name", args);
+            QString     dispFind = getParam("-disp_name", args);
+            quint64     chId;
 
             if (chName.isEmpty())
             {
@@ -177,7 +222,11 @@ void ListMembers::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn,
             {
                 errTxt("err: Invalid channel name.\n");
             }
-            else if (channelAccessLevel(sharedObjs, chName) > REGULAR)
+            else if (!channelExists(chName, &chId))
+            {
+                errTxt("err: Channel name '" + chName + "' does not exists.\n");
+            }
+            else if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) > REGULAR)
             {
                 errTxt("err: You are not currently a member of the channel: '" + chName + "'\n");
             }
@@ -187,21 +236,27 @@ void ListMembers::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn,
 
                 if (!userFind.isEmpty())
                 {
-                    argsBa.append(" " + toTEXT("-" + QString(COLUMN_USERNAME) + " " + userFind));
+                    argsBa.append(toTEXT(" -" + QString(COLUMN_USERNAME) + " " + userFind));
                 }
 
-                TableViewer::procBin(sharedObjs, argsBa, dType);
+                if (!dispFind.isEmpty())
+                {
+                    argsBa.append(toTEXT(" -" + QString(COLUMN_DISPLAY_NAME) + " " + dispFind));
+                }
+
+                TableViewer::procIn(argsBa, dType);
             }
         }
     }
 }
 
-void CreateChannel::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void CreateChannel::procIn(const QByteArray &binIn, uchar dType)
 {
     if (dType == TEXT)
     {
         QStringList args   = parseArgs(binIn, 2);
         QString     chName = getParam("-ch_name", args);
+        quint64     chId;
 
         if (chName.isEmpty())
         {
@@ -211,7 +266,7 @@ void CreateChannel::procBin(const SharedObjs *sharedObjs, const QByteArray &binI
         {
             errTxt("err: Invalid channel name. it must be between 4-32 chars long and contain no spaces.\n");
         }
-        else if (channelExists(chName))
+        else if (channelExists(chName, &chId))
         {
             errTxt("err: Channel name '" + chName + "' already exists.\n");
         }
@@ -223,34 +278,31 @@ void CreateChannel::procBin(const SharedObjs *sharedObjs, const QByteArray &binI
             db.addColumn(COLUMN_CHANNEL_NAME, chName);
             db.exec();
 
-            quint64 chId = getChId(chName);
+            QByteArray uId   = rdFromBlock(userId, BLKSIZE_USER_ID);
+            QString    uName = rdStringFromBlock(userName, BLKSIZE_USER_NAME);
+            QString    dName = rdStringFromBlock(displayName, BLKSIZE_DISP_NAME);
 
             db.setType(Query::PUSH, TABLE_CH_MEMBERS);
             db.addColumn(COLUMN_CHANNEL_ID, chId);
-            db.addColumn(COLUMN_USERNAME, *sharedObjs->userName);
-            db.addColumn(COLUMN_CHANNEL_NAME, chName);
+            db.addColumn(COLUMN_USER_ID, uId);
             db.addColumn(COLUMN_ACCESS_LEVEL, OWNER);
             db.addColumn(COLUMN_PENDING_INVITE, false);
             db.exec();
 
-            args.append("-user");
-            args.append("'" + escapeChars(*sharedObjs->userName, '\\', '\'') + "'");
-            args.append("-level");
-            args.append(QString::number(OWNER));
-            args.append("-ch_id");
-            args.append(QString::number(chId));
+            QByteArray frame = createChMemberAsyncFrame(chId, uId, false, OWNER, uName, dName, chName);
 
-            emit backendDataOut(ASYNC_NEW_CH_MEMBER, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_NEW_CH_MEMBER, PUB_IPC_WITH_FEEDBACK, frame);
         }
     }
 }
 
-void RemoveChannel::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void RemoveChannel::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
         QStringList args   = parseArgs(binIn, 2);
         QString     chName = getParam("-ch_name", args);
+        quint64     chId;
 
         if (chName.isEmpty())
         {
@@ -260,39 +312,35 @@ void RemoveChannel::procBin(const SharedObjs *sharedObjs, const QByteArray &binI
         {
             errTxt("err: Invalid channel name.\n");
         }
-        else if (!channelExists(chName))
+        else if (!channelExists(chName, &chId))
         {
             errTxt("err: Channel name '" + chName + "' does not exists.\n");
         }
-        else if (channelAccessLevel(sharedObjs, chName) != OWNER)
+        else if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) != OWNER)
         {
             errTxt("err: Only the channel owner can delete it.\n");
         }
         else
         {
-            quint64 id = getChId(chName);
-
             Query db(this);
 
             db.setType(Query::DEL, TABLE_CHANNELS);
-            db.addCondition(COLUMN_CHANNEL_NAME, chName);
+            db.addCondition(COLUMN_CHANNEL_ID, chId);
             db.exec();
 
-            args.append("-ch_id");
-            args.append(QString::number(id));
-
-            emit backendDataOut(ASYNC_DEL_CH, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_DEL_CH, PUB_IPC_WITH_FEEDBACK, wrInt(chId, 64));
         }
     }
 }
 
-void RenameChannel::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void RenameChannel::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
         QStringList args    = parseArgs(binIn, 4);
         QString     chName  = getParam("-ch_name", args);
         QString     newName = getParam("-new_name", args);
+        quint64     chId;
 
         if (chName.isEmpty())
         {
@@ -310,11 +358,11 @@ void RenameChannel::procBin(const SharedObjs *sharedObjs, const QByteArray &binI
         {
             errTxt("err: Invalid new channel name. it must be between 4-32 chars long and contain no spaces.\n");
         }
-        else if (!channelExists(chName))
+        else if (!channelExists(chName, &chId))
         {
             errTxt("err: Channel name '" + chName + "' does not exists.\n");
         }
-        else if (channelAccessLevel(sharedObjs, chName) != OWNER)
+        else if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) != OWNER)
         {
             errTxt("err: Only the channel owner can rename it.\n");
         }
@@ -328,15 +376,17 @@ void RenameChannel::procBin(const SharedObjs *sharedObjs, const QByteArray &binI
 
             db.setType(Query::UPDATE, TABLE_CHANNELS);
             db.addColumn(COLUMN_CHANNEL_NAME, newName);
-            db.addCondition(COLUMN_CHANNEL_NAME, chName);
+            db.addCondition(COLUMN_CHANNEL_ID, chId);
             db.exec();
 
-            emit backendDataOut(ASYNC_RENAME_CH, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            QByteArray frame = wrInt(chId, 64) + nullTermTEXT(newName);
+
+            async(ASYNC_RENAME_CH, PUB_IPC_WITH_FEEDBACK, frame);
         }
     }
 }
 
-void SetActiveState::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void SetActiveState::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
@@ -344,6 +394,8 @@ void SetActiveState::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
         QString     chName  = getParam("-ch_name", args);
         QString     subName = getParam("-sub_name", args);
         QString     state   = getParam("-state", args);
+        quint64     chId;
+        quint8      subId;
 
         if (chName.isEmpty())
         {
@@ -369,15 +421,15 @@ void SetActiveState::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
         {
             errTxt("err: '" + state + "' is not a valid boolean value. it must be 0 or 1.\n");
         }
-        else if (!channelExists(chName))
+        else if (!channelExists(chName, &chId))
         {
             errTxt("err: Channel name '" + chName + "' does not exists.\n");
         }
-        else if (channelAccessLevel(sharedObjs, chName) > ADMIN)
+        else if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) > ADMIN)
         {
             errTxt("err: Access denied.\n");
         }
-        else if (!channelSubExists(chName, subName))
+        else if (!channelSubExists(chId, subName, &subId))
         {
             errTxt("err: Sub-channel name '" + chName + "' does not exists.\n");
         }
@@ -387,8 +439,8 @@ void SetActiveState::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
 
             db.setType(Query::UPDATE, TABLE_SUB_CHANNELS);
             db.addColumn(COLUMN_ACTIVE_UPDATE, static_cast<bool>(state.toInt()));
-            db.addCondition(COLUMN_CHANNEL_NAME, chName);
-            db.addCondition(COLUMN_SUB_CH_NAME, subName);
+            db.addCondition(COLUMN_CHANNEL_ID, chId);
+            db.addCondition(COLUMN_SUB_CH_ID, subId);
             db.exec();
 
             if (globalActiveFlag())
@@ -397,20 +449,21 @@ void SetActiveState::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
             }
             else
             {
-                emit backendDataOut(ASYNC_CH_ACT_FLAG, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+                async(ASYNC_CH_ACT_FLAG, PUB_IPC_WITH_FEEDBACK, wrInt(chId, 64) + wrInt(subId, 8));
             }
         }
     }
 }
 
-void CreateSubCh::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void CreateSubCh::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
         QStringList args    = parseArgs(binIn, 4);
         QString     chName  = getParam("-ch_name", args);
         QString     subName = getParam("-sub_name", args);
-        int         subId   = 0;
+        quint64     chId;
+        quint8      subId;
 
         if (chName.isEmpty())
         {
@@ -428,56 +481,50 @@ void CreateSubCh::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn,
         {
             errTxt("err: Invalid sub-channel name. it must be between 4-32 chars long and contain no spaces.\n");
         }
-        else if (!channelExists(chName))
+        else if (!channelExists(chName, &chId))
         {
             errTxt("err: Channel name '" + chName + "' does not exists.\n");
         }
-        else if (channelAccessLevel(sharedObjs, chName) > ADMIN)
+        else if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) > ADMIN)
         {
             errTxt("err: Access denied.\n");
         }
-        else if (channelSubExists(chName, subName))
+        else if (channelSubExists(chId, subName))
         {
             errTxt("err: Sub-channel name '" + subName + "' already exists.\n");
         }
-        else if (!genSubId(chName, &subId))
+        else if (!genSubId(chId, &subId))
         {
             errTxt("err: This channel has reached the maximum amount sub-channels it can have (" + QString::number(maxSubChannels()) + ").\n");
         }
         else
         {
-            quint64 chId = getChId(chName);
-
             Query db(this);
 
             db.setType(Query::PUSH, TABLE_SUB_CHANNELS);
             db.addColumn(COLUMN_SUB_CH_NAME, subName);
             db.addColumn(COLUMN_SUB_CH_ID, subId);
             db.addColumn(COLUMN_LOWEST_LEVEL, REGULAR);
-            db.addColumn(COLUMN_CHANNEL_NAME, chName);
             db.addColumn(COLUMN_CHANNEL_ID, chId);
             db.addColumn(COLUMN_ACTIVE_UPDATE, false);
             db.exec();
 
-            args.append("-ch_id");
-            args.append(QString::number(chId));
-            args.append("-level");
-            args.append(QString::number(REGULAR));
-            args.append("-sub_id");
-            args.append(QString::number(subId));
+            QByteArray frame = wrInt(chId, 64) + wrInt(subId, 8) + wrInt(REGULAR, 8) + wrInt(0, 8) + nullTermTEXT(subName);
 
-            emit backendDataOut(ASYNC_NEW_SUB_CH, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_NEW_SUB_CH, PUB_IPC_WITH_FEEDBACK, frame);
         }
     }
 }
 
-void RemoveSubCh::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void RemoveSubCh::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
         QStringList args    = parseArgs(binIn, 4);
         QString     chName  = getParam("-ch_name", args);
         QString     subName = getParam("-sub_name", args);
+        quint64     chId;
+        quint8      subId;
 
         if (chName.isEmpty())
         {
@@ -495,37 +542,33 @@ void RemoveSubCh::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn,
         {
             errTxt("err: Invalid sub-channel name.\n");
         }
-        else if (channelAccessLevel(sharedObjs, chName) > ADMIN)
+        else if (!channelExists(chName, &chId))
+        {
+            errTxt("err: Channel name '" + chName + "' does not exists.\n");
+        }
+        else if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) > ADMIN)
         {
             errTxt("err: Access denied.\n");
         }
-        else if (!channelSubExists(chName, subName))
+        else if (!channelSubExists(chId, subName, &subId))
         {
             errTxt("err: Sub-channel name '" + subName + "' does not exists.\n");
         }
         else
         {
-            quint64 chId  = getChId(chName);
-            uchar   subId = getSubId(chName, subName);
-
             Query db(this);
 
             db.setType(Query::DEL, TABLE_SUB_CHANNELS);
-            db.addCondition(COLUMN_CHANNEL_NAME, chName);
-            db.addCondition(COLUMN_SUB_CH_NAME, subName);
+            db.addCondition(COLUMN_CHANNEL_ID, chId);
+            db.addCondition(COLUMN_SUB_CH_ID, subId);
             db.exec();
 
-            args.append("-ch_id");
-            args.append(QString::number(chId));
-            args.append("-sub_id");
-            args.append(QString::number(subId));
-
-            emit backendDataOut(ASYNC_RM_SUB_CH, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_RM_SUB_CH, PUB_IPC_WITH_FEEDBACK, wrInt(chId, 64) + wrInt(subId, 8));
         }
     }
 }
 
-void RenameSubCh::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void RenameSubCh::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
@@ -533,6 +576,8 @@ void RenameSubCh::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn,
         QString     chName  = getParam("-ch_name", args);
         QString     subName = getParam("-sub_name", args);
         QString     newName = getParam("-new_name", args);
+        quint64     chId;
+        quint8      subId;
 
         if (chName.isEmpty())
         {
@@ -558,11 +603,15 @@ void RenameSubCh::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn,
         {
             errTxt("err: Invalid new sub-channel name. it must be between 4-32 chars long and contain no spaces.\n");
         }
-        else if (channelAccessLevel(sharedObjs, chName) > ADMIN)
+        else if (!channelExists(chName, &chId))
+        {
+            errTxt("err: Channel name '" + chName + "' does not exists.\n");
+        }
+        else if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) > ADMIN)
         {
             errTxt("err: Access denied.\n");
         }
-        else if (!channelSubExists(chName, subName))
+        else if (!channelSubExists(chId, subName, &subId))
         {
             errTxt("err: Sub-channel name '" + subName + "' does not exists.\n");
         }
@@ -572,22 +621,26 @@ void RenameSubCh::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn,
 
             db.setType(Query::UPDATE, TABLE_SUB_CHANNELS);
             db.addColumn(COLUMN_SUB_CH_NAME, newName);
-            db.addCondition(COLUMN_SUB_CH_NAME, subName);
-            db.addCondition(COLUMN_CHANNEL_NAME, chName);
+            db.addCondition(COLUMN_CHANNEL_ID, chId);
+            db.addCondition(COLUMN_SUB_CH_ID, subId);
             db.exec();
 
-            emit backendDataOut(ASYNC_RENAME_SUB_CH, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            QByteArray frame = wrInt(chId, 64) + wrInt(subId, 8) + nullTermTEXT(newName);
+
+            async(ASYNC_RENAME_SUB_CH, PUB_IPC_WITH_FEEDBACK, frame);
         }
     }
 }
 
-void InviteToCh::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void InviteToCh::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
         QStringList args   = parseArgs(binIn, 4);
         QString     chName = getParam("-ch_name", args);
         QString     uName  = getParam("-user", args);
+        QByteArray  uId;
+        quint64     chId;
 
         if (chName.isEmpty())
         {
@@ -605,23 +658,23 @@ void InviteToCh::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, 
         {
             errTxt("err: Invalid user name.\n");
         }
-        else if (!channelExists(chName))
+        else if (!channelExists(chName, &chId))
         {
             errTxt("err: Channel name '" + chName + "' does not exists.\n");
         }
-        else if (!userExists(uName))
+        else if (!userExists(uName, &uId))
         {
             errTxt("err: User name '" + uName + "' does not exists.\n");
         }
-        else if (channelAccessLevel(sharedObjs, chName) > OFFICER)
+        else if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) > OFFICER)
         {
             errTxt("err: Access denied.\n");
         }
-        else if (inviteExists(uName, chName))
+        else if (inviteExists(uId, chId))
         {
             errTxt("err: User name '" + uName + "' already has an invitation to channel '" + chName + ".'\n");
         }
-        else if (channelAccessLevel(uName, chName) < PUBLIC)
+        else if (channelAccessLevel(uId, chId) < PUBLIC)
         {
             errTxt("err: User name '" + uName + "' is already a member of the requested channel '" + chName + ".'\n");
         }
@@ -630,34 +683,36 @@ void InviteToCh::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, 
             Query db(this);
 
             db.setType(Query::PUSH, TABLE_CH_MEMBERS);
-            db.addColumn(COLUMN_USERNAME, uName);
-            db.addColumn(COLUMN_CHANNEL_NAME, chName);
-            db.addColumn(COLUMN_CHANNEL_ID, getChId(chName));
+            db.addColumn(COLUMN_USER_ID, uId);
+            db.addColumn(COLUMN_CHANNEL_ID, chId);
             db.addColumn(COLUMN_PENDING_INVITE, true);
             db.addColumn(COLUMN_ACCESS_LEVEL, REGULAR);
             db.exec();
 
-            emit backendDataOut(ASYNC_INVITED_TO_CH, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            QByteArray frame = createChMemberAsyncFrame(chId, uId, true, REGULAR, uName, getDispName(uId), chName);
+
+            async(ASYNC_INVITED_TO_CH, PUB_IPC_WITH_FEEDBACK, frame);
         }
     }
 }
 
-void DeclineChInvite::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void DeclineChInvite::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
         QStringList args   = parseArgs(binIn, 2);
         QString     chName = getParam("-ch_name", args);
+        quint64     chId;
 
         if (chName.isEmpty())
         {
             errTxt("err: The channel name (-ch_name) argument was not found or is empty.\n");
         }
-        else if (!channelExists(chName))
+        else if (!channelExists(chName, &chId))
         {
             errTxt("err: Channel name '" + chName + "' does not exists.\n");
         }
-        else if (!inviteExists(*sharedObjs->userName, chName))
+        else if (!inviteExists(rdFromBlock(userId, BLKSIZE_USER_ID), chId))
         {
             errTxt("err: You don't currently have an invitation to channel '" + chName + ".'\n");
         }
@@ -666,36 +721,32 @@ void DeclineChInvite::procBin(const SharedObjs *sharedObjs, const QByteArray &bi
             Query db(this);
 
             db.setType(Query::DEL, TABLE_CH_MEMBERS);
-            db.addCondition(COLUMN_CHANNEL_NAME, chName);
-            db.addCondition(COLUMN_USERNAME, *sharedObjs->userName);
+            db.addCondition(COLUMN_CHANNEL_ID, chId);
+            db.addCondition(COLUMN_USER_ID, rdFromBlock(userId, BLKSIZE_USER_ID));
             db.exec();
 
-            args.append("-ch_id");
-            args.append(QString::number(getChId(chName)));
-            args.append("-user");
-            args.append("'" + escapeChars(*sharedObjs->userName, '\\', '\'') + "'");
-
-            emit backendDataOut(ASYNC_RM_CH_MEMBER, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_RM_CH_MEMBER, PUB_IPC_WITH_FEEDBACK, wrInt(chId, 64) + rdFromBlock(userId, BLKSIZE_USER_ID));
         }
     }
 }
 
-void AcceptChInvite::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void AcceptChInvite::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
         QStringList args   = parseArgs(binIn, 2);
         QString     chName = getParam("-ch_name", args);
+        quint64     chId;
 
         if (chName.isEmpty())
         {
             errTxt("err: The channel name (-ch_name) argument was not found or is empty.\n");
         }
-        else if (!channelExists(chName))
+        else if (!channelExists(chName, &chId))
         {
             errTxt("err: Channel name '" + chName + "' does not exists.\n");
         }
-        else if (!inviteExists(*sharedObjs->userName, chName))
+        else if (!inviteExists(rdFromBlock(userId, BLKSIZE_USER_ID), chId))
         {
             errTxt("err: You don't currently have an invitation to channel '" + chName + ".'\n");
         }
@@ -705,25 +756,52 @@ void AcceptChInvite::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
 
             db.setType(Query::UPDATE, TABLE_CH_MEMBERS);
             db.addColumn(COLUMN_PENDING_INVITE, false);
-            db.addCondition(COLUMN_CHANNEL_NAME, chName);
-            db.addCondition(COLUMN_USERNAME, *sharedObjs->userName);
+            db.addCondition(COLUMN_CHANNEL_ID, chId);
+            db.addCondition(COLUMN_USER_ID, rdFromBlock(userId, BLKSIZE_USER_ID));
             db.exec();
 
-            args.append("-user");
-            args.append("'" + escapeChars(*sharedObjs->userName, '\\', '\'') + "'");
-
-            emit backendDataOut(ASYNC_INVITE_ACCEPTED, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_INVITE_ACCEPTED, PUB_IPC_WITH_FEEDBACK, wrInt(chId, 64) + rdFromBlock(userId, BLKSIZE_USER_ID));
         }
     }
 }
 
-void RemoveChMember::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+bool RemoveChMember::allowMemberDel(const QByteArray &uId, quint64 chId)
+{
+    QByteArray myId        = rdFromBlock(userId, BLKSIZE_USER_ID);
+    bool       ret         = false;
+    bool       leaving     = (uId == myId);
+    int        targetLevel = channelAccessLevel(uId, chId);
+    int        myLevel     = channelAccessLevel(myId, chOwnerOverride, BLKSIZE_USER_ID);
+
+    if (leaving && (myLevel == OWNER))
+    {
+        errTxt("err: The channel owner cannot leave the channel. please assign a new owner before doing so.\n");
+    }
+    else if (targetLevel == PUBLIC)
+    {
+        errTxt("err: The target user is not a member of the channel.\n");
+    }
+    else if (leaving)
+    {
+        ret = myLevel != PUBLIC;
+    }
+    else
+    {
+        ret = myLevel < targetLevel;
+    }
+
+    return ret;
+}
+
+void RemoveChMember::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
         QStringList args   = parseArgs(binIn, 4);
         QString     chName = getParam("-ch_name", args);
         QString     uName  = getParam("-user", args);
+        QByteArray  uId;
+        quint64     chId;
 
         if (chName.isEmpty())
         {
@@ -741,38 +819,41 @@ void RemoveChMember::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
         {
             errTxt("err: Invalid user name.\n");
         }
-        else if (!channelExists(chName))
+        else if (!channelExists(chName, &chId))
         {
             errTxt("err: Channel name '" + chName + "' does not exists.\n");
         }
-        else if (!userExists(uName))
+        else if (!userExists(uName, &uId))
         {
             errTxt("err: User name '" + uName + "' does not exists.\n");
         }
-        else if (!allowMemberDel(sharedObjs, uName, chName))
+        else if (!allowMemberDel(uId, chId))
         {
             errTxt("err: Access denied.\n");
         }
         else
         {
-            quint64 id = getChId(chName);
-
             Query db(this);
 
             db.setType(Query::DEL, TABLE_CH_MEMBERS);
-            db.addCondition(COLUMN_CHANNEL_NAME, chName);
-            db.addCondition(COLUMN_USERNAME, uName);
+            db.addCondition(COLUMN_CHANNEL_ID, chId);
+            db.addCondition(COLUMN_USER_ID, uId);
             db.exec();
 
-            args.append("-ch_id");
-            args.append(QString::number(id));
-
-            emit backendDataOut(ASYNC_RM_CH_MEMBER, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_RM_CH_MEMBER, PUB_IPC_WITH_FEEDBACK, wrInt(chId, 64) + uId);
         }
     }
 }
 
-void SetMemberLevel::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+bool SetMemberLevel::allowLevelChange(const QByteArray &uId, int newLevel, quint64 chId)
+{
+    int targetLevel = channelAccessLevel(uId, chId);
+    int myLevel     = channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, BLKSIZE_USER_ID);
+
+    return (newLevel >= myLevel) && (targetLevel > myLevel);
+}
+
+void SetMemberLevel::procIn(const QByteArray &binIn, uchar dType)
 {
     if (dType == TEXT)
     {
@@ -780,6 +861,8 @@ void SetMemberLevel::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
         QString     chName = getParam("-ch_name", args);
         QString     uName  = getParam("-user", args);
         QString     level  = getParam("-level", args);
+        quint64     chId;
+        QByteArray  uId;
 
         if (chName.isEmpty())
         {
@@ -805,72 +888,54 @@ void SetMemberLevel::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
         {
             errTxt("err: Invalid privilege level. it must be an integer between 1-4.\n");
         }
-        else if (!channelExists(chName))
+        else if (!channelExists(chName, &chId))
         {
             errTxt("err: Channel name '" + chName + "' does not exists.\n");
         }
-        else if (!userExists(uName))
+        else if (!userExists(uName, &uId))
         {
             errTxt("err: User name '" + uName + "' does not exists.\n");
         }
-        else if (!allowLevelChange(sharedObjs, level.toInt(), chName))
+        else if (!allowLevelChange(uId, level.toInt(), chId))
         {
             errTxt("err: Access denied.\n");
         }
-        else if (channelAccessLevel(uName, chName) < PUBLIC)
-        {
-            errTxt("err: The target user '" + uName + "' is not a member of the channel.\n");
-        }
         else
         {
-            quint64 id = getChId(chName);
-
             Query db(this);
 
             db.setType(Query::PULL, TABLE_CH_MEMBERS);
-            db.addColumn(COLUMN_USERNAME);
+            db.addColumn(COLUMN_USER_ID);
             db.addCondition(COLUMN_ACCESS_LEVEL, OWNER);
-            db.addCondition(COLUMN_CHANNEL_NAME, chName);
+            db.addCondition(COLUMN_CHANNEL_ID, chId);
             db.exec();
 
-            QString owner = db.getData(COLUMN_USERNAME).toString();
+            int        newLevel = level.toInt();
+            QByteArray owner    = db.getData(COLUMN_USER_ID).toByteArray();
 
             db.setType(Query::UPDATE, TABLE_CH_MEMBERS);
-            db.addColumn(COLUMN_ACCESS_LEVEL, level.toInt());
-            db.addCondition(COLUMN_CHANNEL_NAME, chName);
-            db.addCondition(COLUMN_USERNAME, uName);
+            db.addColumn(COLUMN_ACCESS_LEVEL, newLevel);
+            db.addCondition(COLUMN_CHANNEL_ID, chId);
+            db.addCondition(COLUMN_USER_ID, uId);
             db.exec();
 
-            args.append("-ch_id");
-            args.append(QString::number(id));
-
-            emit backendDataOut(ASYNC_MEM_LEVEL_CHANGED, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_MEM_LEVEL_CHANGED, PUB_IPC_WITH_FEEDBACK, wrInt(chId, 64) + uId + wrInt(newLevel, 8));
 
             if (level.toInt() == OWNER)
             {
                 db.setType(Query::UPDATE, TABLE_CH_MEMBERS);
                 db.addColumn(COLUMN_ACCESS_LEVEL, ADMIN);
-                db.addCondition(COLUMN_CHANNEL_NAME, chName);
-                db.addCondition(COLUMN_USERNAME, owner);
+                db.addCondition(COLUMN_CHANNEL_ID, chId);
+                db.addCondition(COLUMN_USER_ID, owner);
                 db.exec();
 
-                args.clear();
-                args.append("-user");
-                args.append("'" + escapeChars(owner, '\\', '\'') + "'");
-                args.append("-ch_name");
-                args.append("'" + escapeChars(chName, '\\', '\'') + "'");
-                args.append("-ch_id");
-                args.append(QString::number(id));
-                args.append("-level");
-                args.append(QString::number(ADMIN));
-
-                emit backendDataOut(ASYNC_MEM_LEVEL_CHANGED, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+                async(ASYNC_MEM_LEVEL_CHANGED, PUB_IPC_WITH_FEEDBACK, wrInt(chId, 64) + owner + wrInt(ADMIN, 8));
             }
         }
     }
 }
 
-void SetSubAcessLevel::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void SetSubAcessLevel::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
@@ -878,6 +943,8 @@ void SetSubAcessLevel::procBin(const SharedObjs *sharedObjs, const QByteArray &b
         QString     chName  = getParam("-ch_name", args);
         QString     subName = getParam("-sub_name", args);
         QString     level   = getParam("-level", args);
+        quint64     chId;
+        quint8      subId;
 
         if (chName.isEmpty())
         {
@@ -903,41 +970,35 @@ void SetSubAcessLevel::procBin(const SharedObjs *sharedObjs, const QByteArray &b
         {
             errTxt("err: Invalid privilege level. it must be an integer between 1-5.\n");
         }
-        else if (channelAccessLevel(sharedObjs, chName) > ADMIN)
+        else if (!channelExists(chName, &chId))
+        {
+            errTxt("err: Channel name '" + chName + "' does not exists.\n");
+        }
+        else if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) > ADMIN)
         {
             errTxt("err: Access denied.\n");
         }
-        else if (!channelSubExists(chName, subName))
+        else if (!channelSubExists(chId, subName, &subId))
         {
             errTxt("err: Sub-channel name '" + subName + "' does not exists.\n");
         }
         else
         {
-            quint64 chId  = getChId(chName);
-            uchar   subId = getSubId(chName, subName);
-
             Query db(this);
 
             db.setType(Query::UPDATE, TABLE_SUB_CHANNELS);
             db.addColumn(COLUMN_LOWEST_LEVEL, level.toInt());
-            db.addCondition(COLUMN_SUB_CH_NAME, subName);
-            db.addCondition(COLUMN_CHANNEL_NAME, chName);
+            db.addCondition(COLUMN_SUB_CH_ID, subId);
+            db.addCondition(COLUMN_CHANNEL_ID, chId);
             db.exec();
 
-            args.append("-ch_id");
-            args.append(QString::number(chId));
-            args.append("-sub_id");
-            args.append(QString::number(subId));
-
-            emit backendDataOut(ASYNC_SUB_CH_LEVEL_CHG, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_SUB_CH_LEVEL_CHG, PUB_IPC_WITH_FEEDBACK, wrInt(chId, 64) + wrInt(subId, 8) + wrInt(level.toInt(), 8));
         }
     }
 }
 
-void OwnerOverride::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void OwnerOverride::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs);
-
     if (dType == TEXT)
     {
         QStringList args  = parseArgs(binIn, 2);
@@ -953,7 +1014,7 @@ void OwnerOverride::procBin(const SharedObjs *sharedObjs, const QByteArray &binI
         }
         else
         {
-            *rwSharedObjs->chOwnerOverride = state.toInt();
+            wr8BitToBlock(static_cast<quint8>(state.toUInt()), chOwnerOverride);
         }
     }
 }

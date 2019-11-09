@@ -18,22 +18,21 @@
 
 ListCerts::ListCerts(QObject *parent) : TableViewer(parent)
 {
-    setParams(TABLE_CERT_DATA, QStringList() << COLUMN_COMMON_NAME, false);
+    setParams(TABLE_CERT_DATA, false);
+    addTableColumn(TABLE_CERT_DATA, COLUMN_COMMON_NAME);
 }
 
-CertInfo::CertInfo(QObject *parent)     : InternCommand(parent) {}
-AddCert::AddCert(QObject *parent)       : InternCommand(parent) {}
-RemoveCert::RemoveCert(QObject *parent) : InternCommand(parent) {}
+CertInfo::CertInfo(QObject *parent)     : CmdObject(parent) {}
+AddCert::AddCert(QObject *parent)       : CmdObject(parent) {}
+RemoveCert::RemoveCert(QObject *parent) : CmdObject(parent) {}
 
 QString ListCerts::cmdName()  {return "ls_certs";}
 QString CertInfo::cmdName()   {return "cert_info";}
 QString AddCert::cmdName()    {return "add_cert";}
 QString RemoveCert::cmdName() {return "rm_cert";}
 
-void CertInfo::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void CertInfo::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs);
-
     if (dType == TEXT)
     {
         QStringList args   = parseArgs(binIn, 2);
@@ -75,15 +74,6 @@ void CertInfo::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uc
     }
 }
 
-void AddCert::term()
-{
-    coName.clear();
-    certBa.clear();
-    privBa.clear();
-
-    emit enableMoreInput(false);
-}
-
 void AddCert::run()
 {
     Query db(this);
@@ -94,27 +84,25 @@ void AddCert::run()
     db.addColumn(COLUMN_PRIV_KEY, privBa);
     db.exec();
 
-    term();
+    flags &= ~MORE_INPUT;
 }
 
 void AddCert::ask()
 {
-    emit enableMoreInput(true);
+    flags |= MORE_INPUT;
 
     mainTxt("Common name: '" + coName + "' already exists. do you want to replace it? (y/n): ");
 }
 
-void AddCert::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void AddCert::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs);
-
-    if ((dType == TEXT) && moreInputEnabled())
+    if ((dType == TEXT) && (flags & MORE_INPUT))
     {
         QString ans = fromTEXT(binIn);
 
         if (noCaseMatch("n", ans))
         {
-            term();
+            flags &= ~MORE_INPUT;
         }
         else if (noCaseMatch("y", ans))
         {
@@ -159,7 +147,7 @@ void AddCert::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uch
         }
         else if (!validCommonName(coName))
         {
-            errTxt("err: The common name must be less than or equal to 200 chars long and contain no spaces.\n");
+            errTxt("err: The common name must be less than or equal to 136 chars long and contain no spaces.\n");
         }
         else if (!certFile.open(QFile::ReadOnly))
         {
@@ -210,34 +198,25 @@ void RemoveCert::run()
     db.addCondition(COLUMN_COMMON_NAME, coName);
     db.exec();
 
-    term();
-}
-
-void RemoveCert::term()
-{
-    emit enableMoreInput(false);
-
-    coName.clear();
+    flags &= ~MORE_INPUT;
 }
 
 void RemoveCert::ask()
 {
-    emit enableMoreInput(true);
+    flags |= MORE_INPUT;
 
     mainTxt("Are you sure you want to remove the cert for common name: " + coName + "? (y/n): ");
 }
 
-void RemoveCert::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void RemoveCert::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs);
-
-    if ((dType == TEXT) && moreInputEnabled())
+    if ((dType == TEXT) && (flags & MORE_INPUT))
     {
         QString ans = fromTEXT(binIn);
 
         if (noCaseMatch("n", ans))
         {
-            term();
+            flags &= ~MORE_INPUT;
         }
         else if (noCaseMatch("y", ans))
         {
@@ -260,7 +239,7 @@ void RemoveCert::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, 
         }
         else if (!validCommonName(name))
         {
-            errTxt("err: The common name must be lass than or equal to 200 chars long and contain no spaces.\n");
+            errTxt("err: Invalid common name.\n");
         }
         else if (!certExists(name))
         {

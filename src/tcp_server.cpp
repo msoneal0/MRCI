@@ -16,60 +16,24 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-ModDeleteTimer::ModDeleteTimer(const QString &mod, QStringList *queue, QObject *parent) : QTimer (parent)
-{
-    delQueue = queue;
-    modName  = mod;
-
-    setInterval(5000); // 5 seconds
-
-    queue->append(mod);
-
-    connect(this, &ModDeleteTimer::timeout, this, &ModDeleteTimer::delMod);
-}
-
-void ModDeleteTimer::resetTimer(const QString &mod)
-{
-    if (modName == mod)
-    {
-        start();
-    }
-}
-
-void ModDeleteTimer::delMod()
-{
-    Query db(this);
-
-    db.setType(Query::PULL, TABLE_MODULES);
-    db.addColumn(COLUMN_MOD_MAIN);
-    db.addCondition(COLUMN_MOD_NAME, modName);
-    db.exec();
-
-    if (db.rows())
-    {
-        QString file = db.getData(COLUMN_MOD_MAIN).toString();
-
-        QDir(QFileInfo(file).path()).removeRecursively();
-
-        db.setType(Query::DEL, TABLE_MODULES);
-        db.addCondition(COLUMN_MOD_NAME, modName);
-        db.exec();
-    }
-
-    delQueue->removeAll(modName);
-
-    deleteLater();
-}
-
 TCPServer::TCPServer(QObject *parent) : QTcpServer(parent)
 {
-    sessionCounter = new QSharedMemory(sessionCountShareKey(), this);
-    controlPipe    = new QLocalServer(this);
-    controlSocket  = nullptr;
-    flags          = 0;
+    controlPipe   = new QLocalServer(this);
+    hostSharedMem = new QSharedMemory(this);
+    hostKey       = createHostSharedMem(hostSharedMem);
+    hostLoad      = static_cast<char*>(hostSharedMem->data());
+    controlSocket = nullptr;
+    flags         = 0;
 
-    sessionCounter->create(4);
-    sessionCounter->attach();
+#ifdef Q_OS_LINUX
+
+    setupUnixSignalHandlers();
+
+    auto *signalHandler = new UnixSignalHandler(QCoreApplication::instance());
+
+    connect(signalHandler, &UnixSignalHandler::closeServer, this, &TCPServer::closeServer);
+
+#endif
 
     connect(controlPipe, &QLocalServer::newConnection, this, &TCPServer::newPipeConnection);
 }
@@ -96,50 +60,65 @@ void TCPServer::closedPipeConnection()
     controlSocket = nullptr;
 }
 
+bool TCPServer::createPipe()
+{
+    bool ret = controlPipe->listen(HOST_CONTROL_PIPE);
+
+    controlPipePath = controlPipe->fullServerName();
+
+    if (!ret)
+    {
+        if (QFile::exists(controlPipePath))
+        {
+            QFile::remove(controlPipePath);
+        }
+
+        ret = controlPipe->listen(HOST_CONTROL_PIPE);
+    }
+
+    return ret;
+}
 
 bool TCPServer::start()
 {
-    bool ret = false;
+    close();
+    cleanupDbConnection();
 
-    QString contrPath = pipesPath() + "/" + QString(APP_NAME) + ".TCPServer.Control";
+    Query db(this);
 
-    if (QFile::exists(contrPath))
-    {
-        QFile::remove(contrPath);
-    }
+    db.setType(Query::PULL, TABLE_SERV_SETTINGS);
+    db.addColumn(COLUMN_PORT);
+    db.addColumn(COLUMN_IPADDR);
+    db.addColumn(COLUMN_MAXSESSIONS);
+    db.exec();
 
-    if (!controlPipe->listen(contrPath))
+    maxSessions = db.getData(COLUMN_MAXSESSIONS).toUInt();
+
+    bool    ret  = false;
+    QString addr = db.getData(COLUMN_IPADDR).toString();
+    quint16 port = static_cast<quint16>(db.getData(COLUMN_PORT).toUInt());
+
+    if (!createPipe())
     {
         QTextStream(stderr) << "" << endl << "err: Unable to open a control pipe." << endl;
         QTextStream(stderr) << "err: Reason - " << controlPipe->errorString() << endl;
     }
+    else if (!listen(QHostAddress(addr), port))
+    {
+        QTextStream(stderr) << "" << endl << "err: TCP listen failure on address: " << addr << " port: " << port << endl;
+        QTextStream(stderr) << "err: Reason - " << errorString() << endl;
+    }
+    else if (hostKey.isEmpty())
+    {
+        QTextStream(stderr) << "" << endl << "err: Failed to create the host shared memory block." << endl;
+        QTextStream(stderr) << "err: Reason - " << hostSharedMem->errorString() << endl;
+    }
     else
     {
-        close();
-        cleanupDbConnection();
+        updateBanList();
 
-        Query db(this);
-
-        db.setType(Query::PULL, TABLE_SERV_SETTINGS);
-        db.addColumn(COLUMN_PORT);
-        db.addColumn(COLUMN_IPADDR);
-        db.addColumn(COLUMN_MAXSESSIONS);
-        db.exec();
-
-        QString addr = db.getData(COLUMN_IPADDR).toString();
-        quint16 port = static_cast<quint16>(db.getData(COLUMN_PORT).toUInt());
-
-        if (listen(QHostAddress(addr), port))
-        {
-            ret = true;
-
-            flags |= ACCEPTING;
-        }
-        else
-        {
-            QTextStream(stderr) << "" << endl << "err: TCP listen failure on address: " << addr << " port: " << port << endl;
-            QTextStream(stderr) << "err: Reason - " << errorString() << endl;
-        }
+        ret    = true;
+        flags |= ACCEPTING;
     }
 
     return ret;
@@ -147,9 +126,13 @@ bool TCPServer::start()
 
 void TCPServer::sessionEnded()
 {
-    uint count = rdSessionLoad() - 1;
+    hostSharedMem->lock();
 
-    wrSessionLoad(count);
+    quint32 count = rd32BitFromBlock(hostLoad) - 1;
+
+    wr32BitToBlock(count, hostLoad);
+
+    hostSharedMem->unlock();
 
     if ((count == 0) && (flags & CLOSE_ON_EMPTY))
     {
@@ -169,12 +152,12 @@ void TCPServer::closeServer()
 {
     close();
 
-    if (rdSessionLoad() == 0)
+    if (rd32BitFromBlock(hostLoad) == 0)
     {
         cleanupDbConnection();
 
         controlPipe->close();
-        sessionCounter->detach();
+        hostSharedMem->detach();
 
         QCoreApplication::instance()->quit();
     }
@@ -189,7 +172,7 @@ void TCPServer::closeServer()
 
 void TCPServer::resServer()
 {
-    if (rdSessionLoad() == 0)
+    if (rd32BitFromBlock(hostLoad) == 0)
     {
         controlPipe->close();
 
@@ -206,13 +189,13 @@ void TCPServer::resServer()
 
 bool TCPServer::servOverloaded()
 {
-    Query db(this);
+    hostSharedMem->lock();
 
-    db.setType(Query::PULL, TABLE_SERV_SETTINGS);
-    db.addColumn(COLUMN_MAXSESSIONS);
-    db.exec();
+    bool ret = rd32BitFromBlock(hostLoad) >= maxSessions;
 
-    return rdSessionLoad() >= db.getData(COLUMN_MAXSESSIONS).toUInt();
+    hostSharedMem->unlock();
+
+    return ret;
 }
 
 void TCPServer::procPipeIn()
@@ -235,44 +218,48 @@ void TCPServer::procPipeIn()
         db.setType(Query::PULL, TABLE_SERV_SETTINGS);
         db.addColumn(COLUMN_IPADDR);
         db.addColumn(COLUMN_PORT);
-        db.addColumn(COLUMN_MAXSESSIONS);
         db.exec();
 
-        txtOut << "" << endl;
-        txtOut << "Host Load:            " << rdSessionLoad() << "/" << db.getData(COLUMN_MAXSESSIONS).toUInt() << endl;
-        txtOut << "Active Address:       " << serverAddress().toString() << endl;
-        txtOut << "Active Port:          " << serverPort() << endl;
-        txtOut << "Set Address:          " << db.getData(COLUMN_IPADDR).toString() << endl;
-        txtOut << "Set Port:             " << db.getData(COLUMN_PORT).toUInt() << endl;
-        txtOut << "Database Path:        " << sqlDataPath() << endl;
-        txtOut << "Modules Install Path: " << modDataPath() << endl << endl;
+        hostSharedMem->lock();
 
+        txtOut << "" << endl;
+        txtOut << "Host Load:      " << rd32BitFromBlock(hostLoad) << "/" << maxSessions << endl;
+        txtOut << "Active Address: " << serverAddress().toString() << endl;
+        txtOut << "Active Port:    " << serverPort() << endl;
+        txtOut << "Set Address:    " << db.getData(COLUMN_IPADDR).toString() << endl;
+        txtOut << "Set Port:       " << db.getData(COLUMN_PORT).toUInt() << endl;
+        txtOut << "Database Path:  " << sqlDataPath() << endl << endl;
+
+        hostSharedMem->unlock();
         controlSocket->write(toTEXT(text));
     }
 }
 
-bool TCPServer::inBanList(const QString &ip)
+void TCPServer::updateBanList()
 {
+    banList.clear();
+
     Query db(this);
 
     db.setType(Query::PULL, TABLE_IPBANS);
     db.addColumn(COLUMN_IPADDR);
-    db.addCondition(COLUMN_IPADDR, ip);
     db.exec();
 
-    return db.rows();
+    for (int i = 0; i < db.rows(); ++i)
+    {
+        banList.append(db.getData(COLUMN_IPADDR, i).toString());
+    }
 }
 
-void TCPServer::delayedModDel(const QString &modName)
+void TCPServer::setMaxSessions(quint32 value)
 {
-    if (!modDelQueue.contains(modName))
-    {
-        auto *timer = new ModDeleteTimer(modName, &modDelQueue, this);
+    Query db(this);
 
-        connect(this, &TCPServer::resetModDelTimer, timer, &ModDeleteTimer::resetTimer);
-    }
+    db.setType(Query::UPDATE, TABLE_SERV_SETTINGS);
+    db.addColumn(COLUMN_MAXSESSIONS, value);
+    db.exec();
 
-    emit resetModDelTimer(modName);
+    maxSessions = value;
 }
 
 void TCPServer::incomingConnection(qintptr socketDescriptor)
@@ -291,37 +278,48 @@ void TCPServer::incomingConnection(qintptr socketDescriptor)
     {
         resumeAccepting();
 
-        if (inBanList(soc->peerAddress().toString()))
+        if (banList.contains(soc->peerAddress().toString(), Qt::CaseInsensitive))
         {
             soc->deleteLater();
         }
         else
         {
-            auto *ses = new Session(nullptr);
+            auto buffSize = static_cast<uint>(qPow(2, MAX_FRAME_BITS) - 1) + (MAX_FRAME_BITS / 8) + 4;
+            //                                max_data_size_per_frame + size_of_size_bytes + size_of_cmd_id
+
+            soc->setSocketOption(QAbstractSocket::ReceiveBufferSizeSocketOption, buffSize);
+            soc->setSocketOption(QAbstractSocket::SendBufferSizeSocketOption, buffSize);
+
+            auto *ses = new Session(hostKey, soc, nullptr);
             auto *thr = new QThread(nullptr);
 
             connect(thr, &QThread::finished, soc, &QSslSocket::deleteLater);
             connect(thr, &QThread::finished, ses, &QSslSocket::deleteLater);
             connect(thr, &QThread::finished, thr, &QSslSocket::deleteLater);
+            connect(thr, &QThread::started, ses, &Session::init);
 
             connect(ses, &Session::ended, this, &TCPServer::sessionEnded);
             connect(ses, &Session::ended, thr, &QThread::quit);
             connect(ses, &Session::connectPeers, this, &TCPServer::connectPeers);
-            connect(ses, &Session::delayedModDel, this, &TCPServer::delayedModDel);
             connect(ses, &Session::closeServer, this, &TCPServer::closeServer);
             connect(ses, &Session::resServer, this, &TCPServer::resServer);
+            connect(ses, &Session::setMaxSessions, this, &TCPServer::setMaxSessions);
+            connect(ses, &Session::updateBanList, this, &TCPServer::updateBanList);
 
             connect(this, &TCPServer::connectPeers, ses, &Session::connectToPeer);
             connect(this, &TCPServer::endAllSessions, ses, &Session::endSession);
 
             serializeThread(thr);
 
-            ses->initAsMain(soc);
             ses->moveToThread(thr);
             soc->moveToThread(thr);
             thr->start();
 
-            wrSessionLoad(rdSessionLoad() + 1);
+            hostSharedMem->lock();
+
+            wr32BitToBlock((rd32BitFromBlock(hostLoad) + 1), hostLoad);
+
+            hostSharedMem->unlock();
         }
     }
 }

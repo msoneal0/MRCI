@@ -1,6 +1,6 @@
 ### Summary ###
 
-broadcast text/data to all sessions listening to any matching sub-channels.
+broadcast data to all sessions listening to any matching sub-channels.
 
 ### IO ###
 

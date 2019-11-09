@@ -1,6 +1,6 @@
 ### Summary ###
 
-list all sub-channels within a channel you currently a member of.
+list all sub-channels within a channel.
 
 ### IO ###
 

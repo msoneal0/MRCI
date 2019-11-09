@@ -1,11 +1,11 @@
 ### Summary ###
 
-remove a rank from a command object name.
+remove a rank from a module command name.
 
 ### IO ###
 
-```[-command (text)]/[text]```
+```[-command (text) -mod (text)]/[text]```
 
 ### Description ###
 
-this will remove the command rank from the command object given in -command. any command object without an assigned perm id is assumed a rank of 1 but some exceptions apply for commands that need to be allowed for all users regardless of rank.
+this will remove the command rank from the command name given in -command for the module given in -mod. any command name without an assigned rank is assumed a rank of 1 except for commands that claim immunity.

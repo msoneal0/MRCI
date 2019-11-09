@@ -18,8 +18,9 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "../common.h"
+#include "../cmd_object.h"
 
-class ToPeer : public InternCommand
+class ToPeer : public CmdObject
 {
     Q_OBJECT
 
@@ -27,14 +28,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit ToPeer(QObject *parent = nullptr);
 };
 
 //----------------------------------
 
-class P2PRequest : public InternCommand
+class P2PRequest : public CmdObject
 {
     Q_OBJECT
 
@@ -42,14 +43,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit P2PRequest(QObject *parent = nullptr);
 };
 
 //-----------------------------------
 
-class P2POpen : public InternCommand
+class P2POpen : public CmdObject
 {
     Q_OBJECT
 
@@ -57,14 +58,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit P2POpen(QObject *parent = nullptr);
 };
 
 //----------------------------------
 
-class P2PClose : public InternCommand
+class P2PClose : public CmdObject
 {
     Q_OBJECT
 
@@ -72,22 +73,26 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit P2PClose(QObject *parent = nullptr);
 };
 
 //----------------------------------
 
-class LsP2P : public InternCommand
+class LsP2P : public CmdObject
 {
     Q_OBJECT
+
+private:
+
+    QList<QByteArray> lsBlocks(const char* blocks, int maxBlocks, int sizeOfBlock);
 
 public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit LsP2P(QObject *parent = nullptr);
 };

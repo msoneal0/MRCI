@@ -70,9 +70,9 @@
 
 #include "db.h"
 #include "shell.h"
-#include "commands/command.h"
+#include "mem_share.h"
 
-#define FRAME_HEADER_SIZE   6
+#define FRAME_HEADER_SIZE   8
 #define MAX_FRAME_BITS      24
 #define IMPORT_REV          3
 #define LOCAL_BUFFSIZE      16777215
@@ -84,83 +84,80 @@
 #define EXE_CRASH_LIMIT     5
 #define EXE_DEBUG_INFO_SIZE 512
 #define SERVER_HEADER_TAG   "MRCI"
-#define MOD_IMPORT_FUNC     "hostImport"
+#define HOST_CONTROL_PIPE   "MRCI_HOST_CONTROL"
+#define TXT_CODEC           "UTF-16LE"
+#define TXT_CODEC_BITS      16
 
-#define ASYNC_RDY                1
-#define ASYNC_SYS_MSG            2
-#define ASYNC_EXE_CRASH          3
-#define ASYNC_EXIT               4   // internal only
-#define ASYNC_CAST               5   // internal only
-#define ASYNC_MAXSES             6   // internal only
-#define ASYNC_LOGOUT             7   // internal only
-#define ASYNC_USER_DELETED       8
-#define ASYNC_GROUP_RENAMED      9   // internal only
-#define ASYNC_DISP_RENAMED       10  // internal only
-#define ASYNC_GRP_TRANS          11  // internal only
-#define ASYNC_USER_GROUP_CHANGED 12  // internal only
-#define ASYNC_CMD_RANKS_CHANGED  13  // internal only
-#define ASYNC_RESTART            14  // internal only
-#define ASYNC_ENABLE_MOD         15  // internal only
-#define ASYNC_DISABLE_MOD        16  // internal only
-#define ASYNC_GROUP_UPDATED      17  // internal only
-#define ASYNC_END_SESSION        18  // internal only
-#define ASYNC_USER_LOGIN         19  // internal only
-#define ASYNC_RESTORE_AUTH       20  // internal only
-#define ASYNC_TO_PEER            21
-#define ASYNC_LIMITED_CAST       22
-#define ASYNC_RW_MY_INFO         23  // internal only
-#define ASYNC_P2P                24
-#define ASYNC_CLOSE_P2P          25  // internal only
-#define ASYNC_NEW_CH_MEMBER      26
-#define ASYNC_DEL_CH             27
-#define ASYNC_RENAME_CH          28
-#define ASYNC_CH_ACT_FLAG        29
-#define ASYNC_NEW_SUB_CH         30
-#define ASYNC_RM_SUB_CH          31
-#define ASYNC_RENAME_SUB_CH      32
-#define ASYNC_INVITED_TO_CH      33
-#define ASYNC_RM_CH_MEMBER       34
-#define ASYNC_INVITE_ACCEPTED    35
-#define ASYNC_MEM_LEVEL_CHANGED  36
-#define ASYNC_SUB_CH_LEVEL_CHG   37
-#define ASYNC_ADD_RDONLY         38
-#define ASYNC_RM_RDONLY          39
-#define ASYNC_ADD_CMD            40
-#define ASYNC_RM_CMD             41
-#define ASYNC_USER_RENAMED       42
-#define ASYNC_PUBLIC_AUTH        43  // internal only
-
-enum SalveExitCodes
+enum AsyncCommands : quint16
 {
-    GEN_ERR              = 1,
-    FAILED_TO_OPEN_PIPE  = 2,
-    PIPE_CONNECT_TIMEOUT = 3
+    ASYNC_RDY               = 1,
+    ASYNC_SYS_MSG           = 2,
+    ASYNC_EXIT              = 3,   // internal only
+    ASYNC_CAST              = 4,
+    ASYNC_MAXSES            = 5,   // internal only
+    ASYNC_LOGOUT            = 6,   // internal only
+    ASYNC_USER_DELETED      = 7,
+    ASYNC_DISP_RENAMED      = 8,   // internal only
+    ASYNC_USER_RANK_CHANGED = 9,   // internal only
+    ASYNC_CMD_RANKS_CHANGED = 10,  // internal only
+    ASYNC_RESTART           = 11,  // internal only
+    ASYNC_ENABLE_MOD        = 12,  // internal only
+    ASYNC_DISABLE_MOD       = 13,  // internal only
+    ASYNC_END_SESSION       = 14,  // internal only
+    ASYNC_USER_LOGIN        = 15,  // internal only
+    ASYNC_TO_PEER           = 16,
+    ASYNC_LIMITED_CAST      = 17,
+    ASYNC_RW_MY_INFO        = 18,  // internal only
+    ASYNC_P2P               = 19,
+    ASYNC_CLOSE_P2P         = 20,  // internal only
+    ASYNC_NEW_CH_MEMBER     = 21,
+    ASYNC_DEL_CH            = 22,
+    ASYNC_RENAME_CH         = 23,
+    ASYNC_CH_ACT_FLAG       = 24,
+    ASYNC_NEW_SUB_CH        = 25,
+    ASYNC_RM_SUB_CH         = 26,
+    ASYNC_RENAME_SUB_CH     = 27,
+    ASYNC_INVITED_TO_CH     = 28,
+    ASYNC_RM_CH_MEMBER      = 29,
+    ASYNC_INVITE_ACCEPTED   = 30,
+    ASYNC_MEM_LEVEL_CHANGED = 31,
+    ASYNC_SUB_CH_LEVEL_CHG  = 32,
+    ASYNC_ADD_RDONLY        = 33,
+    ASYNC_RM_RDONLY         = 34,
+    ASYNC_ADD_CMD           = 35,
+    ASYNC_RM_CMD            = 36,
+    ASYNC_USER_RENAMED      = 37,
+    ASYNC_PING_PEERS        = 38,  // internal only
+    ASYNC_OPEN_SUBCH        = 39,  // internal only
+    ASYNC_CLOSE_SUBCH       = 40,  // internal only
+    ASYNC_UPDATE_BANS       = 41,  // internal only
+    ASYNC_KEEP_ALIVE        = 42,  // internal only
+    ASYNC_SET_DIR           = 43,  // internal only
+    ASYNC_DEBUG_TEXT        = 44   // internal only
 };
 
-enum PrivateTypeID
+enum Flags : quint32
 {
-    PRIV_IPC              = 1,
-    PUB_IPC               = 2,
-    PUB_IPC_WITH_FEEDBACK = 3,
-    PING_PEERS            = 4
+    FRAME_RDY                  = 1,
+    SESSION_RDY                = 1 << 1,
+    ACTIVE_PAYLOAD             = 1 << 2,
+    END_SESSION_EMPTY_PROC     = 1 << 3,
+    END_SESSION_ON_PAYLOAD_DEL = 1 << 4,
+    RES_ON_EMPTY               = 1 << 5,
+    CLOSE_ON_EMPTY             = 1 << 6,
+    ACCEPTING                  = 1 << 7,
+    LOADING_PUB_CMDS           = 1 << 8,
+    LOADING_EXEMPT_CMDS        = 1 << 9,
+    LOADING_USER_CMDS          = 1 << 10,
+    SESSION_PARAMS_SET         = 1 << 11,
+    LOGGED_IN                  = 1 << 12,
+    MORE_INPUT                 = 1 << 13,
+    LOOPING                    = 1 << 14,
+    SINGLE_STEP_MODE           = 1 << 15,
+    HALT_STATE                 = 1 << 16
 };
 
-enum Flags : uint
-{
-    IPC_LINK_OK                = 1,
-    IPC_FRAME_RDY              = 1 << 1,
-    TCP_FRAME_RDY              = 1 << 2,
-    SSL_HOLD                   = 1 << 3,
-    VER_OK                     = 1 << 4,
-    EXPECTED_TERM              = 1 << 5,
-    ACTIVE_PAYLOAD             = 1 << 6,
-    END_SESSION_ON_PAYLOAD_DEL = 1 << 7,
-    RES_ON_EMPTY               = 1 << 8,
-    CLOSE_ON_EMPTY             = 1 << 9,
-    ACCEPTING                  = 1 << 10
-};
-
-enum FileInfoFlags
+enum FileInfoFlags : quint8
 {
     IS_FILE   = 1,
     IS_DIR    = 1 << 1,
@@ -171,145 +168,102 @@ enum FileInfoFlags
     EXISTS    = 1 << 6
 };
 
-typedef ExternCommand* (*BuildInternCmd)(QObject*);
+enum TypeID : quint8
+{
+    GEN_FILE              = 1,
+    TEXT                  = 2,
+    ERR                   = 3,
+    PRIV_TEXT             = 4,
+    IDLE                  = 5,
+    HOST_CERT             = 6,
+    FILE_INFO             = 7,
+    PEER_INFO             = 8,
+    MY_INFO               = 9,
+    PEER_STAT             = 10,
+    P2P_REQUEST           = 11,
+    P2P_CLOSE             = 12,
+    P2P_OPEN              = 13,
+    BYTES                 = 14,
+    SESSION_ID            = 15,
+    NEW_CMD               = 16,
+    CMD_ID                = 17,
+    BIG_TEXT              = 18,
+    TERM_CMD              = 19,
+    HOST_VER              = 20,
+    PRIV_IPC              = 21,
+    PUB_IPC               = 22,
+    PUB_IPC_WITH_FEEDBACK = 23,
+    PING_PEERS            = 24,
+    CH_MEMBER_INFO        = 25,
+    CH_ID                 = 26,
+    KILL_CMD              = 27,
+    HALT_CMD              = 28,
+    RESUME_CMD            = 29
+};
 
-class RWSharedObjs;
+enum ChannelMemberLevel : quint8
+{
+    OWNER   = 1,
+    ADMIN   = 2,
+    OFFICER = 3,
+    REGULAR = 4,
+    PUBLIC  = 5
+};
+
 class Session;
 
-QByteArray  wrFrame(quint16 cmdId, const QByteArray &data, uchar dType);
-QByteArray  wrInt(quint64 num, int numOfBits);
-QByteArray  wrInt(qint64 num, int numOfBits);
-QByteArray  wrInt(int num, int numOfBits);
-QByteArray  wrInt(uint num, int numOfBits);
-QByteArray  toFILE_INFO(const QString &path);
-QByteArray  toFILE_INFO(const QFileInfo &info);
 QByteArray  toTEXT(const QString &txt);
 QByteArray  fixedToTEXT(const QString &txt, int len);
-QByteArray  toPEER_INFO(const SharedObjs *sharedObjs);
-QByteArray  toMY_INFO(const SharedObjs *sharedObjs);
-QByteArray  toPEER_STAT(const QByteArray &sesId, const QByteArray &chIds, bool isDisconnecting);
-QByteArray  toNEW_CMD(quint16 cmdId, const QString &cmdName, ExternCommand *cmdObj);
-quint64     rdInt(const QByteArray &bytes);
-quint64     getChId(const QString &chName);
-uchar       getSubId(const QString &chName, const QString &subName);
-uint        rdSessionLoad();
-uint        getRankForGroup(const QString &grName);
-void        wrSessionLoad(uint value);
+QByteArray  nullTermTEXT(const QString &txt);
+quint32     toCmdId32(quint16 cmdId, quint16 branchId);
+quint16     toCmdId16(quint32 id);
 void        serializeThread(QThread *thr);
-void        uniqueAdd(quint16 id, QList<quint16> &list);
-void        mkPathForFile(const QString &path);
-void        msgHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg);
 void        mkPath(const QString &path);
-void        mkFile(const QString &path);
-void        moveCharLeft(int pos, QString &str);
-void        moveCharRight(int pos, QString &str);
 void        listDir(QList<QPair<QString,QString> > &list, const QString &srcPath, const QString &dstPath);
-void        wrOpenCh(RWSharedObjs *sharedObjs, const QByteArray &id);
-void        wrCloseCh(RWSharedObjs *sharedObjs, const QByteArray &id, QByteArray &peerStat);
-void        wrCloseCh(RWSharedObjs *sharedObjs, quint64 chId, QByteArray &peerStat);
-void        wrCloseCh(RWSharedObjs *sharedObjs, const QByteArray &id);
-void        wrCloseCh(RWSharedObjs *sharedObjs, quint64 chId);
+void        containsActiveCh(const char *subChs, char *actBlock);
 bool        containsNewLine(const QString &str);
+bool        validModPath(const QString &modPath);
 bool        validUserName(const QString &uName);
 bool        validEmailAddr(const QString &email);
 bool        validPassword(const QString &pw);
-bool        validGroupName(const QString &grName);
 bool        validCommandName(const QString &name);
 bool        validCommonName(const QString &name);
 bool        validDispName(const QString &name);
 bool        validChName(const QString &name);
 bool        validLevel(const QString &num, bool includePub);
 bool        validSubId(const QString &num);
-bool        modExists(const QString &modName);
-bool        userExists(const QString &uName);
-bool        emailExists(const QString &email);
-bool        groupExists(const QString &grName);
-bool        inviteExists(const QString &uName, const QString &chName);
-bool        memberExists(const QString &uName, const QString &chName);
-bool        channelExists(quint64 chId);
-bool        channelExists(const QString &chName);
-bool        channelSubExists(quint64 chId, uchar subId);
-bool        channelSubExists(const QString &ch, const QString &sub);
-bool        recoverPWExists(const QString &uName);
+bool        modExists(const QString &modPath);
+bool        userExists(const QString &uName, QByteArray *uId = nullptr, QString *email = nullptr);
+bool        emailExists(const QString &email, QByteArray *uId = nullptr);
+bool        inviteExists(const QByteArray &uId, quint64 chId);
+bool        channelExists(const QString &chName, quint64 *chId = nullptr);
+bool        channelSubExists(quint64 chId, const QString &sub, quint8 *subId = nullptr);
+bool        recoverPWExists(const QByteArray &uId);
 bool        rdOnlyFlagExists(const QString &chName, uchar subId, int level);
-bool        checkRank(const QString &myGroup, const QString &targetGroup, bool equalAcceptable = false);
 bool        isBool(const QString &str);
 bool        isInt(const QString &str);
-bool        isLocked(const QString &uName);
-bool        commandHasRank(const QString &cmdName);
+bool        isLocked(const QByteArray &uId);
 bool        matchedFsObjTypes(const QString &pathA, const QString &pathB);
 bool        matchedVolume(const QString &pathA, const QString &pathB);
 bool        noCaseMatch(const QString &strA, const QString &strB);
 bool        argExists(const QString &key, const QStringList &args);
-bool        matchChs(const QByteArray &chsA, const QByteArray &chsB);
-bool        containsChId(const QByteArray &chId, const QByteArray &chIds);
-bool        containsActiveCh(const QByteArray &chIds);
+bool        matchChs(const char *chsA, const char *chsB);
 bool        globalActiveFlag();
-bool        genSubId(const QString &chName, int *newId);
-bool        isChOwner(const QString &uName);
-bool        allowMemberDel(const SharedObjs *sharedObjs, const QString &targetUName, const QString &chName);
-bool        allowLevelChange(const SharedObjs *sharedObjs, int newLevel, const QString &chName);
-bool        maxedInstalledMods();
-int         channelAccessLevel(const QString &uName, quint64 chId);
-int         channelAccessLevel(const QString &uName, const QString &chName);
-int         channelAccessLevel(const SharedObjs *sharedObjs, const QString &chName);
-int         channelAccessLevel(const SharedObjs *sharedObjs, quint64 chId);
-int         lowestAcessLevel(quint64 chId, uchar subId);
-int         chPos(const QByteArray &id, const QByteArray &chIds);
-int         blankChPos(const QByteArray &chIds);
-int         countChs(const QByteArray &chIds);
-int         inRange(int pos, int min, int max);
+bool        genSubId(quint64 chId, quint8 *newId);
+bool        isChOwner(const QByteArray &uId);
+int         channelAccessLevel(const QByteArray &uId, quint64 chId);
+int         channelAccessLevel(const QByteArray &uId, const char *override, quint64 chId);
 int         maxSubChannels();
 QString     fromTEXT(const QByteArray &txt);
-QString     getUserGroup(const QString &uName);
 QString     getUserNameForEmail(const QString &email);
-QString     getEmailForUser(const QString &uName);
+QString     getEmailForUser(const QByteArray &uId);
+QString     getDispName(const QByteArray &uId);
 QString     boolStr(bool state);
 QString     getParam(const QString &key, const QStringList &args);
-QString     genPw();
 QString     escapeChars(const QString &str, const QChar &escapeChr, const QChar &chr);
 QString     genSerialNumber();
-QString     modDataPath();
-QString     pipesPath();
-QString     sessionCountShareKey();
+QString     defaultPw();
 QStringList parseArgs(const QByteArray &data, int maxArgs, int *pos = nullptr);
-QList<int>  genSequence(int min, int max, int len);
-QChar       genLetter();
-QChar       genNum();
-QChar       genSpecialChar();
-
-class RWSharedObjs : public QObject
-{
-    Q_OBJECT
-
-public:
-
-    QHash<quint16, ExternCommand*> *commands;
-    QHash<quint16, QString>        *cmdNames;
-    QList<QString>                 *chList;
-    QList<QByteArray>              *p2pAccepted;
-    QList<QByteArray>              *p2pPending;
-    QList<quint16>                 *moreInputCmds;
-    QList<quint16>                 *activeLoopCmds;
-    QList<quint16>                 *pausedCmds;
-    QString                        *sessionAddr;
-    QString                        *userName;
-    QString                        *groupName;
-    QString                        *displayName;
-    QString                        *appName;
-    ushort                         *clientMajor;
-    ushort                         *clientMinor;
-    ushort                         *clientPatch;
-    QByteArray                     *chIds;
-    QByteArray                     *wrAbleChIds;
-    QByteArray                     *sessionId;
-    QByteArray                     *userId;
-    bool                           *activeUpdate;
-    bool                           *chOwnerOverride;
-    uint                           *hostRank;
-
-    explicit RWSharedObjs(QObject *parent = nullptr);
-};
 
 //---------------------------
 
@@ -324,81 +278,24 @@ public:
     explicit SessionCarrier(Session *session);
 };
 
-//--------------------------
+//----------------------------
 
-class InternCommand : public ExternCommand
+class IdleTimer : public QTimer
 {
     Q_OBJECT
 
-protected:
+private slots:
 
-    RWSharedObjs *rwSharedObjs;
-
-    bool    loopEnabled();
-    bool    moreInputEnabled();
-    QString parseMd(int offset);
+    void detectWrite(qint64);
 
 public:
 
-    void    setWritableDataShare(RWSharedObjs *sharedObjs);
-    QString libText();
-    QString shortText();
-    QString ioText();
-    QString longText();
+    explicit IdleTimer(QObject *parent = nullptr);
 
-    explicit InternCommand(QObject *parent = nullptr);
-
-signals:
-
-    void authOk();
-    void termAllCommands();
-    void castPeerInfo();
-    void reloadCommands();
-    void termCommandId(quint16 cmdId);
-    void backendDataOut(quint16 cmdId, const QByteArray &data, uchar typeId);
+    void attach(QIODevice *dev, int msec);
 };
 
-//----------------------------
-
-class CommandOutput : public QObject
-{
-    Q_OBJECT
-
-private:
-
-    quint16        cmdId;
-    ExternCommand *cmdObj;
-
-public:
-
-    explicit CommandOutput(ExternCommand *parent);
-
-    void setCmdId(quint16 id);
-
-public slots:
-
-    void dataFromCmdObj(const QByteArray &data, uchar typeId);
-    void openChIdFromCmdObj(quint64 id, uchar subId);
-    void closeChIdFromCmdObj(quint64 id, uchar subId);
-    void openChNameFromCmdObj(const QString &ch, const QString &sub);
-    void closeChNameFromCmdObj(const QString &ch, const QString &sub);
-    void enableLoopFromCmdObj(bool state);
-    void enableMoreInputFromCmdObj(bool state);
-    void finished();
-
-signals:
-
-    void dataOut(quint16 cmdId, const QByteArray &data, uchar typeId);
-    void openChById(quint16 cmdId, quint64 id, uchar subId);
-    void closeChById(quint16 cmdId, quint64 id, uchar subId);
-    void openChByName(quint16 cmdId, const QString &ch, const QString &sub);
-    void closeChByName(quint16 cmdId, const QString &ch, const QString &sub);
-    void cmdFinished(quint16 cmdId);
-    void enableLoop(quint16 cmdId, bool state);
-    void enableMoreInput(quint16 cmdId, bool state);
-};
-
-//----------------------------
+//---------------------------
 
 class ShellIPC : public QLocalSocket
 {
@@ -407,7 +304,6 @@ class ShellIPC : public QLocalSocket
 private:
 
     QStringList arguments;
-    QString     pipeName;
 
 private slots:
 
@@ -423,6 +319,16 @@ public:
 signals:
 
     void closeInstance();
+};
+
+//--------------------------
+
+class Serial
+{
+
+public:
+
+    static quint64 serialIndex;
 };
 
 #endif // COMMON_H

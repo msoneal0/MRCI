@@ -18,11 +18,16 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "../common.h"
+#include "../cmd_object.h"
 #include "table_viewer.h"
 
 class ListBans : public TableViewer
 {
     Q_OBJECT
+
+private:
+
+    void onDel();
 
 public:
 
@@ -33,7 +38,7 @@ public:
 
 //---------------------------------
 
-class BanIP : public InternCommand
+class BanIP : public CmdObject
 {
     Q_OBJECT
 
@@ -41,14 +46,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit BanIP(QObject *parent = nullptr);
 };
 
 //--------------------------------
 
-class UnBanIP : public InternCommand
+class UnBanIP : public CmdObject
 {
     Q_OBJECT
 
@@ -56,7 +61,7 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit UnBanIP(QObject *parent = nullptr);
 };

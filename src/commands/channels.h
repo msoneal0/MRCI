@@ -18,9 +18,12 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "../common.h"
+#include "../cmd_object.h"
 #include "table_viewer.h"
 
-class CreateChannel : public InternCommand
+QByteArray createChMemberAsyncFrame(quint64 chId, const QByteArray &userId, bool invite, quint8 level, const QString &userName, const QString &dispName, const QString &chName);
+
+class CreateChannel : public CmdObject
 {
     Q_OBJECT
 
@@ -28,14 +31,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, uchar dType);
 
     explicit CreateChannel(QObject *parent = nullptr);
 };
 
 //-----------------------
 
-class RemoveChannel : public InternCommand
+class RemoveChannel : public CmdObject
 {
     Q_OBJECT
 
@@ -43,14 +46,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit RemoveChannel(QObject *parent = nullptr);
 };
 
 //----------------------
 
-class RenameChannel : public InternCommand
+class RenameChannel : public CmdObject
 {
     Q_OBJECT
 
@@ -58,14 +61,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit RenameChannel(QObject *parent = nullptr);
 };
 
 //------------------------
 
-class SetActiveState : public InternCommand
+class SetActiveState : public CmdObject
 {
     Q_OBJECT
 
@@ -73,14 +76,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit SetActiveState(QObject *parent = nullptr);
 };
 
 //-------------------------
 
-class CreateSubCh : public InternCommand
+class CreateSubCh : public CmdObject
 {
     Q_OBJECT
 
@@ -88,14 +91,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit CreateSubCh(QObject *parent = nullptr);
 };
 
 //-------------------------
 
-class RemoveSubCh : public InternCommand
+class RemoveSubCh : public CmdObject
 {
     Q_OBJECT
 
@@ -103,14 +106,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit RemoveSubCh(QObject *parent = nullptr);
 };
 
 //--------------------------
 
-class RenameSubCh : public InternCommand
+class RenameSubCh : public CmdObject
 {
     Q_OBJECT
 
@@ -118,7 +121,7 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit RenameSubCh(QObject *parent = nullptr);
 };
@@ -133,7 +136,7 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit ListSubCh(QObject *parent = nullptr);
 };
@@ -148,7 +151,7 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit ListChannels(QObject *parent = nullptr);
 };
@@ -163,14 +166,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit SearchChannels(QObject *parent = nullptr);
 };
 
 //------------------------------
 
-class InviteToCh : public InternCommand
+class InviteToCh : public CmdObject
 {
     Q_OBJECT
 
@@ -178,14 +181,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit InviteToCh(QObject *parent = nullptr);
 };
 
 //-------------------------------
 
-class DeclineChInvite : public InternCommand
+class DeclineChInvite : public CmdObject
 {
     Q_OBJECT
 
@@ -193,14 +196,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit DeclineChInvite(QObject *parent = nullptr);
 };
 
 //-------------------------------
 
-class AcceptChInvite : public InternCommand
+class AcceptChInvite : public CmdObject
 {
     Q_OBJECT
 
@@ -208,44 +211,48 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit AcceptChInvite(QObject *parent = nullptr);
 };
 
 //------------------------------
 
-class RemoveChMember : public InternCommand
+class RemoveChMember : public CmdObject
 {
     Q_OBJECT
+
+    bool allowMemberDel(const QByteArray &uId, quint64 chId);
 
 public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit RemoveChMember(QObject *parent = nullptr);
 };
 
 //------------------------------
 
-class SetMemberLevel : public InternCommand
+class SetMemberLevel : public CmdObject
 {
     Q_OBJECT
+
+    bool allowLevelChange(const QByteArray &uId, int newLevel, quint64 chId);
 
 public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, uchar dType);
 
     explicit SetMemberLevel(QObject *parent = nullptr);
 };
 
 //------------------------------
 
-class SetSubAcessLevel : public InternCommand
+class SetSubAcessLevel : public CmdObject
 {
     Q_OBJECT
 
@@ -253,7 +260,7 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit SetSubAcessLevel(QObject *parent = nullptr);
 };
@@ -268,14 +275,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit ListMembers(QObject *parent = nullptr);
 };
 
 //-----------------------------
 
-class OwnerOverride : public InternCommand
+class OwnerOverride : public CmdObject
 {
     Q_OBJECT
 
@@ -283,7 +290,7 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit OwnerOverride(QObject *parent = nullptr);
 };

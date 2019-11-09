@@ -5,7 +5,6 @@
         <file>docs/intern_commands/add_ban.md</file>
         <file>docs/intern_commands/add_cert.md</file>
         <file>docs/intern_commands/add_ch.md</file>
-        <file>docs/intern_commands/add_group.md</file>
         <file>docs/intern_commands/add_mod.md</file>
         <file>docs/intern_commands/add_ranked_cmd.md</file>
         <file>docs/intern_commands/add_rdonly_flag.md</file>
@@ -15,7 +14,6 @@
         <file>docs/intern_commands/cert_info.md</file>
         <file>docs/intern_commands/close_host.md</file>
         <file>docs/intern_commands/close_sub_ch.md</file>
-        <file>docs/intern_commands/cmd_info.md</file>
         <file>docs/intern_commands/decline_ch.md</file>
         <file>docs/intern_commands/find_ch.md</file>
         <file>docs/intern_commands/force_set_email.md</file>
@@ -40,9 +38,7 @@
         <file>docs/intern_commands/ls_certs.md</file>
         <file>docs/intern_commands/ls_ch_members.md</file>
         <file>docs/intern_commands/ls_chs.md</file>
-        <file>docs/intern_commands/ls_cmds.md</file>
         <file>docs/intern_commands/ls_dbg.md</file>
-        <file>docs/intern_commands/ls_groups.md</file>
         <file>docs/intern_commands/ls_mods.md</file>
         <file>docs/intern_commands/ls_open_chs.md</file>
         <file>docs/intern_commands/ls_p2p.md</file>
@@ -55,7 +51,6 @@
         <file>docs/intern_commands/p2p_close.md</file>
         <file>docs/intern_commands/p2p_open.md</file>
         <file>docs/intern_commands/p2p_request.md</file>
-        <file>docs/intern_commands/pause.md</file>
         <file>docs/intern_commands/ping_peers.md</file>
         <file>docs/intern_commands/preview_email.md</file>
         <file>docs/intern_commands/recover_acct.md</file>
@@ -66,7 +61,6 @@
         <file>docs/intern_commands/request_new_user_name.md</file>
         <file>docs/intern_commands/request_pw_reset.md</file>
         <file>docs/intern_commands/restart_host.md</file>
-        <file>docs/intern_commands/resume.md</file>
         <file>docs/intern_commands/rm_acct.md</file>
         <file>docs/intern_commands/rm_ban.md</file>
         <file>docs/intern_commands/rm_cert.md</file>
@@ -79,16 +73,13 @@
         <file>docs/intern_commands/set_disp_name.md</file>
         <file>docs/intern_commands/set_email_template.md</file>
         <file>docs/intern_commands/set_email.md</file>
-        <file>docs/intern_commands/set_group_rank.md</file>
-        <file>docs/intern_commands/set_group.md</file>
         <file>docs/intern_commands/set_member_level.md</file>
         <file>docs/intern_commands/set_pw.md</file>
         <file>docs/intern_commands/set_sub_ch_level.md</file>
         <file>docs/intern_commands/set_user_name.md</file>
-        <file>docs/intern_commands/term.md</file>
         <file>docs/intern_commands/to_peer.md</file>
-        <file>docs/intern_commands/trans_group.md</file>
         <file>docs/intern_commands/verify_email.md</file>
         <file>docs/intern_commands/ch_owner_override.md</file>
+        <file>docs/intern_commands/set_user_rank.md</file>
     </qresource>
 </RCC>

@@ -18,20 +18,25 @@
 
 ListBans::ListBans(QObject *parent) : TableViewer(parent)
 {
-    setParams(TABLE_IPBANS, QStringList() << COLUMN_TIME << COLUMN_IPADDR, true);
+    setParams(TABLE_IPBANS, true);
+    addTableColumn(TABLE_IPBANS, COLUMN_TIME);
+    addTableColumn(TABLE_IPBANS, COLUMN_IPADDR);
 }
 
-BanIP::BanIP(QObject *parent)     : InternCommand(parent) {}
-UnBanIP::UnBanIP(QObject *parent) : InternCommand(parent) {}
+BanIP::BanIP(QObject *parent)     : CmdObject(parent) {}
+UnBanIP::UnBanIP(QObject *parent) : CmdObject(parent) {}
 
 QString ListBans::cmdName() {return "ls_bans";}
 QString BanIP::cmdName()    {return "add_ban";}
 QString UnBanIP::cmdName()  {return "rm_ban";}
 
-void BanIP::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void ListBans::onDel()
 {
-    Q_UNUSED(sharedObjs);
+    async(ASYNC_UPDATE_BANS, PRIV_IPC);
+}
 
+void BanIP::procIn(const QByteArray &binIn, quint8 dType)
+{
     if (dType == TEXT)
     {
         QStringList args = parseArgs(binIn, 2);
@@ -54,14 +59,14 @@ void BanIP::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar
             db.setType(Query::PUSH, TABLE_IPBANS);
             db.addColumn(COLUMN_IPADDR, addr.toString());
             db.exec();
+
+            async(ASYNC_UPDATE_BANS, PRIV_IPC);
         }
     }
 }
 
-void UnBanIP::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void UnBanIP::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs);
-
     if (dType == TEXT)
     {
         QStringList args = parseArgs(binIn, 2);
@@ -84,6 +89,8 @@ void UnBanIP::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uch
             db.setType(Query::DEL, TABLE_IPBANS);
             db.addCondition(COLUMN_IPADDR, addr.toString());
             db.exec();
+
+            async(ASYNC_UPDATE_BANS, PRIV_IPC);
         }
     }
 }

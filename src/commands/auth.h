@@ -18,9 +18,10 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "../common.h"
+#include "../cmd_object.h"
 #include "table_viewer.h"
 
-class Auth : public InternCommand
+class Auth : public CmdObject
 {
     Q_OBJECT
 
@@ -28,20 +29,19 @@ private:
 
     QByteArray uId;
     QString    uName;
-    QString    dName;
+    QString    ip;
     bool       loginOk;
     bool       newPassword;
     bool       newUserName;
 
-    void confirmAuth(const SharedObjs *sharedObjs);
-    void addToThreshold(const SharedObjs *sharedObjs);
+    void confirmAuth();
+    void addToThreshold();
 
 public:
 
     static QString cmdName();
 
-    void term();
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit Auth(QObject *parent = nullptr);
 };

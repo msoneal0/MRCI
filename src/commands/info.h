@@ -18,28 +18,35 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "../common.h"
+#include "../cmd_object.h"
 #include "table_viewer.h"
 
-class ListCommands : public InternCommand
+class ListCommands : public CmdObject
 {
     Q_OBJECT
 
 private:
 
-    bool strInRowTxt(const QString &str, const QStringList &rowTxt);
+    QStringList list;
+    QStringList genfileList;
+
+    QString parseMd(const QString &cmdName, int offset);
+    QString shortText(const QString &cmdName);
+    QString ioText(const QString &cmdName);
+    QString longText(const QString &cmdName);
+
+private slots:
+
+    void onIPCConnected();
 
 public:
 
-    static QString cmdName();
-
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &data, uchar dType);
-
-    explicit ListCommands(QObject *parent = nullptr);
+    explicit ListCommands(const QStringList &cmdList, const QStringList &gen, QObject *parent = nullptr);
 };
 
 //--------------------------------------
 
-class HostInfo : public InternCommand
+class HostInfo : public CmdObject
 {
     Q_OBJECT
 
@@ -47,7 +54,7 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit HostInfo(QObject *parent = nullptr);
 };
@@ -67,7 +74,7 @@ public:
 
 //------------------------------------
 
-class MyInfo : public InternCommand
+class MyInfo : public CmdObject
 {
     Q_OBJECT
 
@@ -75,7 +82,7 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit MyInfo(QObject *parent = nullptr);
 };
@@ -91,21 +98,6 @@ public:
     static QString cmdName();
 
     explicit ListDBG(QObject *parent = nullptr);
-};
-
-//----------------------------------
-
-class CmdInfo : public InternCommand
-{
-    Q_OBJECT
-
-public:
-
-    static QString cmdName();
-
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
-
-    explicit CmdInfo(QObject *parent = nullptr);
 };
 
 #endif // INFO_H

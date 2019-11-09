@@ -1,6 +1,6 @@
 ### Summary ###
 
-lock user account.
+lock a user account.
 
 ### IO ###
 

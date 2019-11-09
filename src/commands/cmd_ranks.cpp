@@ -16,26 +16,42 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-LsCmdRanks::LsCmdRanks(QObject *parent) : TableViewer(parent)
+bool commandHasRank(const QString &mod, const QString &cmdName)
 {
-    setParams(TABLE_CMD_RANKS, QStringList() << COLUMN_COMMAND << COLUMN_HOST_RANK, false);
+    Query db;
+
+    db.setType(Query::PULL, TABLE_CMD_RANKS);
+    db.addColumn(COLUMN_COMMAND);
+    db.addCondition(COLUMN_MOD_MAIN, mod);
+    db.addCondition(COLUMN_COMMAND, cmdName);
+    db.exec();
+
+    return db.rows();
 }
 
-AssignCmdRank::AssignCmdRank(QObject *parent) : InternCommand(parent) {}
-RemoveCmdRank::RemoveCmdRank(QObject *parent) : InternCommand(parent) {}
+LsCmdRanks::LsCmdRanks(QObject *parent) : TableViewer(parent)
+{
+    setParams(TABLE_CMD_RANKS, false);
+
+    addTableColumn(TABLE_CMD_RANKS, COLUMN_MOD_MAIN);
+    addTableColumn(TABLE_CMD_RANKS, COLUMN_COMMAND);
+    addTableColumn(TABLE_CMD_RANKS, COLUMN_HOST_RANK);
+}
+
+AssignCmdRank::AssignCmdRank(QObject *parent) : CmdObject(parent) {}
+RemoveCmdRank::RemoveCmdRank(QObject *parent) : CmdObject(parent) {}
 
 QString LsCmdRanks::cmdName()    {return "ls_ranked_cmds";}
 QString AssignCmdRank::cmdName() {return "add_ranked_cmd";}
 QString RemoveCmdRank::cmdName() {return "rm_ranked_cmd";}
 
-void AssignCmdRank::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void AssignCmdRank::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs);
-
     if (dType == TEXT)
     {
-        QStringList args    = parseArgs(binIn, 4);
+        QStringList args    = parseArgs(binIn, 6);
         QString     cmdName = getParam("-command", args);
+        QString     mod     = getParam("-mod", args);
         QString     rank    = getParam("-rank", args);
 
         if (cmdName.isEmpty())
@@ -48,15 +64,19 @@ void AssignCmdRank::procBin(const SharedObjs *sharedObjs, const QByteArray &binI
         }
         else if (!isInt(rank))
         {
-            errTxt("err: The given rank is not a valid unsigned integer.\n");
+            errTxt("err: The given rank is not a valid 32bit unsigned integer.\n");
         }
         else if (!validCommandName(cmdName))
         {
-            errTxt("err: Invalid command name. it must be 1-64 chars long and can only contain letters, numbers, '_' or '?'.\n");
+            errTxt("err: Invalid command name. it must be 1-64 chars long and contain no spaces.\n");
         }
-        else if (commandHasRank(cmdName))
+        else if (!validModPath(mod))
         {
-            errTxt("err: The given command name already has an assigned rank.\n");
+            errTxt("err: Invalid module path. it cannot contain any of the following chars '|*:\"?<>'\n");
+        }
+        else if (commandHasRank(mod, cmdName))
+        {
+            errTxt("err: The given mod - command name combo already has an assigned rank.\n");
         }
         else
         {
@@ -64,22 +84,22 @@ void AssignCmdRank::procBin(const SharedObjs *sharedObjs, const QByteArray &binI
 
             db.setType(Query::PUSH, TABLE_CMD_RANKS);
             db.addColumn(COLUMN_COMMAND, cmdName);
+            db.addColumn(COLUMN_MOD_MAIN, mod);
             db.addColumn(COLUMN_HOST_RANK, rank.toUInt());
             db.exec();
 
-            emit backendDataOut(ASYNC_CMD_RANKS_CHANGED, QByteArray(), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_CMD_RANKS_CHANGED, PUB_IPC_WITH_FEEDBACK);
         }
     }
 }
 
-void RemoveCmdRank::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void RemoveCmdRank::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs);
-
     if (dType == TEXT)
     {
-        QStringList args    = parseArgs(binIn, 2);
+        QStringList args    = parseArgs(binIn, 4);
         QString     cmdName = getParam("-command", args);
+        QString     mod     = getParam("-mod", args);
 
         if (cmdName.isEmpty())
         {
@@ -89,9 +109,13 @@ void RemoveCmdRank::procBin(const SharedObjs *sharedObjs, const QByteArray &binI
         {
             errTxt("err: Invalid command name.\n");
         }
-        else if (!commandHasRank(cmdName))
+        else if (!validModPath(mod))
         {
-            errTxt("err: The given command name does not have an assigned rank.\n");
+            errTxt("err: Invalid module path.\n");
+        }
+        else if (!commandHasRank(mod, cmdName))
+        {
+            errTxt("err: The given mod - command name combo does not have an assigned rank.\n");
         }
         else
         {
@@ -99,9 +123,10 @@ void RemoveCmdRank::procBin(const SharedObjs *sharedObjs, const QByteArray &binI
 
             db.setType(Query::DEL, TABLE_CMD_RANKS);
             db.addCondition(COLUMN_COMMAND, cmdName);
+            db.addCondition(COLUMN_MOD_MAIN, mod);
             db.exec();
 
-            emit backendDataOut(ASYNC_CMD_RANKS_CHANGED, QByteArray(), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_CMD_RANKS_CHANGED, PUB_IPC_WITH_FEEDBACK);
         }
     }
 }

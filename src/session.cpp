@@ -16,71 +16,44 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-Session::Session(QObject *parent) : QObject(parent)
+QByteArray wrFrame(quint32 cmdId, const QByteArray &data, uchar dType)
 {
-    chIds           = QByteArray(54, static_cast<char>(0));
-    rwShared        = new RWSharedObjs(this);
-    shared          = new SharedObjs(this);
-    exeDebugInfo    = new QSharedMemory(this);
-    ipcServ         = nullptr;
-    slaveProc       = nullptr;
-    ipcLink         = nullptr;
-    tcpSocket       = nullptr;
-    activeUpdate    = false;
-    chOwnerOverride = false;
-    exeCrashCount   = 0;
-    clientMajor     = 0;
-    clientMinor     = 0;
-    clientPatch     = 0;
-    ipcFrameCmdId   = 0;
-    ipcFrameSize    = 0;
-    ipcFrameType    = 0;
-    tcpFrameCmdId   = 0;
-    tcpFrameSize    = 0;
-    tcpFrameType    = 0;
-    hostRank        = 0;
-    flags           = 0;
+    QByteArray typeBa  = wrInt(dType, 8);
+    QByteArray cmdBa   = wrInt(cmdId, 32);
+    QByteArray sizeBa  = wrInt(data.size(), MAX_FRAME_BITS);
 
-    shared->clientMajor     = &clientMajor;
-    shared->clientMinor     = &clientMinor;
-    shared->clientPatch     = &clientPatch;
-    shared->groupName       = &groupName;
-    shared->userName        = &userName;
-    shared->displayName     = &displayName;
-    shared->appName         = &appName;
-    shared->sessionAddr     = &peerIp;
-    shared->sessionId       = &sessionId;
-    shared->userId          = &userId;
-    shared->chIds           = &chIds;
-    shared->wrAbleChIds     = &wrAbleChIds;
-    shared->p2pAccepted     = &p2pAccepted;
-    shared->p2pPending      = &p2pPending;
-    shared->activeUpdate    = &activeUpdate;
-    shared->chList          = &chList;
-    shared->chOwnerOverride = &chOwnerOverride;
-    shared->hostRank        = &hostRank;
-
-    rwShared->clientMajor     = &clientMajor;
-    rwShared->clientMinor     = &clientMinor;
-    rwShared->clientPatch     = &clientPatch;
-    rwShared->groupName       = &groupName;
-    rwShared->userName        = &userName;
-    rwShared->displayName     = &displayName;
-    rwShared->appName         = &appName;
-    rwShared->sessionAddr     = &peerIp;
-    rwShared->sessionId       = &sessionId;
-    rwShared->userId          = &userId;
-    rwShared->chIds           = &chIds;
-    rwShared->wrAbleChIds     = &wrAbleChIds;
-    rwShared->p2pAccepted     = &p2pAccepted;
-    rwShared->p2pPending      = &p2pPending;
-    rwShared->activeUpdate    = &activeUpdate;
-    rwShared->chList          = &chList;
-    rwShared->chOwnerOverride = &chOwnerOverride;
-    rwShared->hostRank        = &hostRank;
+    return typeBa + cmdBa + sizeBa + data;
 }
 
-void Session::genSessionId()
+Session::Session(const QString &hostKey, QSslSocket *tcp, QObject *parent) : MemShare(parent)
+{
+    currentDir     = QDir::currentPath();
+    hostMemKey     = hostKey;
+    tcpSocket      = tcp;
+    tcpFrameCmdId  = 0;
+    tcpPayloadSize = 0;
+    tcpFrameType   = 0;
+    flags          = 0;
+}
+
+void Session::init()
+{
+    if (createSharedMem(genSessionId(), hostMemKey))
+    {
+        setupDataBlocks();
+        wrStringToBlock(tcpSocket->peerAddress().toString(), clientIp, BLKSIZE_CLIENT_IP);
+
+        connect(tcpSocket, &QSslSocket::disconnected, this, &Session::endSession);
+        connect(tcpSocket, &QSslSocket::readyRead, this, &Session::dataFromClient);
+        connect(tcpSocket, &QSslSocket::encrypted, this, &Session::sesRdy);
+    }
+    else
+    {
+        endSession();
+    }
+}
+
+QByteArray Session::genSessionId()
 {
     QByteArray serial = genSerialNumber().toUtf8();
     QByteArray sysId  = QSysInfo::machineUniqueId();
@@ -89,592 +62,258 @@ void Session::genSessionId()
 
     hasher.addData(serial + sysId);
 
-    sessionId = hasher.result();
-}
-
-void Session::initAsMain(QSslSocket *tcp)
-{
-    genSessionId();
-
-    tcpSocket = tcp;
-    slaveProc = new QProcess(this);
-    ipcServ   = new QLocalServer(this);
-    peerIp    = tcp->peerAddress().toString();
-    pipeName  = pipesPath() + "/" + sessionId.toHex();
-
-    if (QFile::exists(pipeName))
-    {
-        QFile::remove(pipeName);
-    }
-
-    exeDebugInfo->setKey(sessionId.toHex());
-    exeDebugInfo->create(EXE_DEBUG_INFO_SIZE);
-
-    auto buffSize = static_cast<uint>(qPow(2, MAX_FRAME_BITS) - 1) + (MAX_FRAME_BITS / 8) + 2;
-    //                                max_data_size_per_frame + size_of_size_bytes + size_of_cmd_id
-
-    tcp->setSocketOption(QAbstractSocket::ReceiveBufferSizeSocketOption, buffSize);
-    tcp->setSocketOption(QAbstractSocket::SendBufferSizeSocketOption, buffSize);
-
-    connect(slaveProc, &QProcess::readyReadStandardError, this, &Session::sendStderr);
-    connect(slaveProc, &QProcess::readyReadStandardOutput, this, &Session::sendStdout);
-    connect(slaveProc, &QProcess::errorOccurred, this, &Session::exeError);
-    connect(slaveProc, &QProcess::started, this, &Session::exeStarted);
-    connect(slaveProc, SIGNAL(finished(int,QProcess::ExitStatus)), this, SLOT(exeFinished(int,QProcess::ExitStatus)));
-
-    connect(tcpSocket, &QSslSocket::disconnected, this, &Session::endSession);
-    connect(tcpSocket, &QSslSocket::readyRead, this, &Session::dataFromClient);
-    connect(tcpSocket, &QSslSocket::encrypted, this, &Session::run);
-
-    connect(ipcServ, &QLocalServer::newConnection, this, &Session::newIPCLink);
-}
-
-void Session::startAsSlave(const QStringList &args)
-{
-    sessionId   = QByteArray::fromHex(getParam("-session_id", args).toUtf8());
-    clientMajor = getParam("-client_major", args).toUShort();
-    clientMinor = getParam("-client_minor", args).toUShort();
-    clientPatch = getParam("-client_patch", args).toUShort();
-    peerIp      = getParam("-session_ipaddr", args);
-    appName     = getParam("-app_name", args);
-    pipeName    = pipesPath() + "/" + sessionId.toHex();
-    ipcLink     = new QLocalSocket(this);
-    executor    = new CmdExecutor(rwShared, shared, exeDebugInfo);
-
-    exeDebugInfo->setKey(sessionId.toHex());
-    exeDebugInfo->attach();
-
-    auto *exeThr = new QThread();
-
-    connect(exeThr, &QThread::finished, executor, &CmdExecutor::deleteLater);
-    connect(exeThr, &QThread::finished, exeThr, &QThread::deleteLater);
-    connect(exeThr, &QThread::started, executor, &CmdExecutor::buildCmdLoaders);
-
-    connect(executor, &CmdExecutor::okToDelete, this, &Session::closeInstance);
-    connect(executor, &CmdExecutor::okToDelete, exeThr, &QThread::quit);
-    connect(executor, &CmdExecutor::logout, this, &Session::logout);
-    connect(executor, &CmdExecutor::authOk, this, &Session::authOk);
-    connect(executor, &CmdExecutor::endSession, this, &Session::endSession);
-    connect(executor, &CmdExecutor::dataToSession, this, &Session::dataToClient);
-
-    connect(this, &Session::closeExe, executor, &CmdExecutor::close);
-    connect(this, &Session::loadCommands, executor, &CmdExecutor::buildCommands);
-    connect(this, &Session::dataToCommand, executor, &CmdExecutor::exeCmd);
-    connect(this, &Session::unloadModFile, executor, &CmdExecutor::unloadModFile);
-    connect(this, &Session::loadModFile, executor, &CmdExecutor::loadModFile);
-
-    connect(ipcLink, &QLocalSocket::connected, this, &Session::ipcConnected);
-    connect(ipcLink, &QLocalSocket::disconnected, this, &Session::ipcDisconnected);
-    connect(ipcLink, &QLocalSocket::readyRead, this, &Session::dataFromIPC);
-    connect(ipcLink, SIGNAL(error(QLocalSocket::LocalSocketError)), this, SLOT(ipcError(QLocalSocket::LocalSocketError)));
-
-    serializeThread(exeThr);
-
-    executor->moveToThread(exeThr);
-    exeThr->start();
-
-    QTimer::singleShot(100, this, SLOT(run()));
-}
-
-void Session::modLoadCrashCheck(const QString &crashInfo)
-{
-    if (crashInfo.contains("loadModLib()"))
-    {
-        int pos = crashInfo.indexOf("path: ");
-
-        if (pos != -1)
-        {
-            QString path = crashInfo.mid(pos + 7).trimmed();
-
-            Query db(this);
-
-            db.setType(Query::UPDATE, TABLE_MODULES);
-            db.addColumn(COLUMN_LOCKED, true);
-            db.addCondition(COLUMN_MOD_MAIN, path);
-            db.exec();
-
-            qDebug() << "Module: '" << path << "' auto locked due to a crash while loading.";
-        }
-    }
-}
-
-void Session::rdExeDebug()
-{
-    if (exeDebugInfo->isAttached())
-    {
-        exeDebugInfo->lock();
-
-        QByteArray data = QByteArray(static_cast<char*>(exeDebugInfo->data()), EXE_DEBUG_INFO_SIZE);
-
-        data.replace(QByteArray(2, static_cast<char>(0)), QByteArray());
-
-        emit dataToClient(ASYNC_SYS_MSG, toTEXT("\ndebug info:\n"), TEXT);
-        emit dataToClient(ASYNC_SYS_MSG, data + toTEXT("\n"), TEXT);
-
-        qDebug() << "Debug info generated: " + fromTEXT(data);
-
-        modLoadCrashCheck(fromTEXT(data));
-
-        exeDebugInfo->unlock();
-    }
-}
-
-bool Session::isSlave()
-{
-    return (tcpSocket == nullptr);
-}
-
-bool Session::isMain()
-{
-    return (tcpSocket != nullptr);
+    return hasher.result();
 }
 
 void Session::payloadDeleted()
 {
-    if (isSlave())
-    {
-        qDebug() << "Session::payloadDeleted() called while running in slave mode.";
-    }
-    else
-    {
-        flags &= ~ACTIVE_PAYLOAD;
+    flags &= ~ACTIVE_PAYLOAD;
 
-        if (flags & END_SESSION_ON_PAYLOAD_DEL)
-        {
-            endSession();
-        }
+    if (flags & END_SESSION_ON_PAYLOAD_DEL)
+    {
+        endSession();
     }
 }
 
 void Session::connectToPeer(const QSharedPointer<SessionCarrier> &peer)
 {
-    if (isSlave())
-    {
-        qDebug() << "Session::connectToPeer() called while running in slave mode.";
-    }
-    else if (peer->sessionObj == nullptr)
+    if (peer->sessionObj == nullptr)
     {
         qDebug() << "Session::connectToPeer() the peer session object is null.";
     }
-    else if ((peer->sessionObj != this) && (flags & IPC_LINK_OK))
+    else if ((peer->sessionObj != this) && (flags & SESSION_RDY))
     {
-        connect(peer->sessionObj, &Session::backendToPeers, this, &Session::peersDataIn);
-        connect(this, &Session::backendToPeers, peer->sessionObj, &Session::peersDataIn);
+        connect(peer->sessionObj, &Session::asyncToPeers, this, &Session::pubAsyncDataIn);
+        connect(this, &Session::asyncToPeers, peer->sessionObj, &Session::pubAsyncDataIn);
     }
 }
 
-void Session::run()
+void Session::sesRdy()
 {
-    flags &= ~SSL_HOLD;
+    flags |= SESSION_RDY;
 
-    if (isSlave())
-    {
-        ipcLink->connectToServer(pipeName);
+    auto *payload = new SessionCarrier(this);
 
-        QTimer::singleShot(IPC_PREP_TIME, this, SLOT(newIPCTimeout()));
-    }
-    else if (!ipcServ->listen(pipeName))
-    {
-        qDebug() << "Session::run() unable to listen on pipe name: " + pipeName + " reason: " + ipcServ->errorString();
+    connect(payload, &SessionCarrier::destroyed, this, &Session::payloadDeleted);
 
-        dataToClient(ASYNC_SYS_MSG, toTEXT("\nsystem err: Unable to create an IPC pipe for the command executor, ending the session.\n"), ERR);
-        endSession();
-    }
-    else
-    {
-        QStringList args;
+    emit connectPeers(QSharedPointer<SessionCarrier>(payload));
 
-        args.append("-executor");
-        args.append("-session_id");
-        args.append(sessionId.toHex());
-        args.append("-client_major");
-        args.append(QString::number(clientMajor));
-        args.append("-client_minor");
-        args.append(QString::number(clientMinor));
-        args.append("-client_patch");
-        args.append(QString::number(clientPatch));
-        args.append("-session_ipaddr");
-        args.append(peerIp);
-        args.append("-app_name");
-        args.append(appName);
-
-        slaveProc->start(QCoreApplication::applicationFilePath(), args);
-
-        dataToClient(ASYNC_SYS_MSG, toTEXT("Attempting to start a new command executor.\n"), TEXT);
-
-        QTimer::singleShot(IPC_PREP_TIME, this, SLOT(newIPCTimeout()));
-    }
-}
-
-void Session::ipcOk()
-{
-    if (isSlave())
-    {
-        qDebug() << "Session::ipcOk() called while running in slave mode.";
-    }
-    else
-    {
-        flags |= IPC_LINK_OK;
-        flags |= ACTIVE_PAYLOAD;
-
-        auto *payload = new SessionCarrier(this);
-
-        connect(ipcLink, &QLocalSocket::readyRead, this, &Session::dataFromIPC);
-        connect(ipcLink, &QLocalSocket::disconnected, this, &Session::ipcDisconnected);
-        connect(ipcLink, SIGNAL(error(QLocalSocket::LocalSocketError)), this, SLOT(ipcError(QLocalSocket::LocalSocketError)));
-
-        connect(payload, &SessionCarrier::destroyed, this, &Session::payloadDeleted);
-
-        emit connectPeers(QSharedPointer<SessionCarrier>(payload));
-
-        dataToClient(ASYNC_SYS_MSG, toTEXT("IPC connection successfully established.\n"), TEXT);
-
-        if (!userId.isEmpty())
-        {
-            ipcLink->write(wrFrame(ASYNC_RESTORE_AUTH, userId, PRIV_IPC));
-        }
-        else
-        {
-            ipcLink->write(wrFrame(ASYNC_PUBLIC_AUTH, QByteArray(), PRIV_IPC));
-        }
-    }
-}
-
-void Session::newIPCTimeout()
-{
-    if (isSlave())
-    {
-        if (ipcLink->state() != QLocalSocket::ConnectedState)
-        {
-            QCoreApplication::exit(PIPE_CONNECT_TIMEOUT);
-        }
-    }
-    else if (ipcLink == nullptr)
-    {
-        dataToClient(ASYNC_SYS_MSG, toTEXT("\nsystem err: Timed out waiting for the command executor to request an IPC link with the session.\n"), ERR);
-        endSession();
-    }
-}
-
-void Session::newIPCLink()
-{
-    if (isSlave())
-    {
-        qDebug() << "Session::newIPCLink() called while running in slave mode.";
-    }
-    else
-    {
-        if (ipcLink != nullptr)
-        {
-            qDebug() << "Session::newIPCLink() another local socket tried to connect to the session while there is already an active connection. session id: " + sessionId.toHex();
-
-            ipcServ->nextPendingConnection()->deleteLater();
-        }
-        else
-        {
-            ipcLink = ipcServ->nextPendingConnection();
-
-            QTimer::singleShot(IPC_PREP_TIME, this, SLOT(ipcOk()));
-        }
-    }
-}
-
-void Session::exeStarted()
-{
-    if (isSlave())
-    {
-        qDebug() << "Session::exeStarted() called while running in slave mode.";
-    }
-    else
-    {
-        dataToClient(ASYNC_SYS_MSG, toTEXT("Command executor successfully started, awaiting an IPC request.\n"), TEXT);
-    }
-}
-
-void Session::ipcConnected()
-{
-    if (isSlave())
-    {
-        flags |= IPC_LINK_OK;
-    }
-}
-
-void Session::ipcDisconnected()
-{
-    flags &= ~IPC_LINK_OK;
-
-    if (isMain())
-    {
-        ipcLink = nullptr;
-    }
-}
-
-void Session::exeFinished(int ret, QProcess::ExitStatus status)
-{
-    if (isSlave())
-    {
-        qDebug() << "Session::exeFinished() called while running in slave mode.";
-    }
-    else if (flags & EXPECTED_TERM)
-    {
-        endSession();
-    }
-    else if ((status == QProcess::NormalExit) && (ret == FAILED_TO_OPEN_PIPE))
-    {
-        dataToClient(ASYNC_EXE_CRASH, toTEXT("\nsystem err: The command executor could not open a new pipe for listening.\n"), ERR);
-        endSession();
-    }
-    else if ((status == QProcess::NormalExit) && (ret == PIPE_CONNECT_TIMEOUT))
-    {
-        dataToClient(ASYNC_EXE_CRASH, toTEXT("\nsystem err: The command executor timed out waiting for the session to acknowledge the IPC request.\n"), ERR);
-        endSession();
-    }
-    else
-    {
-        int msecSinceLastCrash = lastExeCrash.msecsTo(QTime::currentTime());
-
-        if ((msecSinceLastCrash <= 5000) || lastExeCrash.isNull())
-        {
-            // only count executor crashes within 5sec of each other. any longer than that
-            // can be considered a recoverable session.
-
-            exeCrashCount++;
-        }
-        else
-        {
-            lastExeCrash  = QTime();
-            exeCrashCount = 0;
-        }
-
-        if (exeCrashCount <= EXE_CRASH_LIMIT)
-        {
-            ipcServ->close();
-
-            dataToClient(ASYNC_EXE_CRASH, toTEXT("\nsystem err: The command executor has stopped unexpectedly.\n"), ERR);
-            rdExeDebug();
-            dataToClient(ASYNC_SYS_MSG, toTEXT("\nAttempting to restart the executor...\n\n"), TEXT);
-            run();
-        }
-        else
-        {
-            // if there is the amount of executor crashes defined in EXE_CRASH_LIMIT
-            // within 5sec of each other then the session can no longer be considered
-            // recoverable so it will be killed to prevent an infinite loop.
-
-            dataToClient(ASYNC_EXE_CRASH, toTEXT("\nsystem err: The command executor has crashed too many times, ending the session.\n"), ERR);
-            endSession();
-        }
-    }
-}
-
-void Session::exeError(QProcess::ProcessError err)
-{
-    if (isSlave())
-    {
-        qDebug() << "Session::exeError() called while running in slave mode.";
-    }
-    else if (err == QProcess::FailedToStart)
-    {
-        qDebug() << "\nsystem err: Could not start the command executor. reason: " + slaveProc->errorString() + ".\n";
-
-        dataToClient(ASYNC_SYS_MSG, toTEXT("\nsystem err: Could not start the command executor. details are logged for the host admin.\n"), ERR);
-        endSession();
-    }
-    else
-    {
-        qDebug() << "Session:: exeError() " << slaveProc->errorString();
-    }
-}
-
-void Session::ipcError(QLocalSocket::LocalSocketError socketError)
-{
-    if (socketError != QLocalSocket::PeerClosedError)
-    {
-        if (isSlave())
-        {
-            qDebug() << "Session::ipcError() slave mode. socketError: " + QString::number(socketError) + " session id: " + sessionId.toHex();
-        }
-        else
-        {
-            qDebug() << "Session::ipcError() main mode. socketError: " + QString::number(socketError) + " session id: " + sessionId.toHex();
-        }
-    }
+    loadCmds();
+    asyncToClient(ASYNC_RDY, toTEXT("\nReady!\n\n"), TEXT);
 }
 
 void Session::addIpAction(const QString &action)
 {
     Query db(this);
 
+    QString    ip  = rdStringFromBlock(clientIp, BLKSIZE_CLIENT_IP);
+    QString    app = rdStringFromBlock(appName, BLKSIZE_APP_NAME);
+    QByteArray id  = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
+
     db.setType(Query::PUSH, TABLE_IPHIST);
-    db.addColumn(COLUMN_IPADDR, peerIp);
+    db.addColumn(COLUMN_IPADDR, ip);
     db.addColumn(COLUMN_LOGENTRY, action);
-    db.addColumn(COLUMN_SESSION_ID, sessionId);
-    db.addColumn(COLUMN_CLIENT_VER, QString::number(clientMajor) + "." +
-                                    QString::number(clientMinor) + "." +
-                                    QString::number(clientPatch));
+    db.addColumn(COLUMN_SESSION_ID, id);
+    db.addColumn(COLUMN_APP_NAME, app);
     db.exec();
 }
 
-void Session::closeInstance()
+void Session::cmdProcFinished(quint32 cmdId)
 {
-    if (isMain())
+    cmdProcesses.remove(cmdId);
+    frameQueue.remove(cmdId);
+
+    if (flags & END_SESSION_EMPTY_PROC)
     {
-        qDebug() << "Session::closeInstance() called while running on the main process.";
+        endSession();
     }
-    else
-    {   
-        QCoreApplication::exit(0);
+}
+
+void Session::cmdProcStarted(quint32 cmdId, CmdProcess *obj)
+{
+    cmdProcesses.insert(cmdId, obj);
+
+    if (frameQueue.contains(cmdId))
+    {
+        for (auto&& frame : frameQueue[cmdId])
+        {
+            dataToCmd(cmdId, frame.mid(1), static_cast<quint8>(frame[0]));
+        }
+
+        frameQueue.remove(cmdId);
     }
 }
 
 void Session::endSession()
 {
-    if (isSlave())
+    emit killMods();
+
+    logout("", false);
+
+    if (flags & ACTIVE_PAYLOAD)
     {
-        ipcLink->write(wrFrame(ASYNC_END_SESSION, QByteArray(), PRIV_IPC));
+        flags |= END_SESSION_ON_PAYLOAD_DEL;
     }
     else
-    {
-        if (activeUpdate)
+    {   
+        if (cmdProcesses.isEmpty())
         {
-            QByteArray castHeader = chIds + wrInt(PEER_STAT, 8);
-            QByteArray data       = toPEER_STAT(sessionId, chIds, true);
+            addIpAction("Session Ended");
+            cleanupDbConnection();
 
-            emit backendToPeers(ASYNC_LIMITED_CAST, castHeader + data);
-        }
-
-        if (flags & ACTIVE_PAYLOAD)
-        {
-            flags |= END_SESSION_ON_PAYLOAD_DEL;
+            emit ended();
         }
         else
         {
-            if (flags & IPC_LINK_OK)
-            {
-                flags |= EXPECTED_TERM;
+            flags |= END_SESSION_EMPTY_PROC;
 
-                ipcLink->write(wrFrame(ASYNC_END_SESSION, QByteArray(), PRIV_IPC));
-            }
-            else
+            for (auto id : cmdProcesses.keys())
             {
-                addIpAction("Session Ended");
-                cleanupDbConnection();
-
-                emit ended();
+                emit killCmd32(id);
             }
         }
     }
 }
 
-void Session::dataFromIPC()
-{   
-    if (flags & IPC_FRAME_RDY)
+void Session::startCmdProc(quint32 cmdId)
+{
+    quint16 cmdId16 = toCmdId16(cmdId);
+    QString modApp  = cmdAppById[cmdId16];
+    QString pipe    = rdFromBlock(sessionId, BLKSIZE_USER_ID).toHex() + "-cmd-" + QString::number(cmdId);
+
+    auto *proc = new CmdProcess(cmdId, cmdRealNames[cmdId16], modApp, sesMemKey, hostMemKey, pipe, this);
+
+    proc->setWorkingDirectory(currentDir);
+    proc->setSessionParams(sharedMem, sessionId, openWritableSubChs);
+
+    connect(proc, &CmdProcess::cmdProcFinished, this, &Session::cmdProcFinished);
+    connect(proc, &CmdProcess::cmdProcReady, this, &Session::cmdProcStarted);
+    connect(proc, &CmdProcess::pubIPC, this, &Session::asyncToPeers);
+    connect(proc, &CmdProcess::privIPC, this, &Session::privAsyncDataIn);
+    connect(proc, &CmdProcess::pubIPCWithFeedBack, this, &Session::asyncToPeers);
+    connect(proc, &CmdProcess::pubIPCWithFeedBack, this, &Session::pubAsyncDataIn);
+    connect(proc, &CmdProcess::dataToClient, this, &Session::dataToClient);
+
+    connect(this, &Session::killCmd16, proc, &CmdProcess::killCmd16);
+    connect(this, &Session::killCmd32, proc, &CmdProcess::killCmd32);
+
+    proc->startCmdProc();
+}
+
+ModProcess *Session::initModProc(const QString &modApp)
+{
+    QString pipe = rdFromBlock(sessionId, BLKSIZE_USER_ID).toHex() + "-mod-" + genSerialNumber();
+    quint32 rnk  = rd32BitFromBlock(hostRank);
+
+    auto *proc = new ModProcess(modApp, sesMemKey, hostMemKey, pipe, this);
+
+    proc->setWorkingDirectory(currentDir);
+    proc->setSessionParams(&cmdUniqueNames, &cmdRealNames, &cmdAppById, &modCmdNames, &cmdIds, rnk);
+
+    connect(proc, &ModProcess::dataToClient, this, &Session::dataToClient);
+    connect(proc, &ModProcess::cmdUnloaded, this, &Session::killCmd16);
+
+    connect(this, &Session::killMods, proc, &ModProcess::kill);
+
+    return proc;
+}
+
+void Session::startModProc(const QString &modApp)
+{
+    if (flags & LOGGED_IN)
     {
-        if (ipcLink->bytesAvailable() >= ipcFrameSize)
+        initModProc(modApp)->loadExemptCmds();
+        initModProc(modApp)->loadUserCmds();
+    }
+    else
+    {
+        initModProc(modApp)->loadPublicCmds();
+    }
+}
+
+void Session::loadCmds()
+{
+    startModProc(QCoreApplication::applicationFilePath());
+
+    Query db(this);
+
+    db.setType(Query::PULL, TABLE_MODULES);
+    db.addColumn(COLUMN_MOD_MAIN);
+    db.exec();
+
+    for (int i = 0; i < db.rows(); ++i)
+    {
+        startModProc(db.getData(COLUMN_MOD_MAIN, i).toString());
+    }
+}
+
+void Session::dataToCmd(quint32 cmdId, const QByteArray &data, quint8 typeId)
+{
+    quint16 cmdId16 = toCmdId16(cmdId);
+
+    if (cmdIds.contains(cmdId16))
+    {
+        if (cmdProcesses.contains(cmdId))
         {
-            QByteArray data = ipcLink->read(ipcFrameSize);
-
-            if (isSlave())
+            cmdProcesses[cmdId]->dataFromSession(cmdId, data, typeId);
+        }
+        else
+        {
+            if (frameQueue.contains(cmdId))
             {
-                // data from Session object in main process.
-
-                if ((ipcFrameType == PRIV_IPC) || (ipcFrameType == PUB_IPC))
-                {
-                    backendDataIn(ipcFrameCmdId, data);
-                }
-                else
-                {
-                    emit dataToCommand(ipcFrameCmdId, data, ipcFrameType);
-                }
+                frameQueue[cmdId].append(wrInt(typeId, 8) + data);
             }
-            else if (isMain())
+            else
             {
-                // data from Session object in slave process.
+                QList<QByteArray> frames;
 
-                if (ipcFrameType == PRIV_IPC)
-                {
-                    backendDataIn(ipcFrameCmdId, data);
-                }
-                else if ((ipcFrameType == PUB_IPC) || (ipcFrameType == PUB_IPC_WITH_FEEDBACK))
-                {
-                    emit backendToPeers(ipcFrameCmdId, data);
-                }
-                else
-                {
-                    dataToClient(ipcFrameCmdId, data, ipcFrameType);
-                }
+                frames.append(wrInt(typeId, 8) + data);
+                frameQueue.insert(cmdId, frames);
             }
 
-            flags ^= IPC_FRAME_RDY;
-
-            dataFromIPC();
+            startCmdProc(cmdId);
         }
     }
-    else if (ipcLink->bytesAvailable() >= FRAME_HEADER_SIZE)
+    else
     {
-        QByteArray header = ipcLink->read(FRAME_HEADER_SIZE);
-
-        ipcFrameType  = static_cast<uchar>(header[0]);
-        ipcFrameCmdId = static_cast<quint16>(rdInt(header.mid(1, 2)));
-        ipcFrameSize  = static_cast<uint>(rdInt(header.mid(3)));
-        flags        |= IPC_FRAME_RDY;
-
-        dataFromIPC();
+        dataToClient(cmdId, toTEXT("err: No such command id: " + QString::number(cmdId16) + "."), ERR);
     }
 }
 
 void Session::dataFromClient()
 {
-    if ((flags & IPC_LINK_OK) && !(flags & SSL_HOLD))
+    if (flags & SESSION_RDY)
     {   
-        if (flags & TCP_FRAME_RDY)
+        if (flags & FRAME_RDY)
         {
-            if (tcpSocket->bytesAvailable() >= tcpFrameSize)
-            {
-                ipcLink->write(tcpSocket->read(tcpFrameSize));
+            if (tcpSocket->bytesAvailable() >= tcpPayloadSize)
+            {   
+                dataToCmd(tcpFrameCmdId, tcpSocket->read(tcpPayloadSize), tcpFrameType);
 
-                flags ^= TCP_FRAME_RDY;
+                flags ^= FRAME_RDY;
 
                 dataFromClient();
             }
         }
         else if (tcpSocket->bytesAvailable() >= FRAME_HEADER_SIZE)
         {
-            QByteArray header = tcpSocket->peek(FRAME_HEADER_SIZE);
+            QByteArray header = tcpSocket->read(FRAME_HEADER_SIZE);
 
-            tcpFrameType  = static_cast<uchar>(header[0]);
-            tcpFrameCmdId = static_cast<quint16>(rdInt(header.mid(1, 2)));
-            tcpFrameSize  = static_cast<uint>(rdInt(header.mid(3)) + FRAME_HEADER_SIZE);
-
-            if ((tcpFrameType == PUB_IPC)    || (tcpFrameType == PRIV_IPC) ||
-                (tcpFrameType == PING_PEERS) || (tcpFrameType == PUB_IPC_WITH_FEEDBACK))
-            {
-                // for obvious security reasons, TCP clients should not be allowed
-                // to send any of the PrivateTypeID data frames. infact, it is logged
-                // as suspicious behaviour that admins can monitor for.
-
-                addIpAction("Suspicious action: client attempted to send a private TypeID: " + QString::number(tcpFrameType));
-
-                tcpSocket->readAll(); // kill the frame.
-            }
-            else
-            {
-                flags |= TCP_FRAME_RDY;
-            }
+            tcpFrameType   = static_cast<quint8>(header[0]);
+            tcpFrameCmdId  = static_cast<quint32>(rdInt(header.mid(1, 4)));
+            tcpPayloadSize = static_cast<quint32>(rdInt(header.mid(5)));
+            flags         |= FRAME_RDY;
 
             dataFromClient();
         }
     }
-    else if (!(flags & VER_OK))
+    else
     {
         if (tcpSocket->bytesAvailable() >= CLIENT_HEADER_LEN)
         {
             if (tcpSocket->read(4) == QByteArray(SERVER_HEADER_TAG))
             {
-                clientMajor = static_cast<ushort>(rdInt(tcpSocket->read(2)));
-                clientMinor = static_cast<ushort>(rdInt(tcpSocket->read(2)));
-                clientPatch = static_cast<ushort>(rdInt(tcpSocket->read(2)));
-                appName     = fromTEXT(tcpSocket->read(128)).trimmed();
+                wrStringToBlock(fromTEXT(tcpSocket->read(BLKSIZE_APP_NAME)).trimmed(), appName, BLKSIZE_APP_NAME);
 
                 QString     coName = fromTEXT(tcpSocket->read(272)).trimmed();
                 QStringList ver    = QCoreApplication::applicationVersion().split('.');
@@ -684,86 +323,64 @@ void Session::dataFromClient()
                 servHeader.append(wrInt(ver[0].toULongLong(), 16));
                 servHeader.append(wrInt(ver[1].toULongLong(), 16));
                 servHeader.append(wrInt(ver[2].toULongLong(), 16));
-                servHeader.append(sessionId);
+                servHeader.append(sessionId, BLKSIZE_SESSION_ID);
 
-                if (clientMajor == 1)
+                addIpAction("Session Active");
+
+                if (tcpSocket->peerAddress().isLoopback())
                 {
-                    flags |= VER_OK;
+                    // SSL encryption is optional for locally connected clients
+                    // so sesOk() can be called right away instead of starting
+                    // an SSL handshake.
 
-                    addIpAction("Session Active");
+                    // reply value 1 means the client needs to take no further
+                    // action, just await a message from the ASYNC_RDY async
+                    // command id.
 
-                    if (tcpSocket->peerAddress().isLoopback())
-                    {
-                        // SSL encryption is optional for locally connected clients
-                        // so run() can be called right away instead of starting
-                        // an SSL handshake.
-
-                        // reply value 1 means the client version is acceptable
-                        // and the client needs to take no further action, just
-                        // await an IDLE mrci frame from the host to indicate
-                        // that it is ready to take commands.
-
-                        servHeader[0] = 1;
-
-                        tcpSocket->write(servHeader);
-
-                        run();
-                    }
-                    else
-                    {
-                        flags |= SSL_HOLD;
-
-                        QByteArray certBa;
-                        QByteArray privBa;
-
-                        if (getCertAndKey(coName, certBa, privBa))
-                        {
-                            servHeader[0] = 2;
-
-                            // reply value 2 means the client version is acceptable
-                            // but the host will now send it's Pem formatted SSL cert
-                            // data in a HOST_CERT mrci frame just after sending it's
-                            // header.
-
-                            // the client must use this cert and send a STARTTLS
-                            // signal when ready.
-
-                            tcpSocket->setLocalCertificate(toSSLCert(certBa));
-                            tcpSocket->setPrivateKey(toSSLKey(privBa));
-                            tcpSocket->write(servHeader);
-
-                            dataToClient(ASYNC_SYS_MSG, certBa, HOST_CERT);
-
-                            tcpSocket->startServerEncryption();
-                        }
-                        else
-                        {
-                            servHeader[0] = 4;
-
-                            // reply value 4 means the host was unable to load the
-                            // SSL cert associated with the common name sent by the
-                            // client. the session will lock out and auto close at
-                            // this point.
-
-                            tcpSocket->write(servHeader);
-
-                            endSession();
-                        }
-                    }
-                }
-                else
-                {
-                    // replay value 3 means the client version is not supported
-                    // by the host and the session will end after sending the
-                    // header.
-
-                    servHeader[0] = 3;
-
-                    addIpAction("Client Rejected");
+                    servHeader[0] = 1;
 
                     tcpSocket->write(servHeader);
 
-                    endSession();
+                    sesRdy();
+                }
+                else
+                {
+                    QByteArray certBa;
+                    QByteArray privBa;
+
+                    if (getCertAndKey(coName, certBa, privBa))
+                    {
+                        servHeader[0] = 2;
+
+                        // reply value 2 means the client version is acceptable
+                        // but the host will now send it's Pem formatted SSL cert
+                        // data in a HOST_CERT mrci frame just after sending it's
+                        // header.
+
+                        // the client must use this cert and send a STARTTLS
+                        // signal when ready.
+
+                        tcpSocket->setLocalCertificate(toSSLCert(certBa));
+                        tcpSocket->setPrivateKey(toSSLKey(privBa));
+                        tcpSocket->write(servHeader);
+
+                        dataToClient(ASYNC_SYS_MSG, certBa, HOST_CERT);
+
+                        tcpSocket->startServerEncryption();
+                    }
+                    else
+                    {
+                        servHeader[0] = 4;
+
+                        // reply value 4 means the host was unable to load the
+                        // SSL cert associated with the common name sent by the
+                        // client. the session will lock out and auto close at
+                        // this point.
+
+                        tcpSocket->write(servHeader);
+
+                        endSession();
+                    }
                 }
             }
             else
@@ -774,558 +391,327 @@ void Session::dataFromClient()
     }
 }
 
-void Session::dataToClient(quint16 cmdId, const QByteArray &data, uchar typeId)
+void Session::dataToClient(quint32 cmdId, const QByteArray &data, quint8 typeId)
 {
-    if (isSlave() && (flags & IPC_LINK_OK))
+    tcpSocket->write(wrFrame(cmdId, data, typeId));
+}
+
+void Session::asyncToClient(quint16 cmdId, const QByteArray &data, quint8 typeId)
+{
+    dataToClient(toCmdId32(cmdId, 0), data, typeId);
+}
+
+void Session::logout(const QByteArray &uId, bool reload)
+{
+    if (rd8BitFromBlock(activeUpdate))
     {
-        if (typeId == PUB_IPC_WITH_FEEDBACK)
+        castPeerStat(rdFromBlock(openSubChs, MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL), true);
+    }
+
+    emit asyncToPeers(ASYNC_CLOSE_P2P, rdFromBlock(sessionId, BLKSIZE_SESSION_ID));
+
+    memset(userId, 0, BLKSIZE_USER_ID);
+    memset(userName, 0, BLKSIZE_USER_NAME);
+    memset(displayName, 0, BLKSIZE_DISP_NAME);
+    memset(openSubChs, 0, MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL);
+    memset(openWritableSubChs, 0, MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL);
+    memset(chList, 0, MAX_CHANNELS_PER_USER * BLKSIZE_CHANNEL_ID);
+
+    wr32BitToBlock(0, hostRank);
+    wr8BitToBlock(0, activeUpdate);
+    wr8BitToBlock(0, chOwnerOverride);
+
+    flags &= ~LOGGED_IN;
+
+    if (uId.isEmpty())
+    {
+        if (reload)
         {
-            backendDataIn(cmdId, data);
+            loadCmds();
         }
-
-        ipcLink->write(wrFrame(cmdId, data, typeId));
-    }
-    else if (isMain())
-    {
-        tcpSocket->write(wrFrame(cmdId, data, typeId));
-    }
-}
-
-void Session::peersDataIn(quint16 cmdId, const QByteArray &data)
-{
-    if (isSlave())
-    {
-        qDebug() << "Session::peersDataIn() called while running in slave mode.";
-    }
-    else if (flags & IPC_LINK_OK)
-    {
-        ipcLink->write(wrFrame(cmdId, data, PRIV_IPC));
-    }
-}
-
-void Session::logout()
-{
-    if (isMain())
-    {
-        qDebug() << "Session::logout() called while running on the main process.";
     }
     else
     {
-        userName.clear();
-        groupName.clear();
-        displayName.clear();
-        userId.clear();
-        chIds.clear();
-        chList.clear();
-
-        hostRank = 0;
-
-        dataToClient(ASYNC_LOGOUT, QByteArray(), PRIV_IPC);
-
-        emit loadCommands();
+        login(uId);
     }
 }
 
-void Session::authOk()
+void Session::login(const QByteArray &uId)
 {
-    if (isMain())
+    if (flags & LOGGED_IN)
     {
-        qDebug() << "Session:authOk() called while running on the main process.";
+        logout(uId, true);
     }
     else
     {
-        if (!userName.isEmpty())
+        Query db(this);
+
+        db.setType(Query::PULL, TABLE_USERS);
+        db.addColumn(COLUMN_USERNAME);
+        db.addColumn(COLUMN_HOST_RANK);
+        db.addColumn(COLUMN_DISPLAY_NAME);
+        db.addCondition(COLUMN_USER_ID, uId);
+        db.exec();
+
+        wrToBlock(uId, userId, BLKSIZE_USER_ID);
+        wrStringToBlock(db.getData(COLUMN_USERNAME).toString(), userName, BLKSIZE_USER_NAME);
+        wrStringToBlock(db.getData(COLUMN_DISPLAY_NAME).toString(), displayName, BLKSIZE_DISP_NAME);
+        wr32BitToBlock(db.getData(COLUMN_HOST_RANK).toUInt(), hostRank);
+
+        db.setType(Query::PULL, TABLE_CH_MEMBERS);
+        db.addColumn(COLUMN_CHANNEL_ID);
+        db.addCondition(COLUMN_USER_ID, uId);
+        db.exec();
+
+        memset(chList, 0, MAX_CHANNELS_PER_USER * BLKSIZE_CHANNEL_ID);
+
+        for (int i = 0; i < db.rows(); ++i)
         {
-            Query db(this);
+            QByteArray chId = wrInt(db.getData(COLUMN_CHANNEL_ID, i).toULongLong(), 64);
 
-            db.setType(Query::PULL, TABLE_CH_MEMBERS);
-            db.addColumn(COLUMN_CHANNEL_NAME);
-            db.addCondition(COLUMN_USERNAME, userName);
-            db.exec();
-
-            chList.clear();
-
-            for (int i = 0; i < db.rows(); ++i)
-            {
-                chList.append(db.getData(COLUMN_CHANNEL_NAME, i).toString().toLower());
-            }
-
-            dataToClient(ASYNC_USER_LOGIN, userId, PRIV_IPC);
-            sendLocalInfo();
+            addBlockToBlockset(chId.data(), chList, MAX_CHANNELS_PER_USER, BLKSIZE_CHANNEL_ID);
         }
 
-        emit loadCommands();
-    }
-}
+        flags |= LOGGED_IN;
 
-void Session::castPeerInfo()
-{
-    if (isMain())
-    {
-        qDebug() << "Session::castPeerInfo() called while running on the main process.";
-    }
-    else
-    {
-        if (activeUpdate)
-        {
-            // format: [54bytes(chIds)][1byte(typeId)][rest-of-bytes(PEER_INFO)]
-
-            QByteArray castHeader = chIds + wrInt(PEER_INFO, 8);
-            QByteArray data       = toPEER_INFO(shared);
-
-            dataToClient(ASYNC_LIMITED_CAST, castHeader + data, PUB_IPC);
-        }
+        sendLocalInfo();
+        loadCmds();
     }
 }
 
 void Session::sendLocalInfo()
 {
-    if (isMain())
+    QByteArray frame = createPeerInfoFrame();
+
+    Query db;
+
+    db.setType(Query::PULL, TABLE_USERS);
+    db.addColumn(COLUMN_EMAIL);
+    db.addColumn(COLUMN_EMAIL_VERIFIED);
+    db.addCondition(COLUMN_USER_ID, rdFromBlock(userId, BLKSIZE_USER_ID));
+    db.exec();
+
+    frame.append(fixedToTEXT(db.getData(COLUMN_EMAIL).toString(), BLKSIZE_EMAIL_ADDR));
+    frame.append(rdFromBlock(hostRank, BLKSIZE_HOST_RANK));
+
+    if (db.getData(COLUMN_EMAIL_VERIFIED).toBool())
     {
-        qDebug() << "Session::sendLocalInfo() called while runnning on the main process.";
+        frame.append(static_cast<char>(0x01));
     }
     else
     {
-        dataToClient(ASYNC_SYS_MSG, toMY_INFO(shared), MY_INFO);
+        frame.append(static_cast<char>(0x00));
     }
+
+    dataToClient(ASYNC_SYS_MSG, frame, MY_INFO);
 }
 
-void Session::backendDataIn(quint16 cmdId, const QByteArray &data)
+void Session::castPeerStat(const QByteArray &oldSubIds, bool isDisconnecting)
 {
-    if (flags & IPC_LINK_OK)
+    if (rd8BitFromBlock(activeUpdate))
     {
-        if (isMain())
+        // format: [54bytes(chIds)][1byte(typeId)][rest-of-bytes(PEER_STAT)]
+
+        QByteArray typeId   = wrInt(PEER_STAT, 8);
+        QByteArray sesId    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
+        QByteArray openSubs = rdFromBlock(openSubChs, MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL);
+        QByteArray dc;
+
+        if (isDisconnecting)
         {
-            if (cmdId == ASYNC_END_SESSION)
-            {
-                endSession();
-            }
-            else if (cmdId == ASYNC_USER_LOGIN)
-            {
-                userId = data;
-            }
-            else if (cmdId == ASYNC_LOGOUT)
-            {
-                userId.clear();
-            }
-            else if (cmdId == ASYNC_EXIT)
-            {
-                emit closeServer();
-            }
-            else if (cmdId == ASYNC_RESTART)
-            {
-                emit resServer();
-            }
-            else if (cmdId == ASYNC_MAXSES)
-            {   
-                emit setMaxSessions(static_cast<uint>(rdInt(data)));
-            }
-            else if (cmdId == ASYNC_DISABLE_MOD)
-            {   
-                emit delayedModDel(fromTEXT(data));
-            }
+            dc = QByteArray(1, 0x01);
         }
         else
         {
-            if (cmdId == ASYNC_END_SESSION)
-            {
-                p2pAccepted.clear();
-                p2pPending.clear();
-
-                dataToClient(ASYNC_CLOSE_P2P, sessionId, PUB_IPC);
-
-                emit closeExe();
-            }
-            else if (cmdId == ASYNC_USER_DELETED)
-            {
-                if (!userName.isEmpty())
-                {
-                    if (noCaseMatch(userName, fromTEXT(data)))
-                    {
-                        logout();
-                        dataToClient(ASYNC_SYS_MSG, toTEXT("\nsystem: your session was forced to logout because your account was deleted.\n"), TEXT);
-                        dataToClient(ASYNC_USER_DELETED, data, TEXT);
-                    }
-                }
-            }
-            else if (cmdId == ASYNC_CAST)
-            {
-                // format: [54bytes(wrAbleChIds)][1byte(typeId)][rest-of-bytes(payload)]
-
-                if (matchChs(chIds, QByteArray::fromRawData(data.data(), 54)))
-                {
-                    dataToClient(cmdId, data.mid(55), static_cast<uchar>(data[54]));
-                }
-            }
-            else if (cmdId == ASYNC_TO_PEER)
-            {
-                // format: [28bytes(sessionId)][1byte(typeId)][rest-of-bytes(payload)]
-
-                if (QByteArray::fromRawData(data.data(), 28) == sessionId)
-                {
-                    dataToClient(cmdId, data.mid(29), static_cast<uchar>(data[28]));
-                }
-            }
-            else if (cmdId == ASYNC_P2P)
-            {
-                // format: [28bytes(dst_sessionId)][28bytes(src_sessionId)][1byte(typeId)][rest-of-bytes(payload)]
-
-                if (QByteArray::fromRawData(data.data(), 28) == sessionId)
-                {
-                    QByteArray src = data.mid(28, 28);
-
-                    if (data[56] == P2P_REQUEST)
-                    {
-                        if (!p2pPending.contains(src) && !p2pAccepted.contains(src))
-                        {
-                            p2pPending.append(src);
-
-                            dataToClient(cmdId, data.mid(57), P2P_REQUEST);
-                        }
-                    }
-                    else if (data[56] == P2P_OPEN)
-                    {
-                        if (p2pPending.contains(src) && !p2pAccepted.contains(src))
-                        {
-                            p2pPending.removeAll(src);
-                            p2pAccepted.append(src);
-
-                            dataToClient(cmdId, data.mid(57), P2P_OPEN);
-                        }
-                    }
-                    else if (data[56] == P2P_CLOSE)
-                    {
-                        if (p2pPending.contains(src))
-                        {
-                            p2pPending.removeAll(src);
-
-                            dataToClient(cmdId, data.mid(57), P2P_CLOSE);
-                        }
-                        else if (p2pAccepted.contains(src))
-                        {
-                            p2pAccepted.removeAll(src);
-
-                            dataToClient(cmdId, data.mid(57), P2P_CLOSE);
-                        }
-                    }
-                    else if (p2pAccepted.contains(src))
-                    {
-                        dataToClient(cmdId, src + data.mid(57), static_cast<uchar>(data[56]));
-                    }
-                }
-            }
-            else if (cmdId == ASYNC_CLOSE_P2P)
-            {
-                // format: [28bytes(src_sessionId)]
-
-                if (p2pAccepted.contains(data) || p2pPending.contains(data))
-                {
-                     p2pAccepted.removeAll(data);
-                     p2pPending.removeAll(data);
-
-                     dataToClient(ASYNC_P2P, data, P2P_CLOSE);
-                }
-            }
-            else if (cmdId == ASYNC_LIMITED_CAST)
-            {
-                // format: [54bytes(chIds)][1byte(typeId)][rest-of-bytes(payload)]
-
-                if (activeUpdate && matchChs(chIds, QByteArray::fromRawData(data.data(), 54)))
-                {
-                    if (data[54] == PING_PEERS)
-                    {
-                        // PING_PEERS is formatted exactly like PEER_INFO. it only tells this
-                        // async command to also send PEER_INFO of this session to the session
-                        // that requested the ping using ASYNC_TO_PEER.
-
-                        QByteArray peerId = data.mid(55, 28);
-                        QByteArray typeId = wrInt(PEER_INFO, 8);
-                        QByteArray info   = toPEER_INFO(shared);
-
-                        dataToClient(ASYNC_TO_PEER, peerId + typeId + info, PUB_IPC);
-                        dataToClient(cmdId, data.mid(55), PEER_INFO);
-                    }
-                    else
-                    {
-                        dataToClient(cmdId, data.mid(55), static_cast<uchar>(data[54]));
-                    }
-                }
-            }
-            else if ((cmdId == ASYNC_GROUP_RENAMED) || (cmdId == ASYNC_GRP_TRANS))
-            {
-                QStringList args = parseArgs(data, -1);
-                QString     name = getParam("-src", args);
-
-                if (noCaseMatch(groupName, name))
-                {
-                    groupName = getParam("-dst", args);
-
-                    if (cmdId == ASYNC_GRP_TRANS)
-                    {
-                        hostRank = getRankForGroup(groupName);
-
-                        emit loadCommands();
-
-                        sendLocalInfo();
-                    }
-                }
-            }
-            else if (cmdId == ASYNC_RW_MY_INFO)
-            {
-                if (noCaseMatch(userName, fromTEXT(data)))
-                {
-                    sendLocalInfo();
-                }
-            }
-            else if (cmdId == ASYNC_USER_RENAMED)
-            {
-                QStringList args = parseArgs(data, -1);
-                QString     name = getParam("-old", args);
-
-                if (noCaseMatch(userName, name))
-                {
-                    userName = getParam("-new_name", args);
-
-                    castPeerInfo();
-                    sendLocalInfo();
-                }
-            }
-            else if (cmdId == ASYNC_DISP_RENAMED)
-            {
-                QStringList args  = parseArgs(data, -1);
-                QString     uName = getParam("-user", args);
-
-                if (noCaseMatch(userName, uName))
-                {
-                    displayName = getParam("-name", args);
-
-                    castPeerInfo();
-                    sendLocalInfo();
-                }
-            }
-            else if (cmdId == ASYNC_USER_GROUP_CHANGED)
-            {
-                QStringList args  = parseArgs(data, -1);
-                QString     uName = getParam("-user", args);
-
-                if (noCaseMatch(userName, uName))
-                {
-                    groupName = getParam("-group", args);
-                    hostRank  = getRankForGroup(groupName);
-
-                    emit loadCommands();
-
-                    sendLocalInfo();
-                }
-            }
-            else if (cmdId == ASYNC_CMD_RANKS_CHANGED)
-            {
-                emit loadCommands();
-            }
-            else if (cmdId == ASYNC_GROUP_UPDATED)
-            {
-                QStringList args = parseArgs(data, -1);
-                QString     name = getParam("-name", args);
-
-                if (noCaseMatch(groupName, name))
-                {
-                    hostRank = getParam("-rank", args).toUInt();
-
-                    emit loadCommands();
-                }
-            }
-            else if (cmdId == ASYNC_RESTORE_AUTH)
-            {
-                Query db(this);
-
-                db.setType(Query::PULL, TABLE_USERS);
-                db.addColumn(COLUMN_USERNAME);
-                db.addColumn(COLUMN_GRNAME);
-                db.addColumn(COLUMN_DISPLAY_NAME);
-                db.addCondition(COLUMN_USER_ID, data);
-                db.exec();
-
-                userId      = data;
-                userName    = db.getData(COLUMN_USERNAME).toString();
-                groupName   = db.getData(COLUMN_GRNAME).toString();
-                displayName = db.getData(COLUMN_DISPLAY_NAME).toString();
-                hostRank    = getRankForGroup(groupName);
-
-                authOk();
-                dataToClient(ASYNC_RDY, toTEXT("\nReady!\n\n"), TEXT);
-            }
-            else if (cmdId == ASYNC_PUBLIC_AUTH)
-            {
-                userName.clear();
-                groupName.clear();
-                displayName.clear();
-                userId.clear();
-                chIds.clear();
-                chList.clear();
-
-                hostRank = 0;
-
-                authOk();
-                dataToClient(ASYNC_RDY, toTEXT("\nReady!\n\n"), TEXT);
-            }
-            else if (cmdId == ASYNC_ENABLE_MOD)
-            {
-                emit loadModFile(fromTEXT(data));
-                emit loadCommands();
-            }
-            else if (cmdId == ASYNC_DISABLE_MOD)
-            {
-                emit unloadModFile(fromTEXT(data));
-            }
-            else if ((cmdId == ASYNC_NEW_CH_MEMBER) || (cmdId == ASYNC_INVITED_TO_CH) ||
-                     (cmdId == ASYNC_INVITE_ACCEPTED))
-            {
-                QStringList args   = parseArgs(data, -1);
-                QString     user   = getParam("-user", args);
-                QString     chName = getParam("-ch_name", args).toLower();
-
-                if (noCaseMatch(user, userName))
-                {
-                    if ((cmdId == ASYNC_NEW_CH_MEMBER) || (cmdId == ASYNC_INVITE_ACCEPTED))
-                    {
-                        chList.append(chName);
-                    }
-
-                    dataToClient(cmdId, data, TEXT);
-                }
-            }
-            else if (cmdId == ASYNC_DEL_CH)
-            {
-                QStringList args   = parseArgs(data, -1);
-                QString     chName = getParam("-ch_name", args).toLower();
-
-                if (chList.contains(chName))
-                {
-                    chList.removeAll(chName);
-
-                    wrCloseCh(rwShared, getParam("-ch_id", args).toULongLong());
-                    dataToClient(cmdId, data, TEXT);
-                }
-            }
-            else if (cmdId == ASYNC_RM_CH_MEMBER)
-            {
-                QStringList args  = parseArgs(data, -1);
-                QString     uName = getParam("-user", args);
-
-                if (noCaseMatch(userName, uName))
-                {
-                    QString chName = getParam("-ch_name", args).toLower();
-
-                    chList.removeAll(chName);
-
-                    QByteArray peerStat;
-
-                    wrCloseCh(rwShared, getParam("-ch_id", args).toULongLong(), peerStat);
-
-                    if (!peerStat.isEmpty())
-                    {
-                        dataToClient(ASYNC_LIMITED_CAST, peerStat, PUB_IPC);
-                    }
-
-                    dataToClient(cmdId, data, TEXT);
-                }
-            }
-            else if (cmdId == ASYNC_MEM_LEVEL_CHANGED)
-            {
-                QStringList args   = parseArgs(data, -1);
-                QString     uName  = getParam("-user", args);
-                QString     chName = getParam("-ch_name", args).toLower();
-
-                if (noCaseMatch(userName, uName))
-                {
-                    QByteArray peerStat;
-
-                    wrCloseCh(rwShared, getParam("-ch_id", args).toULongLong(), peerStat);
-
-                    if (!peerStat.isEmpty())
-                    {
-                        dataToClient(ASYNC_LIMITED_CAST, peerStat, PUB_IPC);
-                    }
-
-                    dataToClient(cmdId, data, TEXT);
-                }
-                else if (chList.contains(chName))
-                {
-                    dataToClient(cmdId, data, TEXT);
-                }
-            }
-            else if (cmdId == ASYNC_RENAME_CH)
-            {
-                QStringList args   = parseArgs(data, -1);
-                QString     chName = getParam("-ch_name", args).toLower();
-
-                if (chList.contains(chName))
-                {
-                    QString newName = getParam("-new_name", args).toLower();
-
-                    chList.removeAll(chName);
-                    chList.append(newName);
-
-                    dataToClient(cmdId, data, TEXT);
-                }
-            }
-            else if (cmdId == ASYNC_CH_ACT_FLAG)
-            {
-                QStringList args   = parseArgs(data, -1);
-                QString     chName = getParam("-ch_name", args).toLower();
-
-                if (chList.contains(chName))
-                {
-                    activeUpdate = containsActiveCh(chIds);
-                }
-            }
-            else if ((cmdId == ASYNC_NEW_SUB_CH) || (cmdId == ASYNC_RENAME_SUB_CH))
-            {
-                QStringList args   = parseArgs(data, -1);
-                QString     chName = getParam("-ch_name", args).toLower();
-
-                if (chList.contains(chName))
-                {
-                    dataToClient(cmdId, data, TEXT);
-                }
-            }
-            else if ((cmdId == ASYNC_RM_SUB_CH) || (cmdId == ASYNC_SUB_CH_LEVEL_CHG) ||
-                     (cmdId == ASYNC_RM_RDONLY) || (cmdId == ASYNC_ADD_RDONLY))
-            {
-                QStringList args   = parseArgs(data, -1);
-                QString     chName = getParam("-ch_name", args).toLower();
-                QString     chId   = getParam("-ch_id", args);
-                QString     subId  = getParam("-sub_id", args);
-                QByteArray  chSub  = wrInt(chId.toULongLong(), 64) + wrInt(subId.toUInt(), 8);
-
-                int pos = chPos(chSub, chIds);
-
-                if (pos != -1)
-                {
-                    wrCloseCh(rwShared, chSub);
-                    dataToClient(cmdId, data, TEXT);
-                }
-                else if (chList.contains(chName))
-                {
-                    dataToClient(cmdId, data, TEXT);
-                }
-            }
+            dc = QByteArray(1, 0x00);
         }
+
+        emit asyncToPeers(ASYNC_LIMITED_CAST, oldSubIds + typeId + sesId + openSubs + dc);
     }
 }
 
-void Session::sendStdout()
+void Session::castPeerInfo(quint8 typeId)
 {
-    if (isSlave())
+    if (rd8BitFromBlock(activeUpdate))
     {
-        qDebug() << "CmdExecutor: " << slaveProc->readAllStandardOutput();
+        // format: [54bytes(chIds)][1byte(typeId)][rest-of-bytes(PEER_INFO)]
+
+        QByteArray openSubs = rdFromBlock(openWritableSubChs, MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL);
+        QByteArray typeIdBa = wrInt(typeId, 8);
+        QByteArray frame    = createPeerInfoFrame();
+
+        emit asyncToPeers(ASYNC_LIMITED_CAST, openSubs + typeIdBa + frame);
     }
 }
 
-void Session::sendStderr()
+void Session::castPingForPeers()
 {
-    if (isSlave())
+    castPeerInfo(PING_PEERS);
+}
+
+void Session::closeByChId(const QByteArray &chId, bool peerCast)
+{
+    QByteArray oldSubChs;
+
+    if (peerCast)
     {
-        qDebug() << "CmdExecutor Err: " << slaveProc->readAllStandardError();
+        oldSubChs = QByteArray(openSubChs, MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL);
     }
+
+    rmLikeBlkFromBlkset(chId, openWritableSubChs, MAX_OPEN_SUB_CHANNELS, BLKSIZE_SUB_CHANNEL);
+
+    if (rmLikeBlkFromBlkset(chId, openSubChs, MAX_OPEN_SUB_CHANNELS, BLKSIZE_SUB_CHANNEL) && peerCast)
+    {
+        castPeerStat(oldSubChs, false);
+    }
+}
+
+void Session::privAsyncDataIn(quint16 cmdId, const QByteArray &data)
+{
+    sharedMem->lock();
+
+    if (cmdId == ASYNC_END_SESSION)
+    {
+        endSession();
+    }
+    else if (cmdId == ASYNC_USER_LOGIN)
+    {
+        login(data);
+    }
+    else if (cmdId == ASYNC_LOGOUT)
+    {
+        logout("", true);
+    }
+    else if (cmdId == ASYNC_EXIT)
+    {
+        emit closeServer();
+    }
+    else if (cmdId == ASYNC_RESTART)
+    {
+        emit resServer();
+    }
+    else if (cmdId == ASYNC_MAXSES)
+    {
+        emit setMaxSessions(static_cast<quint32>(rdInt(data)));
+    }
+    else if (cmdId == ASYNC_UPDATE_BANS)
+    {
+        emit updateBanList();
+    }
+    else if (cmdId == ASYNC_PING_PEERS)
+    {
+        castPingForPeers();
+    }
+    else if (cmdId == ASYNC_OPEN_SUBCH)
+    {
+        openSubChannel(data);
+    }
+    else if (cmdId == ASYNC_CLOSE_SUBCH)
+    {
+        closeSubChannel(data);
+    }
+    else if (cmdId == ASYNC_SET_DIR)
+    {
+        currentDir = fromTEXT(data);
+    }
+    else if (cmdId == ASYNC_DEBUG_TEXT)
+    {
+        qDebug() << fromTEXT(data);
+    }
+
+    sharedMem->unlock();
+}
+
+void Session::pubAsyncDataIn(quint16 cmdId, const QByteArray &data)
+{
+    sharedMem->lock();
+
+    if (cmdId == ASYNC_USER_DELETED)
+    {
+        acctDeleted(data);
+    }
+    else if (cmdId == ASYNC_CAST)
+    {
+        castCatch(data);
+    }
+    else if (cmdId == ASYNC_TO_PEER)
+    {
+        directDataFromPeer(data);
+    }
+    else if (cmdId == ASYNC_P2P)
+    {
+        p2p(data);
+    }
+    else if (cmdId == ASYNC_CLOSE_P2P)
+    {
+        closeP2P(data);
+    }
+    else if (cmdId == ASYNC_LIMITED_CAST)
+    {
+        limitedCastCatch(data);
+    }
+    else if (cmdId == ASYNC_RW_MY_INFO)
+    {
+        acctEdited(data);
+    }
+    else if (cmdId == ASYNC_USER_RENAMED)
+    {
+        acctRenamed(data);
+    }
+    else if (cmdId == ASYNC_DISP_RENAMED)
+    {
+        acctDispChanged(data);
+    }
+    else if (cmdId == ASYNC_USER_RANK_CHANGED)
+    {
+        updateRankViaUser(data);
+    }
+    else if (cmdId == ASYNC_CMD_RANKS_CHANGED)
+    {
+        loadCmds();
+    }
+    else if (cmdId == ASYNC_ENABLE_MOD)
+    {
+        addModule(data);
+    }
+    else if (cmdId == ASYNC_DISABLE_MOD)
+    {
+        rmModule(data);
+    }
+    else if ((cmdId == ASYNC_NEW_CH_MEMBER) || (cmdId == ASYNC_INVITED_TO_CH) ||
+             (cmdId == ASYNC_INVITE_ACCEPTED))
+    {
+        userAddedToChannel(cmdId, data);
+    }
+    else if (cmdId == ASYNC_RM_CH_MEMBER)
+    {
+        userRemovedFromChannel(data);
+    }
+    else if (cmdId == ASYNC_DEL_CH)
+    {
+        channelDeleted(data);
+    }
+    else if (cmdId == ASYNC_MEM_LEVEL_CHANGED)
+    {
+        channelMemberLevelUpdated(data);
+    }
+    else if (cmdId == ASYNC_RENAME_CH)
+    {
+        channelRenamed(data);
+    }
+    else if (cmdId == ASYNC_CH_ACT_FLAG)
+    {
+        channelActiveFlagUpdated(data);
+    }
+    else if ((cmdId == ASYNC_NEW_SUB_CH) || (cmdId == ASYNC_RENAME_SUB_CH))
+    {
+        subChannelAdded(cmdId, data);
+    }
+    else if ((cmdId == ASYNC_RM_SUB_CH) || (cmdId == ASYNC_SUB_CH_LEVEL_CHG) ||
+             (cmdId == ASYNC_RM_RDONLY) || (cmdId == ASYNC_ADD_RDONLY))
+    {
+        subChannelUpdated(cmdId, data);
+    }
+
+    sharedMem->unlock();
 }

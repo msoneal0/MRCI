@@ -1,6 +1,6 @@
 ### Summary ###
 
-send/receive any data directly with a client connected to the host that has accepted your p2p request or the peer's p2p request.
+send/receive any data directly with a client connected to the host.
 
 ### IO ###
 

@@ -16,11 +16,11 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-ToPeer::ToPeer(QObject *parent)         : InternCommand(parent) {}
-P2PRequest::P2PRequest(QObject *parent) : InternCommand(parent) {}
-P2POpen::P2POpen(QObject *parent)       : InternCommand(parent) {}
-P2PClose::P2PClose(QObject *parent)     : InternCommand(parent) {}
-LsP2P::LsP2P(QObject *parent)           : InternCommand(parent) {}
+ToPeer::ToPeer(QObject *parent)         : CmdObject(parent) {}
+P2PRequest::P2PRequest(QObject *parent) : CmdObject(parent) {}
+P2POpen::P2POpen(QObject *parent)       : CmdObject(parent) {}
+P2PClose::P2PClose(QObject *parent)     : CmdObject(parent) {}
+LsP2P::LsP2P(QObject *parent)           : CmdObject(parent) {}
 
 QString ToPeer::cmdName()     {return "to_peer";}
 QString P2PRequest::cmdName() {return "p2p_request";}
@@ -28,92 +28,133 @@ QString P2POpen::cmdName()    {return "p2p_open";}
 QString P2PClose::cmdName()   {return "p2p_close";}
 QString LsP2P::cmdName()      {return "ls_p2p";}
 
-void ToPeer::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void ToPeer::procIn(const QByteArray &binIn, quint8 dType)
 {
-    QByteArray peerId = binIn.left(28);
-
-    if (!sharedObjs->p2pAccepted->contains(peerId))
+    if (binIn.size() >= BLKSIZE_SESSION_ID)
     {
-        errTxt("err: You don't current have an open p2p connection with the requested peer.");
+        errTxt("err: The p2p data does not contain a session id header.\n");
+    }
+    if (posOfBlock(binIn.data(), p2pAccepted, MAX_P2P_LINKS, BLKSIZE_SESSION_ID) == -1)
+    {
+        errTxt("err: You don't currently have an open p2p connection with the requested peer.\n");
     }
     else
     {
-        emit toPeer(peerId, binIn.mid(28), dType);
+        quint32    len    = static_cast<quint32>(binIn.size());
+        QByteArray dst    = rdFromBlock(binIn.data(), BLKSIZE_SESSION_ID);
+        QByteArray src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
+        QByteArray data   = rdFromBlock(binIn.data() + BLKSIZE_SESSION_ID, len - BLKSIZE_SESSION_ID);
+        QByteArray typeBa = wrInt(dType, 8);
+
+        async(ASYNC_P2P, PUB_IPC, dst + src + typeBa + data);
     }
 }
 
-void P2PRequest::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void P2PRequest::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == SESSION_ID)
     {
-        if (binIn.size() != 28)
+        if (binIn.size() != BLKSIZE_SESSION_ID)
         {
-            errTxt("err: The given client session id does not equal 28 bytes.");
+            errTxt("err: The given client session id does not equal " + QString::number(BLKSIZE_SESSION_ID) + " bytes.\n");
         }
-        else if (sharedObjs->p2pAccepted->contains(binIn))
+        else if (posOfBlock(binIn.data(), p2pAccepted, MAX_P2P_LINKS, BLKSIZE_SESSION_ID) != -1)
         {
-            errTxt("err: You already have an open p2p connection with the requested peer.");
+            errTxt("err: You already have an open p2p connection with the requested peer.\n");
         }
-        else if (sharedObjs->p2pPending->contains(binIn))
+        else if (posOfBlock(binIn.data(), p2pPending, MAX_P2P_LINKS, BLKSIZE_SESSION_ID) != -1)
         {
-            errTxt("err: There is already a pending p2p request for this peer.");
+            errTxt("err: There is already a pending p2p request for this peer.\n");
         }
         else
         {
-            emit toPeer(binIn, QByteArray(), P2P_REQUEST);
+            QByteArray dst    = rdFromBlock(binIn.data(), BLKSIZE_SESSION_ID);
+            QByteArray src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
+            QByteArray typeBa = wrInt(P2P_REQUEST, 8);
+
+            async(ASYNC_P2P, PUB_IPC, dst + src + typeBa + dst);
         }
     }
 }
 
-void P2POpen::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void P2POpen::procIn(const QByteArray &binIn, quint8 dType)
 {   
     if (dType == SESSION_ID)
     {
-        if (binIn.size() != 28)
+        if (binIn.size() != BLKSIZE_SESSION_ID)
         {
-            errTxt("err: The given client session id does not equal 28 bytes.");
+            errTxt("err: The given client session id does not equal " + QString::number(BLKSIZE_SESSION_ID) + " bytes.\n");
         }
-        else if (sharedObjs->p2pAccepted->contains(binIn))
+        else if (posOfBlock(binIn.data(), p2pAccepted, MAX_P2P_LINKS, BLKSIZE_SESSION_ID) != -1)
         {
-            errTxt("err: You already have an open p2p connection with the requested peer.");
+            errTxt("err: You already have an open p2p connection with the requested peer.\n");
         }
-        else if (!sharedObjs->p2pPending->contains(binIn))
+        else if (posOfBlock(binIn.data(), p2pPending, MAX_P2P_LINKS, BLKSIZE_SESSION_ID) != -1)
         {
-            errTxt("err: There is no pending p2p request for the given peer.");
+            errTxt("err: There is no pending p2p request for the given peer.\n");
         }
         else
         {
-            emit toPeer(binIn, QByteArray(), P2P_OPEN);
+            QByteArray dst    = rdFromBlock(binIn.data(), BLKSIZE_SESSION_ID);
+            QByteArray src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
+            QByteArray typeBa = wrInt(P2P_OPEN, 8);
+
+            async(ASYNC_P2P, PUB_IPC, dst + src + typeBa + dst);
         }
     }
 }
 
-void P2PClose::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void P2PClose::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == SESSION_ID)
     {
-        if (binIn.size() != 28)
+        if (binIn.size() != BLKSIZE_SESSION_ID)
         {
-            errTxt("err: The given client session id does not equal 28 bytes.");
+            errTxt("err: The given client session id does not equal " + QString::number(BLKSIZE_SESSION_ID) + " bytes.\n");
         }
-        else if (!sharedObjs->p2pAccepted->contains(binIn) && !sharedObjs->p2pPending->contains(binIn))
+        else if ((posOfBlock(binIn.data(), p2pAccepted, MAX_P2P_LINKS, BLKSIZE_SESSION_ID) != -1) &&
+                 (posOfBlock(binIn.data(), p2pPending, MAX_P2P_LINKS, BLKSIZE_SESSION_ID) != -1))
         {
-            errTxt("err: There is no pending p2p request or p2p connection with the given peer.");
+            errTxt("err: There is no pending p2p request or p2p connection with the given peer.\n");
         }
         else
         {
-            emit toPeer(binIn, QByteArray(), P2P_CLOSE);
+            QByteArray dst    = rdFromBlock(binIn.data(), BLKSIZE_SESSION_ID);
+            QByteArray src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
+            QByteArray typeBa = wrInt(P2P_CLOSE, 8);
+
+            async(P2P_CLOSE, PUB_IPC, dst + src + typeBa + dst);
         }
     }
 }
 
-void LsP2P::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+QList<QByteArray> LsP2P::lsBlocks(const char *blocks, int maxBlocks, int sizeOfBlock)
 {
-    Q_UNUSED(binIn);
+    QList<QByteArray> ret;
+
+    QByteArray blank(sizeOfBlock, 0x00);
+
+    for (int i = 0; i < (maxBlocks * sizeOfBlock); i += sizeOfBlock)
+    {
+        QByteArray block = rdFromBlock(blocks + i, static_cast<quint32>(sizeOfBlock));
+
+        if (block != blank)
+        {
+            ret.append(block);
+        }
+    }
+
+    return ret;
+}
+
+void LsP2P::procIn(const QByteArray &binIn, quint8 dType)
+{
+    Q_UNUSED(binIn)
 
     if (dType == TEXT)
     {
-        QList<QByteArray>  peerIds = *sharedObjs->p2pAccepted + *sharedObjs->p2pPending;
+        QList<QByteArray>  peerIds = lsBlocks(p2pAccepted, MAX_P2P_LINKS, BLKSIZE_SESSION_ID) +
+                                     lsBlocks(p2pPending, MAX_P2P_LINKS, BLKSIZE_SESSION_ID);
         QList<QStringList> tableData;
         QStringList        separators;
         QList<int>         justLens;
@@ -132,7 +173,7 @@ void LsP2P::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar
             QString     pending = "0";
             QStringList columnData;
 
-            if (sharedObjs->p2pPending->contains(peerId))
+            if (posOfBlock(peerId.data(), p2pPending, MAX_P2P_LINKS, BLKSIZE_SESSION_ID) != -1)
             {
                 pending = "1";
             }
@@ -154,7 +195,7 @@ void LsP2P::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar
         {
             for (int i = 0; i < row.size(); ++i)
             {
-                mainTxt(row[i].leftJustified(justLens[i] + 2, ' '));
+                mainTxt(row[i].leftJustified(justLens[i] + 4, ' '));
             }
 
             mainTxt("\n");

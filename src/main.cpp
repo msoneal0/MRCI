@@ -7,8 +7,6 @@
 #include "db.h"
 #include "common.h"
 #include "tcp_server.h"
-#include "unix_signal.h"
-#include "cmd_executor.h"
 #include "db_setup.h"
 
 //    This file is part of MRCI.
@@ -27,6 +25,33 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
+void msgHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
+{
+    Q_UNUSED(type)
+    Q_UNUSED(context)
+
+    if (!msg.contains("QSslSocket: cannot resolve"))
+    {
+        Query db;
+
+        db.setType(Query::PUSH, TABLE_DMESG);
+        db.addColumn(COLUMN_LOGENTRY, msg);
+        db.exec();
+    }
+}
+
+QByteArray rootUserId()
+{
+    Query db;
+
+    db.setType(Query::PULL, TABLE_USERS);
+    db.addColumn(COLUMN_USER_ID);
+    db.addCondition(COLUMN_USERNAME, ROOT_USER);
+    db.exec();
+
+    return db.getData(COLUMN_USER_ID).toByteArray();
+}
+
 void showHelp()
 {
     QTextStream txtOut(stdout);
@@ -35,14 +60,22 @@ void showHelp()
     txtOut << "Usage: " << APP_TARGET << " <argument>" << endl << endl;
     txtOut << "<Arguments>" << endl << endl;
     txtOut << " -help                   : display usage information about this application." << endl;
-    txtOut << " -start                  : start a new host instance in the background." << endl;
+    txtOut << " -start                  : start a new host instance in the background. (non-blocking)" << endl;
     txtOut << " -stop                   : stop the current host instance if one is currently running." << endl;
     txtOut << " -about                  : display versioning/warranty information about this application." << endl;
     txtOut << " -addr {ip_address:port} : set the listening address and port for TCP clients." << endl;
     txtOut << " -status                 : display status information about the host instance if it is currently running." << endl;
-    txtOut << " -reset_root             : reset the root account password to default." << endl;
-    txtOut << " -executor               : this starts a command executor instance. this is normally for internal use only." << endl;
-    txtOut << " -host                   : this starts a blocking host instance. this is normally for internal use only." << endl << endl;
+    txtOut << " -reset_root             : reset the root account password to the default password shown below." << endl;
+    txtOut << " -host                   : this starts a blocking host instance. for internal use only." << endl;
+    txtOut << " -public_cmds            : run the internal module to list it's public commands. for internal use only." << endl;
+    txtOut << " -exempt_cmds            : run the internal module to list it's rank exempt commands. for internal use only." << endl;
+    txtOut << " -user_cmds              : run the internal module to list it's user commands. for internal use only." << endl;
+    txtOut << " -run_cmd {command_name} : run an internal module command. for internal use only." << endl << endl;
+    txtOut << "Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:" << endl << endl;
+    txtOut << " -pipe {pipe_name/path} : the named pipe used to establish a data connection with the session." << endl;
+    txtOut << " -mem_ses {key_name}    : the shared memory key for the session." << endl;
+    txtOut << " -mem_host {key_name}   : the shared memory key for the host main process." << endl << endl;
+    txtOut << " default password: " << defaultPw() << endl << endl;
 }
 
 void soeDueToDbErr(int *retCode)
@@ -98,6 +131,8 @@ int main(int argc, char *argv[])
 
     qInstallMessageHandler(msgHandler);
 
+    //args.append("-host"); // debug
+
     if (args.contains("-help", Qt::CaseInsensitive))
     {
         showHelp();
@@ -108,6 +143,7 @@ int main(int argc, char *argv[])
         QTextStream(stdout) << "Based on QT " << QT_VERSION_STR << " " << 8 * QT_POINTER_SIZE << "bit" << endl << endl;
         QTextStream(stdout) << "The program is provided AS IS with NO WARRANTY OF ANY KIND, INCLUDING THE" << endl;
         QTextStream(stdout) << "WARRANTY OF DESIGN, MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE." << endl << endl;
+        QTextStream(stdout) << " default password: " << defaultPw() << endl << endl;
     }
     else if (args.contains("-addr", Qt::CaseInsensitive))
     {
@@ -154,7 +190,10 @@ int main(int argc, char *argv[])
             }
         }
     }
-    else if (args.contains("-executor", Qt::CaseInsensitive))
+    else if (args.contains("-run_cmd", Qt::CaseInsensitive)     ||
+             args.contains("-public_cmds", Qt::CaseInsensitive) ||
+             args.contains("-exempt_cmds", Qt::CaseInsensitive) ||
+             args.contains("-user_cmds", Qt::CaseInsensitive))
     {
         if (dbFail)
         {
@@ -162,11 +201,12 @@ int main(int argc, char *argv[])
         }
         else
         {
-            auto *session = new Session(&app);
+            auto *mod = new Module(&app);
 
-            session->startAsSlave(args);
-
-            ret = QCoreApplication::exec();
+            if (mod->start(args))
+            {
+                ret = QCoreApplication::exec();
+            }
         }
     }
     else if (args.contains("-host", Qt::CaseInsensitive))
@@ -178,16 +218,6 @@ int main(int argc, char *argv[])
         else
         {
             auto *serv = new TCPServer(&app);
-
-            #ifdef Q_OS_LINUX
-
-            setupUnixSignalHandlers();
-
-            auto *signalHandler = new UnixSignalHandler(&app);
-
-            QObject::connect(signalHandler, SIGNAL(closeServer()), serv, SLOT(closeServer()));
-
-            #endif
 
             if (serv->start())
             {
@@ -218,7 +248,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-            updatePassword(ROOT_USER, DEFAULT_PASSWRD, TABLE_USERS, true);
+            updatePassword(rootUserId(), defaultPw(), TABLE_USERS, true);
         }
     }
     else

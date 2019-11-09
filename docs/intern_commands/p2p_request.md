@@ -1,6 +1,6 @@
 ### Summary ###
 
-send out a p2p request to the client session id given in this command.
+send out a p2p request to the peer session id given in this command.
 
 ### IO ###
 

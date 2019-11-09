@@ -18,26 +18,42 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "../common.h"
+#include "../cmd_object.h"
 
-class TableViewer : public InternCommand
+class TableViewer : public CmdObject
 {
     Q_OBJECT
 
 protected:
 
-    Query       db;
-    QString     table;
-    QStringList columns;
-    QStringList cachedArgs;
-    bool        delOption;
-    bool        del;
-    uint        offset;
+    Query              rdQuery;
+    Query              delQuery;
+    bool               condAdded;
+    bool               delOption;
+    bool               delMode;
+    quint32            offset;
+    QList<QString>     columns;
+    QList<QString>     tables;
+    QList<int>         blobIndexes;
+    QList<QStringList> columnRows;
+
+    QList<QStringList> toStrings(const QList<QList<QVariant> > &data);
+    QList<int>         getColumnLens(const QList<QStringList> &data);
+    void               addWhereConds(const QStringList &userArgs);
+    void               askDelete();
+    void               askPage();
+    void               dispData();
+
+    virtual void onDel() {}
 
 public:
 
-    void term();
-    void setParams(const QString &tbl, const QStringList &colms, bool allowDel);
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void idle();
+    void nextPage();
+    void addJointColumn(const QString &tbl, const QString &column);
+    void addTableColumn(const QString &tbl, const QString &column);
+    void setParams(const QString &mainTbl, bool allowDel);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit TableViewer(QObject *parent = nullptr);
 };

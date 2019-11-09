@@ -18,26 +18,30 @@
 
 ListUsers::ListUsers(QObject *parent) : TableViewer(parent)
 {
-    setParams(TABLE_USERS, QStringList() << COLUMN_TIME << COLUMN_USERNAME << COLUMN_GRNAME << COLUMN_USER_ID, false);
+    setParams(TABLE_USERS, false);
+    addTableColumn(TABLE_USERS, COLUMN_TIME);
+    addTableColumn(TABLE_USERS, COLUMN_USERNAME);
+    addTableColumn(TABLE_USERS, COLUMN_HOST_RANK);
+    addTableColumn(TABLE_USERS, COLUMN_USER_ID);
 }
 
-LockUser::LockUser(QObject *parent)                           : InternCommand(parent) {}
-CreateUser::CreateUser(QObject *parent)                       : InternCommand(parent) {}
-RemoveUser::RemoveUser(QObject *parent)                       : InternCommand(parent) {}
-ChangeGroup::ChangeGroup(QObject *parent)                     : InternCommand(parent) {}
-ChangePassword::ChangePassword(QObject *parent)               : InternCommand(parent) {}
-ChangeDispName::ChangeDispName(QObject *parent)               : InternCommand(parent) {}
-ChangeUsername::ChangeUsername(QObject *parent)               : InternCommand(parent) {}
-OverWriteEmail::OverWriteEmail(QObject *parent)               : InternCommand(parent) {}
+LockUser::LockUser(QObject *parent)                           : CmdObject(parent) {}
+CreateUser::CreateUser(QObject *parent)                       : CmdObject(parent) {}
+RemoveUser::RemoveUser(QObject *parent)                       : CmdObject(parent) {}
+ChangeUserRank::ChangeUserRank(QObject *parent)               : CmdObject(parent) {}
+ChangePassword::ChangePassword(QObject *parent)               : CmdObject(parent) {}
+ChangeDispName::ChangeDispName(QObject *parent)               : CmdObject(parent) {}
+ChangeUsername::ChangeUsername(QObject *parent)               : CmdObject(parent) {}
+OverWriteEmail::OverWriteEmail(QObject *parent)               : CmdObject(parent) {}
 ChangeEmail::ChangeEmail(QObject *parent)                     : OverWriteEmail(parent) {}
-PasswordChangeRequest::PasswordChangeRequest(QObject *parent) : InternCommand(parent) {}
-NameChangeRequest::NameChangeRequest(QObject *parent)         : InternCommand(parent) {}
+PasswordChangeRequest::PasswordChangeRequest(QObject *parent) : CmdObject(parent) {}
+NameChangeRequest::NameChangeRequest(QObject *parent)         : PasswordChangeRequest(parent) {}
 
 QString ListUsers::cmdName()             {return "ls_users";}
 QString LockUser::cmdName()              {return "lock_acct";}
 QString CreateUser::cmdName()            {return "add_acct";}
 QString RemoveUser::cmdName()            {return "rm_acct";}
-QString ChangeGroup::cmdName()           {return "set_group";}
+QString ChangeUserRank::cmdName()        {return "set_user_rank";}
 QString ChangePassword::cmdName()        {return "set_pw";}
 QString ChangeDispName::cmdName()        {return "set_disp_name";}
 QString ChangeUsername::cmdName()        {return "set_user_name";}
@@ -46,13 +50,33 @@ QString ChangeEmail::cmdName()           {return "set_email";}
 QString PasswordChangeRequest::cmdName() {return "request_new_pw";}
 QString NameChangeRequest::cmdName()     {return "request_new_user_name";}
 
-void LockUser::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+bool canModifyUser(const QByteArray &uId, quint32 myRank, bool equalAcceptable)
+{
+    Query db;
+
+    db.setType(Query::PULL, TABLE_USERS);
+    db.addColumn(COLUMN_HOST_RANK);
+    db.addCondition(COLUMN_USER_ID, uId);
+    db.exec();
+
+    if (equalAcceptable)
+    {
+        return myRank <= db.getData(COLUMN_HOST_RANK).toUInt();
+    }
+    else
+    {
+        return myRank < db.getData(COLUMN_HOST_RANK).toUInt();
+    }
+}
+
+void LockUser::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
         QStringList args  = parseArgs(binIn, 4);
         QString     uName = getParam("-user", args);
         QString     state = getParam("-state", args);
+        QByteArray  uId;
 
         if (uName.isEmpty())
         {
@@ -66,21 +90,17 @@ void LockUser::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uc
         {
             errTxt("err: Invalid user name.\n");
         }
-        else if (noCaseMatch(ROOT_USER, uName))
-        {
-            errTxt("err: Unable to lock/unlock protected user: '" + QString(ROOT_USER) + "'\n");
-        }
         else if (!isBool(state))
         {
             errTxt("err: The state bool value (-state) must be a 0 or 1.\n");
         }
-        else if (!userExists(uName))
+        else if (!userExists(uName, &uId))
         {
             errTxt("err: The requested user name does not exists.\n");
         }
-        else if (!checkRank(*sharedObjs->groupName, getUserGroup(uName)))
+        else if (!canModifyUser(uId, rd32BitFromBlock(hostRank), false))
         {
-            errTxt("err: The target user account out ranks or is equal to your own rank. access denied.\n");
+            errTxt("err: The target user account out ranks you or is equal to your own rank. access denied.\n");
         }
         else
         {
@@ -88,33 +108,31 @@ void LockUser::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uc
 
             db.setType(Query::UPDATE, TABLE_USERS);
             db.addColumn(COLUMN_LOCKED, static_cast<bool>(state.toInt()));
-            db.addCondition(COLUMN_USERNAME, uName);
+            db.addCondition(COLUMN_USER_ID, uId);
             db.exec();
         }
     }
 }
 
-void CreateUser::term()
+void CreateUser::clear()
 {
-    emit enableMoreInput(false);
+    flags = 0;
 
     email.clear();
     newName.clear();
 }
 
-void CreateUser::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void CreateUser::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(sharedObjs);
-
     if (dType == TEXT)
     {
-        if (moreInputEnabled())
+        if (flags & MORE_INPUT)
         {
             QString password = fromTEXT(binIn);
 
             if (password.isEmpty())
             {
-                term();
+                clear();
             }
             else if (!validPassword(password))
             {
@@ -124,16 +142,16 @@ void CreateUser::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, 
             else if (!createUser(newName, email, dispName, password))
             {
                 errTxt("err: The requested User name already exists.\n");
-                term();
+                clear();
             }
             else
             {
-                term();
+                clear();
             }
         }
         else
         {
-            QStringList args = parseArgs(binIn, 4);
+            QStringList args = parseArgs(binIn, 6);
 
             dispName = getParam("-disp", args);
             newName  = getParam("-name", args);
@@ -169,7 +187,7 @@ void CreateUser::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, 
             }
             else
             {
-                emit enableMoreInput(true);
+                flags |= MORE_INPUT;
 
                 privTxt("Enter a new password (leave blank to cancel): ");
             }
@@ -177,38 +195,31 @@ void CreateUser::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, 
     }
 }
 
-void RemoveUser::term()
-{
-    emit enableMoreInput(false);
-
-    uName.clear();
-}
-
 void RemoveUser::rm()
 {
     Query db;
 
     db.setType(Query::DEL, TABLE_USERS);
-    db.addCondition(COLUMN_USERNAME, uName);
+    db.addCondition(COLUMN_USER_ID, uId);
     db.exec();
 
-    emit backendDataOut(ASYNC_USER_DELETED, toTEXT(uName), PUB_IPC_WITH_FEEDBACK);
+    flags &= ~MORE_INPUT;
 
-    term();
+    async(ASYNC_USER_DELETED, PUB_IPC_WITH_FEEDBACK, uId);
 }
 
 void RemoveUser::ask()
 {
-    emit enableMoreInput(true);
+    flags |= MORE_INPUT;
 
     mainTxt("Are you sure you want to permanently remove this user account? (y/n): ");
 }
 
-void RemoveUser::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void RemoveUser::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        if (moreInputEnabled())
+        if (flags & MORE_INPUT)
         {
             QString ans = fromTEXT(binIn);
 
@@ -218,7 +229,7 @@ void RemoveUser::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, 
             }
             else if (noCaseMatch("n", ans))
             {
-                term();
+                flags &= ~MORE_INPUT;
             }
             else
             {
@@ -227,9 +238,8 @@ void RemoveUser::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, 
         }
         else
         {
-            QStringList args = parseArgs(binIn, 2);
-
-            uName = getParam("-name", args);
+            QStringList args  = parseArgs(binIn, 2);
+            QString     uName = getParam("-name", args);
 
             if (uName.isEmpty())
             {
@@ -243,15 +253,15 @@ void RemoveUser::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, 
             {
                 errTxt("err: Invalid username.\n");
             }
-            else if (!userExists(uName))
+            else if (!userExists(uName, &uId))
             {
                 errTxt("err: The requested user name does not exists.\n");
             }
-            else if (isChOwner(uName))
+            else if (isChOwner(uId))
             {
-                errTxt("err: The requested user name is the owner of one or more channels.\n");
+                errTxt("err: The requested user name is the owner of one or more channels. assign new owners for these channels before attempting to delete this account.\n");
             }
-            else if (!checkRank(*sharedObjs->groupName, getUserGroup(uName)) && !noCaseMatch(*sharedObjs->userName, uName))
+            else if (!canModifyUser(uId, rd32BitFromBlock(hostRank), false) && (rdFromBlock(userId, BLKSIZE_USER_ID) != uId))
             {
                 errTxt("err: The target user account out ranks you, access denied.\n");
             }
@@ -270,76 +280,76 @@ void RemoveUser::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, 
     }
 }
 
-void ChangeGroup::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void ChangeUserRank::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args = parseArgs(binIn, 4);
-
-        QString uName = getParam("-user", args);
-        QString gName = getParam("-group", args);
+        QStringList args  = parseArgs(binIn, 4);
+        QString     uName = getParam("-user", args);
+        QString     rank  = getParam("-rank", args);
+        QByteArray  uId;
 
         if (uName.isEmpty())
         {
-            errTxt("err: User name argument -user not found or is empty.\n");
+            errTxt("err: User name argument (-user) not found or is empty.\n");
         }
-        else if (gName.isEmpty())
+        else if (rank.isEmpty())
         {
-            errTxt("err: Group name argument -group not found or is empty.\n");
+            errTxt("err: New rank argument (-rank) not found or is empty.\n");
         }
         else if (noCaseMatch(ROOT_USER, uName))
         {
-            errTxt("err: You are not allowed to change the group of protected user: '" + QString(ROOT_USER) + "'\n");
-        }
-        else if (noCaseMatch(ROOT_USER, gName))
-        {
-            errTxt("err: No user created account is allowed to attach to protected group: '" + QString(ROOT_USER) + "'\n");
-        }
-        else if (!validGroupName(gName))
-        {
-            errTxt("err: Invalid group name.\n");
+            errTxt("err: You are not allowed to change the rank of protected user: '" + QString(ROOT_USER) + "'\n");
         }
         else if (!validUserName(uName))
         {
             errTxt("err: Invalid username.\n");
         }
-        else if (!userExists(uName))
+        else if (!isInt(rank))
+        {
+            errTxt("err: Invalid 32bit unsigned integer for the new rank.\n");
+        }
+        else if (rank.toUInt() == 0)
+        {
+            errTxt("err: Rank 0 is invalid. please set a rank of 1 or higher.\n");
+        }
+        else if (rank.toUInt() < rd32BitFromBlock(hostRank))
+        {
+            errTxt("err: You cannot assign a rank higher than your own.\n");
+        }
+        else if (!userExists(uName, &uId))
         {
             errTxt("err: The requested user account does not exists.\n");
         }
-        else if (!groupExists(gName))
+        else if (!canModifyUser(uId, rd32BitFromBlock(hostRank), false))
         {
-            errTxt("err: The requested group does not exists.\n");
-        }
-        else if (!checkRank(*sharedObjs->groupName, gName, true))
-        {
-            errTxt("err: The target group out ranks your own group. access denied.\n");
+            errTxt("err: The target user out ranks you or is equal to your own rank. access denied.\n");
         }
         else
         {
             Query db(this);
 
             db.setType(Query::UPDATE, TABLE_USERS);
-            db.addColumn(COLUMN_GRNAME, gName);
-            db.addCondition(COLUMN_USERNAME, uName);
+            db.addColumn(COLUMN_HOST_RANK, rank.toUInt());
+            db.addCondition(COLUMN_USER_ID, uId);
             db.exec();
 
-            emit backendDataOut(ASYNC_USER_GROUP_CHANGED, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_USER_RANK_CHANGED, PUB_IPC_WITH_FEEDBACK, uId + wrInt(rank.toUInt(), 32));
         }
     }
 }
 
-void ChangePassword::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void ChangePassword::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        if (moreInputEnabled())
+        if (flags & MORE_INPUT)
         {
             QString password = fromTEXT(binIn);
 
             if (password.isEmpty())
             {
-                emit enableMoreInput(false);
+                flags &= ~MORE_INPUT;
             }
             else if (!validPassword(password))
             {
@@ -348,21 +358,21 @@ void ChangePassword::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
             }
             else
             {   
-                emit enableMoreInput(false);
+                flags &= ~MORE_INPUT;
 
-                updatePassword(*sharedObjs->userName, password, TABLE_USERS);
+                updatePassword(rdFromBlock(userId, BLKSIZE_USER_ID), password, TABLE_USERS);
             }
         }
         else
         {
-            emit enableMoreInput(true);
+            flags |= MORE_INPUT;
 
             privTxt("Enter a new password (leave blank to cancel): ");
         }
     }
 }
 
-void ChangeUsername::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void ChangeUsername::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
@@ -383,31 +393,31 @@ void ChangeUsername::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
         }
         else
         {
+            QByteArray uId       = rdFromBlock(userId, BLKSIZE_USER_ID);
+            QByteArray newNameBa = fixedToTEXT(newName, BLKSIZE_USER_NAME);
+
             Query db(this);
 
             db.setType(Query::UPDATE, TABLE_USERS);
             db.addColumn(COLUMN_USERNAME, newName);
-            db.addCondition(COLUMN_USERNAME, *sharedObjs->userName);
+            db.addCondition(COLUMN_USER_ID, rdFromBlock(userId, BLKSIZE_USER_ID));
             db.exec();
 
-            args.append("-old");
-            args.append("'" + escapeChars(*sharedObjs->userName, '\\', '\'') + "'");
-
-            emit backendDataOut(ASYNC_USER_RENAMED, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_USER_RENAMED, PUB_IPC_WITH_FEEDBACK, uId + newNameBa);
         }
     }
 }
 
-void ChangeDispName::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void ChangeDispName::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
         QStringList args = parseArgs(binIn, 2);
-        QString     name = getParam("-name", args);
+        QString     name = getParam("-new_name", args).trimmed();
 
-        if (name.isEmpty())
+        if (argExists("-new_name", args))
         {
-            errTxt("err: New display name argument (-name) not found or is empty.\n");
+            errTxt("err: New display name argument (-new_name) not found.\n");
         }
         else if (!validDispName(name))
         {
@@ -417,21 +427,23 @@ void ChangeDispName::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
         {
             Query db(this);
 
+            QByteArray uId       = rdFromBlock(userId, BLKSIZE_USER_ID);
+            QByteArray newNameBa = fixedToTEXT(name, BLKSIZE_DISP_NAME);
+
             db.setType(Query::UPDATE, TABLE_USERS);
             db.addColumn(COLUMN_DISPLAY_NAME, name);
-            db.addCondition(COLUMN_USERNAME, *sharedObjs->userName);
+            db.addCondition(COLUMN_USER_ID, uId);
             db.exec();
 
-            args.append("-user");
-            args.append("'" + escapeChars(*sharedObjs->userName, '\\', '\'') + "'");
-
-            emit backendDataOut(ASYNC_DISP_RENAMED, toTEXT(args.join(' ')), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_DISP_RENAMED, PUB_IPC_WITH_FEEDBACK, uId + newNameBa);
         }
     }
 }
 
-void OverWriteEmail::procArgs(const QString &uName, const QString &newEmail, bool sameRank, const SharedObjs *sharedObjs)
+void OverWriteEmail::procArgs(const QString &uName, const QString &newEmail, bool sameRank)
 {
+    QByteArray uId;
+
     if (newEmail.isEmpty())
     {
         errTxt("err: New email address (-new_email) argument was not found or is empty.\n");
@@ -452,13 +464,13 @@ void OverWriteEmail::procArgs(const QString &uName, const QString &newEmail, boo
     {
         errTxt("err: The requested email address is already in use.\n");
     }
-    else if (!userExists(uName))
+    else if (!userExists(uName, &uId))
     {
         errTxt("err: The requested user account does not exists.\n");
     }
-    else if (!checkRank(*sharedObjs->groupName, getUserGroup(uName), sameRank))
+    else if (!canModifyUser(uId, rd32BitFromBlock(hostRank), sameRank))
     {
-        errTxt("err: The target user account out ranks your own rank. access denied.\n");
+        errTxt("err: Access denied.\n");
     }
     else
     {
@@ -467,14 +479,14 @@ void OverWriteEmail::procArgs(const QString &uName, const QString &newEmail, boo
         db.setType(Query::UPDATE, TABLE_USERS);
         db.addColumn(COLUMN_EMAIL, newEmail);
         db.addColumn(COLUMN_EMAIL_VERIFIED, false);
-        db.addCondition(COLUMN_USERNAME, uName);
+        db.addCondition(COLUMN_USER_ID, uId);
         db.exec();
 
-        emit backendDataOut(ASYNC_RW_MY_INFO, toTEXT(uName), PUB_IPC_WITH_FEEDBACK);
+        async(ASYNC_RW_MY_INFO, PUB_IPC_WITH_FEEDBACK, uId);
     }
 }
 
-void OverWriteEmail::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void OverWriteEmail::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
@@ -482,30 +494,39 @@ void OverWriteEmail::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
         QString     uName    = getParam("-user", args);
         QString     newEmail = getParam("-new_email", args);
 
-        procArgs(uName, newEmail, false, sharedObjs);
+        procArgs(uName, newEmail, false);
     }
 }
 
-void ChangeEmail::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void ChangeEmail::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
         QStringList args     = parseArgs(binIn, 2);
         QString     newEmail = getParam("-new_email", args);
 
-        procArgs(*sharedObjs->userName, newEmail, true, sharedObjs);
+        procArgs(rdStringFromBlock(userName, BLKSIZE_USER_NAME), newEmail, true);
     }
 }
 
-void PasswordChangeRequest::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void PasswordChangeRequest::exec(const QByteArray &uId, bool req)
 {
-    Q_UNUSED(sharedObjs);
+    Query db(this);
 
+    db.setType(Query::UPDATE, TABLE_USERS);
+    db.addColumn(COLUMN_NEED_PASS, req);
+    db.addCondition(COLUMN_USER_ID, uId);
+    db.exec();
+}
+
+void PasswordChangeRequest::procIn(const QByteArray &binIn, quint8 dType)
+{
     if (dType == TEXT)
     {
         QStringList args  = parseArgs(binIn, 4);
         QString     uName = getParam("-user", args);
         QString     req   = getParam("-req", args);
+        QByteArray  uId;
 
         if (uName.isEmpty())
         {
@@ -523,68 +544,27 @@ void PasswordChangeRequest::procBin(const SharedObjs *sharedObjs, const QByteArr
         {
             errTxt("err: Invalid user name.\n");
         }
-        else if (!userExists(uName))
+        else if (!userExists(uName, &uId))
         {
             errTxt("err: The requested user account does not exists.\n");
         }
-        else if (!checkRank(*sharedObjs->groupName, getUserGroup(uName)))
+        else if (!canModifyUser(uId, rd32BitFromBlock(hostRank), false))
         {
             errTxt("err: The target user account out ranks or is equal to your own rank. access denied.\n");
         }
         else
         {
-            Query db(this);
-
-            db.setType(Query::UPDATE, TABLE_USERS);
-            db.addColumn(COLUMN_NEED_PASS, static_cast<bool>(req.toInt()));
-            db.addCondition(COLUMN_USERNAME, uName);
-            db.exec();
+            exec(uId, static_cast<bool>(req.toUInt()));
         }
     }
 }
 
-void NameChangeRequest::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void NameChangeRequest::exec(const QByteArray &uId, bool req)
 {
-    Q_UNUSED(sharedObjs);
+    Query db(this);
 
-    if (dType == TEXT)
-    {
-        QStringList args  = parseArgs(binIn, 4);
-        QString     uName = getParam("-user", args);
-        QString     req   = getParam("-req", args);
-
-        if (uName.isEmpty())
-        {
-            errTxt("err: User name (-user) argument was not found or is empty.\n");
-        }
-        else if (req.isEmpty())
-        {
-            errTxt("err: Request bool (-req) argument was not found or is empty.\n");
-        }
-        else if (!isBool(req))
-        {
-            errTxt("err: The request bool value (-req) must be a 0 or 1.\n");
-        }
-        else if (!validUserName(uName))
-        {
-            errTxt("err: Invalid user name.\n");
-        }
-        else if (!userExists(uName))
-        {
-            errTxt("err: The requested user account does not exists.\n");
-        }
-        else if (!checkRank(*sharedObjs->groupName, getUserGroup(uName)))
-        {
-            errTxt("err: The target user account out ranks or is equal to your own rank. access denied.\n");
-        }
-        else
-        {
-            Query db(this);
-
-            db.setType(Query::UPDATE, TABLE_USERS);
-            db.addColumn(COLUMN_NEED_NAME, static_cast<bool>(req.toInt()));
-            db.addCondition(COLUMN_USERNAME, uName);
-            db.exec();
-        }
-    }
+    db.setType(Query::UPDATE, TABLE_USERS);
+    db.addColumn(COLUMN_NEED_NAME, req);
+    db.addCondition(COLUMN_USER_ID, uId);
+    db.exec();
 }

@@ -16,40 +16,31 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-Auth::Auth(QObject *parent) : InternCommand(parent) {}
+Auth::Auth(QObject *parent) : CmdObject(parent) {}
 
 AuthLog::AuthLog(QObject *parent) : TableViewer(parent)
 {
-    setParams(TABLE_AUTH_LOG, QStringList() << COLUMN_TIME
-                                            << COLUMN_IPADDR
-                                            << COLUMN_USERNAME
-                                            << COLUMN_AUTH_ATTEMPT
-                                            << COLUMN_RECOVER_ATTEMPT
-                                            << COLUMN_COUNT
-                                            << COLUMN_ACCEPTED, true);
+    setParams(TABLE_AUTH_LOG, false);
+    addJointColumn(TABLE_USERS, COLUMN_USER_ID);
+    addTableColumn(TABLE_AUTH_LOG, COLUMN_TIME);
+    addTableColumn(TABLE_AUTH_LOG, COLUMN_IPADDR);
+    addTableColumn(TABLE_USERS, COLUMN_USERNAME);
+    addTableColumn(TABLE_AUTH_LOG, COLUMN_AUTH_ATTEMPT);
+    addTableColumn(TABLE_AUTH_LOG, COLUMN_RECOVER_ATTEMPT);
+    addTableColumn(TABLE_AUTH_LOG, COLUMN_COUNT);
+    addTableColumn(TABLE_AUTH_LOG, COLUMN_ACCEPTED);
 }
 
 QString Auth::cmdName()    {return "auth";}
 QString AuthLog::cmdName() {return "ls_auth_log";}
 
-void Auth::term()
-{
-    emit enableMoreInput(false);
-
-    newPassword = false;
-    newUserName = false;
-    loginOk     = false;
-
-    uName.clear();
-}
-
-void Auth::addToThreshold(const SharedObjs *sharedObjs)
+void Auth::addToThreshold()
 {
     Query db(this);
 
     db.setType(Query::PUSH, TABLE_AUTH_LOG);
-    db.addColumn(COLUMN_USERNAME, uName);
-    db.addColumn(COLUMN_IPADDR, *sharedObjs->sessionAddr);
+    db.addColumn(COLUMN_USER_ID, uId);
+    db.addColumn(COLUMN_IPADDR, ip);
     db.addColumn(COLUMN_AUTH_ATTEMPT, true);
     db.addColumn(COLUMN_RECOVER_ATTEMPT, false);
     db.addColumn(COLUMN_COUNT, true);
@@ -58,8 +49,8 @@ void Auth::addToThreshold(const SharedObjs *sharedObjs)
 
     db.setType(Query::PULL, TABLE_SERV_SETTINGS);
 
-    uint maxAttempts = 0;
-    bool isRoot      = false;
+    quint32 maxAttempts = 0;
+    bool    isRoot      = false;
 
     if (noCaseMatch(ROOT_USER, uName))
     {
@@ -80,37 +71,38 @@ void Auth::addToThreshold(const SharedObjs *sharedObjs)
 
     db.setType(Query::PULL, TABLE_AUTH_LOG);
     db.addColumn(COLUMN_IPADDR);
-    db.addCondition(COLUMN_USERNAME, uName);
+    db.addCondition(COLUMN_USER_ID, uId);
     db.addCondition(COLUMN_AUTH_ATTEMPT, true);
     db.addCondition(COLUMN_COUNT, true);
     db.addCondition(COLUMN_ACCEPTED, false);
 
-    if (isRoot) db.addCondition(COLUMN_IPADDR, *sharedObjs->sessionAddr);
+    if (isRoot) db.addCondition(COLUMN_IPADDR, ip);
 
     db.exec();
 
-    if (static_cast<uint>(db.rows()) > maxAttempts)
+    if (static_cast<quint32>(db.rows()) > maxAttempts)
     {
         if (isRoot)
         {
-            if (!QHostAddress(*sharedObjs->sessionAddr).isLoopback())
+            if (!QHostAddress(ip).isLoopback())
             {
                 db.setType(Query::PUSH, TABLE_IPBANS);
-                db.addColumn(COLUMN_IPADDR, *sharedObjs->sessionAddr);
+                db.addColumn(COLUMN_IPADDR, ip);
                 db.exec();
 
-                emit closeSession();
+                async(ASYNC_UPDATE_BANS, PRIV_IPC);
+                async(ASYNC_END_SESSION, PRIV_IPC);
             }
         }
         else
         {
             db.setType(Query::UPDATE, TABLE_USERS);
             db.addColumn(COLUMN_LOCKED, true);
-            db.addCondition(COLUMN_USERNAME, uName);
+            db.addCondition(COLUMN_USER_ID, uId);
             db.exec();
         }
 
-        term();
+        flags &= ~MORE_INPUT;
     }
     else
     {
@@ -119,48 +111,43 @@ void Auth::addToThreshold(const SharedObjs *sharedObjs)
     }
 }
 
-void Auth::confirmAuth(const SharedObjs *sharedObjs)
+void Auth::confirmAuth()
 {
-    *rwSharedObjs->userName    = uName;
-    *rwSharedObjs->displayName = dName;
-    *rwSharedObjs->userId      = uId;
-    *rwSharedObjs->groupName   = getUserGroup(uName);
-    *rwSharedObjs->hostRank    = getRankForGroup(*sharedObjs->groupName);
-
     Query db(this);
 
     db.setType(Query::UPDATE, TABLE_AUTH_LOG);
     db.addColumn(COLUMN_COUNT, false);
     db.addCondition(COLUMN_COUNT, true);
-    db.addCondition(COLUMN_USERNAME, uName);
+    db.addCondition(COLUMN_USER_ID, uId);
     db.addCondition(COLUMN_AUTH_ATTEMPT, true);
 
     if (noCaseMatch(ROOT_USER, uName))
     {
-        db.addCondition(COLUMN_IPADDR, *sharedObjs->sessionAddr);
+        db.addCondition(COLUMN_IPADDR, ip);
     }
 
     db.exec();
 
     db.setType(Query::PUSH, TABLE_AUTH_LOG);
-    db.addColumn(COLUMN_USERNAME, uName);
-    db.addColumn(COLUMN_IPADDR, *sharedObjs->sessionAddr);
+    db.addColumn(COLUMN_USER_ID, uId);
+    db.addColumn(COLUMN_IPADDR, ip);
     db.addColumn(COLUMN_COUNT, false);
     db.addColumn(COLUMN_ACCEPTED, true);
     db.addColumn(COLUMN_AUTH_ATTEMPT, true);
     db.addColumn(COLUMN_RECOVER_ATTEMPT, false);
     db.exec();
 
-    mainTxt("Access granted.\n");
+    flags &= ~MORE_INPUT;
 
-    emit authOk();
+    async(ASYNC_USER_LOGIN, PRIV_IPC, uId);
+    mainTxt("Access granted.\n");
 }
 
-void Auth::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
-{   
+void Auth::procIn(const QByteArray &binIn, quint8 dType)
+{
     if (dType == TEXT)
     {
-        if (moreInputEnabled())
+        if (flags & MORE_INPUT)
         {
             QString text = fromTEXT(binIn);
 
@@ -171,7 +158,8 @@ void Auth::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar 
                     if (text.isEmpty())
                     {
                         mainTxt("\n");
-                        term();
+
+                        flags &= ~MORE_INPUT;
                     }
                     else if (!validPassword(text))
                     {
@@ -180,13 +168,13 @@ void Auth::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar 
                     }
                     else
                     {
-                        updatePassword(uName, text, TABLE_USERS);
+                        updatePassword(uId, text, TABLE_USERS);
 
                         Query db(this);
 
                         db.setType(Query::UPDATE, TABLE_USERS);
                         db.addColumn(COLUMN_NEED_PASS, false);
-                        db.addCondition(COLUMN_USERNAME, uName);
+                        db.addCondition(COLUMN_USER_ID, uId);
                         db.exec();
 
                         newPassword = false;
@@ -197,8 +185,7 @@ void Auth::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar 
                         }
                         else
                         {
-                            confirmAuth(sharedObjs);
-                            term();
+                            confirmAuth();
                         }
                     }
                 }
@@ -207,7 +194,8 @@ void Auth::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar 
                     if (text.isEmpty())
                     {
                         mainTxt("\n");
-                        term();
+
+                        flags &= ~MORE_INPUT;
                     }
                     else if (!validUserName(text))
                     {
@@ -226,31 +214,31 @@ void Auth::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar 
                         db.setType(Query::UPDATE, TABLE_USERS);
                         db.addColumn(COLUMN_NEED_NAME, false);
                         db.addColumn(COLUMN_USERNAME, text);
-                        db.addCondition(COLUMN_USERNAME, uName);
+                        db.addCondition(COLUMN_USER_ID, uId);
                         db.exec();
 
-                        emit backendDataOut(ASYNC_USER_RENAMED, toTEXT("-old '" + escapeChars(uName, '\\', '\'') + "' -new '" + escapeChars(text, '\\', '\'') + "'"), PUB_IPC);
+                        async(ASYNC_USER_RENAMED, PUB_IPC, uId + fixedToTEXT(text, BLKSIZE_USER_NAME));
 
                         uName       = text;
                         newUserName = false;
 
-                        confirmAuth(sharedObjs);
-                        term();
+                        confirmAuth();
                     }
                 }
             }
             else if (text.isEmpty())
             {
                 mainTxt("\n");
-                term();
+
+                flags &= ~MORE_INPUT;
             }
             else if (!validPassword(text))
             {
-                addToThreshold(sharedObjs);
+                addToThreshold();
             }
-            else if (!auth(uName, text, TABLE_USERS))
+            else if (!auth(uId, text, TABLE_USERS))
             {
-                addToThreshold(sharedObjs);
+                addToThreshold();
             }
             else
             {
@@ -266,8 +254,7 @@ void Auth::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar 
                 }
                 else
                 {
-                    confirmAuth(sharedObjs);
-                    term();
+                    confirmAuth();
                 }
             }
         }
@@ -277,40 +264,40 @@ void Auth::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar 
             QString     email = getParam("-email", args);
             QString     name  = getParam("-user", args);
 
-            if (!email.isEmpty() && validEmailAddr(email)) name = getUserNameForEmail(email);
+            if (!email.isEmpty() && validEmailAddr(email))
+            {
+                name = getUserNameForEmail(email);
+            }
 
             if (name.isEmpty() || !validUserName(name))
             {
                 errTxt("err: The -user or -email argument is empty, not found or invalid.\n");
             }
-            else if (!userExists(name))
+            else if (!userExists(name, &uId))
             {
                 errTxt("err: No such user.\n");
             }
-            else if (isLocked(name))
+            else if (isLocked(uId))
             {
                 errTxt("err: The requested user account is locked.\n");
             }
             else
             {
-                emit enableMoreInput(true);
-
-                uName = name;
-
                 Query db(this);
 
                 db.setType(Query::PULL, TABLE_USERS);
-                db.addColumn(COLUMN_DISPLAY_NAME);
                 db.addColumn(COLUMN_NEED_NAME);
                 db.addColumn(COLUMN_NEED_PASS);
                 db.addColumn(COLUMN_USER_ID);
-                db.addCondition(COLUMN_USERNAME, uName);
+                db.addCondition(COLUMN_USER_ID, uId);
                 db.exec();
 
+                loginOk     = false;
+                uName       = name;
+                flags      |= MORE_INPUT;
+                ip          = rdStringFromBlock(clientIp, BLKSIZE_CLIENT_IP);
                 newPassword = db.getData(COLUMN_NEED_PASS).toBool();
                 newUserName = db.getData(COLUMN_NEED_NAME).toBool();
-                dName       = db.getData(COLUMN_DISPLAY_NAME).toString();
-                uId         = db.getData(COLUMN_USER_ID).toByteArray();
 
                 privTxt("Enter password (leave blank to cancel): ");
             }

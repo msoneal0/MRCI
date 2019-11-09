@@ -1,6 +1,6 @@
 ### Summary ###
 
-set the user privilege levels of a channel member. (lower the value, the higher the privilege)
+set the user privilege levels of a channel member.
 
 ### IO ###
 

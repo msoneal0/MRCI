@@ -1,6 +1,6 @@
 ### Summary ###
 
-list all available modules currently installed in the host.
+list all available modules currently configured in the host.
 
 ### IO ###
 
@@ -8,8 +8,4 @@ list all available modules currently installed in the host.
 
 ### Description ###
 
-display a list of all modules currently installed in the host. any mods marked with a '1' on the locked column will prevent new sessions from attempting to load it. the presents of a lock can mean 3 things: 
-
-1. the module is queued for deletion. 
-2. installation is in process and the module is not yet ready for loading.
-3. a session has crashed while attempting to load the module.
+display a list of all modules currently configured to run in the host. modules are independent applications so having them listed here doesn't guarantee the commands installed in them will actually be avaiable for running. any module that fails to load correctly should log debug messages.

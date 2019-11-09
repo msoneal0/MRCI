@@ -1,6 +1,6 @@
 ### Summary ###
 
-copy a file system object (file,directory,symlink) from one location to another.
+copy a file or directory in the host file system.
 
 ### IO ###
 

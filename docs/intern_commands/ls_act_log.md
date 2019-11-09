@@ -12,8 +12,8 @@ by default, all entries in the table are displayed in 50 entries per page. you c
 
 -time_stamp
 -ip_address
+-client_app
 -session_id
--client_version
 -log_entry
 
 you can also pass -delete that will cause the command to delete the entries instead of displaying them. note: passing no search terms with this option will delete all entries in the table.

@@ -16,12 +16,12 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-RecoverAcct::RecoverAcct(QObject *parent)           : InternCommand(parent) {inputOk = false;}
-ResetPwRequest::ResetPwRequest(QObject *parent)     : InternCommand(parent) {}
-VerifyEmail::VerifyEmail(QObject *parent)           : InternCommand(parent) {}
-IsEmailVerified::IsEmailVerified(QObject *parent)   : InternCommand(parent) {}
-SetEmailTemplate::SetEmailTemplate(QObject *parent) : InternCommand(parent) {}
-PreviewEmail::PreviewEmail(QObject *parent)         : InternCommand(parent) {}
+RecoverAcct::RecoverAcct(QObject *parent)           : CmdObject(parent) {}
+ResetPwRequest::ResetPwRequest(QObject *parent)     : CmdObject(parent) {}
+VerifyEmail::VerifyEmail(QObject *parent)           : CmdObject(parent) {}
+IsEmailVerified::IsEmailVerified(QObject *parent)   : CmdObject(parent) {}
+SetEmailTemplate::SetEmailTemplate(QObject *parent) : CmdObject(parent) {}
+PreviewEmail::PreviewEmail(QObject *parent)         : CmdObject(parent) {}
 
 QString RecoverAcct::cmdName()      {return "recover_acct";}
 QString ResetPwRequest::cmdName()   {return "request_pw_reset";}
@@ -30,38 +30,54 @@ QString IsEmailVerified::cmdName()  {return "is_email_verified";}
 QString SetEmailTemplate::cmdName() {return "set_email_template";}
 QString PreviewEmail::cmdName()     {return "preview_email";}
 
-void RecoverAcct::term()
+void delRecoverPw(const QByteArray &uId)
 {
-    emit enableMoreInput(false);
-
-    inputOk = false;
-}
-
-void RecoverAcct::delRecoverPw()
-{
-    Query db(this);
+    Query db;
 
     db.setType(Query::DEL, TABLE_PW_RECOVERY);
-    db.addCondition(COLUMN_USERNAME, uName);
+    db.addCondition(COLUMN_USER_ID, uId);
     db.exec();
 
     db.setType(Query::UPDATE, TABLE_AUTH_LOG);
     db.addColumn(COLUMN_COUNT, false);
     db.addCondition(COLUMN_COUNT, true);
     db.addCondition(COLUMN_RECOVER_ATTEMPT, true);
-    db.addCondition(COLUMN_USERNAME, uName);
+    db.addCondition(COLUMN_USER_ID, uId);
     db.exec();
-
-    term();
 }
 
-void RecoverAcct::addToThreshold(const SharedObjs *sharedObjs)
+bool expired(const QByteArray &uId)
+{
+    bool ret = true;
+
+    Query db;
+
+    db.setType(Query::PULL, TABLE_PW_RECOVERY);
+    db.addColumn(COLUMN_TIME);
+    db.addCondition(COLUMN_USER_ID, uId);
+    db.exec();
+
+    QDateTime expiry = db.getData(COLUMN_TIME).toDateTime().addSecs(3600); // pw datetime + 1hour;
+
+    if (expiry > QDateTime::currentDateTime().toUTC())
+    {
+        ret = false;
+    }
+    else
+    {
+        delRecoverPw(uId);
+    }
+
+    return ret;
+}
+
+void RecoverAcct::addToThreshold()
 {
     Query db(this);
 
     db.setType(Query::PUSH, TABLE_AUTH_LOG);
-    db.addColumn(COLUMN_USERNAME, uName);
-    db.addColumn(COLUMN_IPADDR, *sharedObjs->sessionAddr);
+    db.addColumn(COLUMN_USER_ID, uId);
+    db.addColumn(COLUMN_IPADDR, rdStringFromBlock(clientIp, BLKSIZE_CLIENT_IP));
     db.addColumn(COLUMN_AUTH_ATTEMPT, false);
     db.addColumn(COLUMN_RECOVER_ATTEMPT, true);
     db.addColumn(COLUMN_COUNT, true);
@@ -72,20 +88,21 @@ void RecoverAcct::addToThreshold(const SharedObjs *sharedObjs)
     db.addColumn(COLUMN_LOCK_LIMIT);
     db.exec();
 
-    uint maxAttempts = db.getData(COLUMN_LOCK_LIMIT).toUInt();
+    quint32 maxAttempts = db.getData(COLUMN_LOCK_LIMIT).toUInt();
 
     db.setType(Query::PULL, TABLE_AUTH_LOG);
     db.addColumn(COLUMN_IPADDR);
-    db.addCondition(COLUMN_USERNAME, uName);
+    db.addCondition(COLUMN_USER_ID, uId);
     db.addCondition(COLUMN_RECOVER_ATTEMPT, true);
     db.addCondition(COLUMN_COUNT, true);
     db.addCondition(COLUMN_ACCEPTED, false);
     db.exec();
 
-    if (static_cast<uint>(db.rows()) > maxAttempts)
+    if (static_cast<quint32>(db.rows()) > maxAttempts)
     {
-        delRecoverPw();
-        term();
+        delRecoverPw(uId);
+
+        flags &= ~MORE_INPUT;
     }
     else
     {
@@ -94,9 +111,9 @@ void RecoverAcct::addToThreshold(const SharedObjs *sharedObjs)
     }
 }
 
-void RecoverAcct::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void RecoverAcct::procIn(const QByteArray &binIn, quint8 dType)
 {
-    if (moreInputEnabled() && (dType == TEXT))
+    if ((flags & MORE_INPUT) && (dType == TEXT))
     {
         QString pw = fromTEXT(binIn);
 
@@ -109,24 +126,25 @@ void RecoverAcct::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn,
             }
             else
             {
-                updatePassword(uName, pw, TABLE_USERS);
-                delRecoverPw();
-                term();
+                updatePassword(uId, pw, TABLE_USERS);
+                delRecoverPw(uId);
+
+                flags &= ~MORE_INPUT;
             }
         }
         else
         {
             if (pw.isEmpty())
             {
-                term();
+                flags &= ~MORE_INPUT;
             }
             else if (!validPassword(pw))
             {
-                addToThreshold(sharedObjs);
+                addToThreshold();
             }
-            else if (!auth(uName, pw, TABLE_PW_RECOVERY))
+            else if (!auth(uId, pw, TABLE_PW_RECOVERY))
             {
-                addToThreshold(sharedObjs);
+                addToThreshold();
             }
             else
             {
@@ -142,65 +160,71 @@ void RecoverAcct::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn,
         QString     email = getParam("-email", args);
         QString     name  = getParam("-user", args);
 
-        if (!email.isEmpty() && validEmailAddr(email)) name = getUserNameForEmail(email);
+        if (!email.isEmpty() && validEmailAddr(email))
+        {
+            name = getUserNameForEmail(email);
+        }
 
         if (name.isEmpty() || !validUserName(name))
         {
             errTxt("err: The -user or -email argument is empty, not found or invalid.\n");
         }
-        else if (!userExists(name))
+        else if (!userExists(name, &uId))
         {
             errTxt("err: No such user.\n");
         }
-        else if (!recoverPWExists(name))
+        else if (!recoverPWExists(uId))
         {
             errTxt("err: This account does not have a recovery password.\n");
+        }
+        else if (expired(uId))
+        {
+            errTxt("err: The recovery password has expired.\n");
         }
         else
         {
             privTxt("Enter the temporary password (leave blank to cancel): ");
 
-            uName = name;
-
-            emit enableMoreInput(true);
+            inputOk = false;
+            flags  |= MORE_INPUT;
         }
     }
 }
 
-void ResetPwRequest::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void ResetPwRequest::procIn(const QByteArray &binIn, uchar dType)
 {
-    Q_UNUSED(sharedObjs);
-
     if (dType == TEXT)
     {
         QStringList args  = parseArgs(binIn, 2);
         QString     email = getParam("-email", args);
         QString     name  = getParam("-user", args);
+        QByteArray  uId;
 
-        if (!email.isEmpty() && validEmailAddr(email)) name = getUserNameForEmail(email);
+        if (!email.isEmpty() && validEmailAddr(email))
+        {
+            name = getUserNameForEmail(email);
+        }
 
         if (name.isEmpty() || !validUserName(name))
         {
             errTxt("err: The -user or -email argument is empty, not found or invalid.\n");
         }
-        else if (!userExists(name))
+        else if (!userExists(name, &uId, &email))
         {
             errTxt("err: No such user.\n");
         }
         else
         {
-            email = getEmailForUser(name);
-
             QString pw   = genPw();
             QString date = QDateTime::currentDateTimeUtc().toString("YYYY-MM-DD HH:MM:SS");
 
-            if (recoverPWExists(name))
+            if (recoverPWExists(uId))
             {
-                updatePassword(name, pw, TABLE_PW_RECOVERY);
+                updatePassword(uId, pw, TABLE_PW_RECOVERY);
             }
             else
             {
-                createTempPw(name, email, pw);
+                createTempPw(uId, pw);
             }
 
             Query db(this);
@@ -227,40 +251,33 @@ void ResetPwRequest::procBin(const SharedObjs *sharedObjs, const QByteArray &bin
 
             QProcess::startDetached(expandEnvVariables(app), parseArgs(toTEXT(cmdLine), -1));
 
-            mainTxt("A temporary password was sent to the email address associated with the account.\n");
+            mainTxt("A temporary password was sent to the email address associated with the account. this password will expire in 1hour.\n");
         }
     }
 }
 
-void VerifyEmail::term()
+void VerifyEmail::procIn(const QByteArray &binIn, quint8 dType)
 {
-    emit enableMoreInput(false);
-
-    code.clear();
-}
-
-void VerifyEmail::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
-{
-    if (moreInputEnabled() && (dType == TEXT))
+    if ((flags & MORE_INPUT) && (dType == TEXT))
     {
         QString txt = fromTEXT(binIn);
 
-        if (txt == code)
+        if (txt.isEmpty())
+        {
+            flags &= ~MORE_INPUT;
+        }
+        else if (txt == code)
         {
             Query db(this);
 
             db.setType(Query::UPDATE, TABLE_USERS);
             db.addColumn(COLUMN_EMAIL_VERIFIED, true);
-            db.addCondition(COLUMN_USERNAME, *sharedObjs->userName);
+            db.addCondition(COLUMN_USER_ID, uId);
             db.exec();
 
-            emit backendDataOut(ASYNC_RW_MY_INFO, toTEXT(*sharedObjs->userName), PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_RW_MY_INFO, PUB_IPC_WITH_FEEDBACK, uId);
 
-            term();
-        }
-        else if (txt.isEmpty())
-        {
-            term();
+            flags &= ~MORE_INPUT;
         }
         else
         {
@@ -270,7 +287,9 @@ void VerifyEmail::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn,
     }
     else if (dType == TEXT)
     {
-        QString email = getEmailForUser(*sharedObjs->userName);
+        uId = rdFromBlock(userId, BLKSIZE_USER_ID);
+
+        QString email = getEmailForUser(uId);
 
         if (email.isEmpty())
         {
@@ -278,9 +297,8 @@ void VerifyEmail::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn,
         }
         else
         {
-            QString date = QDateTime::currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss");
-
-            code = QString::number(QRandomGenerator::global()->bounded(100000, 999999));
+            flags |= MORE_INPUT;
+            code   = QString::number(QRandomGenerator::global()->bounded(100000, 999999));
 
             Query db(this);
 
@@ -291,13 +309,15 @@ void VerifyEmail::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn,
             db.addColumn(COLUMN_MAIL_SEND);
             db.exec();
 
+            QString uName   = rdStringFromBlock(userName, BLKSIZE_USER_NAME);
+            QString date    = QDateTime::currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss");
             QString subject = db.getData(COLUMN_CONFIRM_SUBJECT).toString();
             QString body    = db.getData(COLUMN_CONFIRM_MSG).toString();
             QString app     = db.getData(COLUMN_MAILERBIN).toString();
             QString cmdLine = db.getData(COLUMN_MAIL_SEND).toString();
 
             body.replace(DATE_SUB, date);
-            body.replace(USERNAME_SUB, *sharedObjs->userName);
+            body.replace(USERNAME_SUB, uName);
             body.replace(CONFIRM_CODE_SUB, code);
 
             cmdLine.replace(TARGET_EMAIL_SUB, email);
@@ -307,51 +327,32 @@ void VerifyEmail::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn,
             QProcess::startDetached(expandEnvVariables(app), parseArgs(toTEXT(cmdLine), -1));
 
             privTxt("A confirmation code was sent to your email address: " + email + "\n\n" + "Please enter that code now or leave blank to cancel: ");
-
-            emit enableMoreInput(true);
         }
     }
 }
 
-void IsEmailVerified::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void IsEmailVerified::procIn(const QByteArray &binIn, quint8 dType)
 {
-    Q_UNUSED(binIn);
+    Q_UNUSED(binIn)
 
     if (dType == TEXT)
     {
+        QByteArray uId = rdFromBlock(userId, BLKSIZE_USER_ID);
+
         Query db(this);
 
         db.setType(Query::PULL, TABLE_USERS);
         db.addColumn(COLUMN_EMAIL_VERIFIED);
-        db.addCondition(COLUMN_USERNAME, *sharedObjs->userName);
+        db.addCondition(COLUMN_USER_ID, uId);
         db.exec();
 
         mainTxt(boolStr(db.getData(COLUMN_EMAIL_VERIFIED).toBool()) + "\n");
     }
 }
 
-bool SetEmailTemplate::handlesGenfile()
+void SetEmailTemplate::procIn(const QByteArray &binIn, quint8 dType)
 {
-    return true;
-}
-
-void SetEmailTemplate::term()
-{
-    emit enableMoreInput(false);
-
-    textFromFile = false;
-    dataSent     = 0;
-
-    subject.clear();
-    bodyText.clear();
-    len.clear();
-}
-
-void SetEmailTemplate::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
-{
-    Q_UNUSED(sharedObjs);
-
-    if (moreInputEnabled() && (dType == GEN_FILE))
+    if ((flags & MORE_INPUT) && (dType == GEN_FILE))
     {
         bodyText.append(fromTEXT(binIn));
 
@@ -361,8 +362,6 @@ void SetEmailTemplate::procBin(const SharedObjs *sharedObjs, const QByteArray &b
 
         if (dataSent >= len.toInt())
         {
-            emit enableMoreInput(false);
-
             mainTxt("\nUpload complete.\n");
             proc();
         }
@@ -371,6 +370,7 @@ void SetEmailTemplate::procBin(const SharedObjs *sharedObjs, const QByteArray &b
     {
         QStringList args = parseArgs(binIn, 9);
 
+        dataSent     = 0;
         textFromFile = argExists("-client_file", args);
         subject      = getParam("-subject", args);
         bodyText     = getParam("-body", args);
@@ -392,22 +392,18 @@ void SetEmailTemplate::procBin(const SharedObjs *sharedObjs, const QByteArray &b
         if (eType == NONE)
         {
             errTxt("err: Which template do you want to change? -reset_template or -confirm_template not found.\n");
-            term();
         }
         else if (textFromFile && !isInt(len))
         {
             errTxt("err: '" + len + "' given in -len is not a valid integer.\n");
-            term();
         }
         else if (textFromFile && (len.toInt() <= 0))
         {
             errTxt("err: The text file size cannot be 0 or less than 0.\n");
-            term();
         }
         else if (textFromFile && (len.toInt() > 20000))
         {
             errTxt("err: The text file size is too large. it cannot exceed 20,000 bytes or 10,000 chars.\n");
-            term();
         }
         else
         {
@@ -429,9 +425,10 @@ void SetEmailTemplate::procBin(const SharedObjs *sharedObjs, const QByteArray &b
 
                 bodyText.clear();
 
-                emit enableMoreInput(true);
-                emit dataToClient(toTEXT("-to_host"), GEN_FILE);
-                emit dataToClient(QByteArray(), GEN_FILE);
+                flags |= MORE_INPUT;
+
+                emit procOut(toTEXT("-to_host"), GEN_FILE);
+                emit procOut(QByteArray(), GEN_FILE);
             }
             else
             {
@@ -518,10 +515,10 @@ void SetEmailTemplate::proc()
         if (execQuery) db.exec();
     }
 
-    term();
+    flags &= ~MORE_INPUT;
 }
 
-void PreviewEmail::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void PreviewEmail::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
@@ -565,11 +562,12 @@ void PreviewEmail::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn
             db.addColumn(subjectColumn);
             db.exec();
 
+            QString uName   = rdStringFromBlock(userName, BLKSIZE_USER_NAME);
             QString subject = db.getData(subjectColumn).toString();
             QString body    = db.getData(bodyColumn).toString();
 
             body.replace(DATE_SUB, date);
-            body.replace(USERNAME_SUB, *sharedObjs->userName);
+            body.replace(USERNAME_SUB, uName);
             body.replace(codeSub, code);
 
             QString     txt;

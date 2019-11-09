@@ -18,49 +18,32 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "../common.h"
+#include "../cmd_object.h"
 #include "table_viewer.h"
 
 QString rmFileSuffix(const QString &filePath);
 bool    validFileOnlyName(const QString &fileName);
 
-class UploadMod : public InternCommand
+class UploadMod : public CmdObject
 {
     Q_OBJECT
 
 private:
 
-    QProcess       *proc;
-    QString         clientFile;
-    QString         modName;
-    QString         modPath;
-    QTemporaryFile *fileBuff;
-    qint64          dSize;
-
-    void clearOnfailure();
-    void setup();
-    bool libExists(const QString &path);
-
-private slots:
-
-    void rdTextFromProc();
-    void rdErrFromProc();
-    void procFinished(int exStatus);
-    void procStartError(QProcess::ProcessError err);
+    bool isExecutable(const QString &path);
 
 public:
 
     static QString cmdName();
 
-    bool handlesGenfile();
-    void term();
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit UploadMod(QObject *parent = nullptr);
 };
 
 //-------------------------------
 
-class DelMod : public InternCommand
+class DelMod : public CmdObject
 {
     Q_OBJECT
 
@@ -68,7 +51,7 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit DelMod(QObject *parent = nullptr);
 };

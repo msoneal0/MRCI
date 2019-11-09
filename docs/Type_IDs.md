@@ -3,26 +3,34 @@
 All mrci frames transferred throughout this application are usually passed into various functions using a ```uchar``` numeric value to indicate the type of data being passed with the ```QByteArray``` that are also usually passed into the functions. The type id enum values are as follows:
 
 ```
-enum TypeID
+enum TypeID : quint8
 {
-    GEN_FILE    = 30,
-    TEXT        = 31,
-    ERR         = 32,
-    PRIV_TEXT   = 33,
-    IDLE        = 34,
-    HOST_CERT   = 35,
-    FILE_INFO   = 36,
-    PEER_INFO   = 37,
-    MY_INFO     = 38,
-    PEER_STAT   = 39,
-    P2P_REQUEST = 40,
-    P2P_CLOSE   = 41,
-    P2P_OPEN    = 42,
-    BYTES       = 43,
-    SESSION_ID  = 44,
-    NEW_CMD     = 45,
-    CMD_ID      = 46,
-    BIG_TEXT    = 47
+    GEN_FILE              = 1,
+    TEXT                  = 2,
+    ERR                   = 3,
+    PRIV_TEXT             = 4,
+    IDLE                  = 5,
+    HOST_CERT             = 6,
+    FILE_INFO             = 7,
+    PEER_INFO             = 8,
+    MY_INFO               = 9,
+    PEER_STAT             = 10,
+    P2P_REQUEST           = 11,
+    P2P_CLOSE             = 12,
+    P2P_OPEN              = 13,
+    BYTES                 = 14,
+    SESSION_ID            = 15,
+    NEW_CMD               = 16,
+    CMD_ID                = 17,
+    BIG_TEXT              = 18,
+    TERM_CMD              = 19,
+    HOST_VER              = 20,
+    PRIV_IPC              = 21,
+    PUB_IPC               = 22,
+    PUB_IPC_WITH_FEEDBACK = 23,
+    PING_PEERS            = 24,
+    CH_MEMBER_INFO        = 25,
+    CH_ID                 = 26
 };
 ```
 
@@ -131,8 +139,8 @@ This contains all of the information found in ```PEER_INFO``` for the local sess
 ```
   format:
   1. bytes[300-427] 128bytes - email (TEXT - padded with empty spaces)
-  2. bytes[428-451] 24bytes  - group name (TEXT - padded with empty spaces)
-  3. bytes[452]     1byte    - is email confirmed? (0x00 false, 0x01 true)
+  2. bytes[428-431] 4bytes   - host rank (32bit unsigned int)
+  3. bytes[432]     1byte    - is email confirmed? (0x00 false, 0x01 true)
 ```
 
 ```NEW_CMD```
@@ -142,17 +150,19 @@ This contains information about a new command that was added to the current sess
   format:
   1. bytes[0-1]     2bytes   - 16bit LE unsigned int (command id)
   2. bytes[2]       1byte    - bool (0x01 or 0x00) (handles gen file)
-  3. bytes[3-130]   128bytes - command name (TEXT - padded with empty spaces)
-  4. bytes[131-258] 128bytes - library name (TEXT - padded with empty spaces)
+  3. bytes[3-130]   128bytes - command name (TEXT - padded with 0x00)
+  4. bytes[131-258] 128bytes - library name (TEXT - padded with 0x00)
+  5. bytes[259-n]   variable - short text (16bit null terminated)
+  6. bytes[n-n]     variable - io text (16bit null terminated)
+  7. bytes[n-n]     variable - long text (16bit null terminated)
 
   notes:
   1. the handles gen file flag is a single byte 0x01 to indicate true and
      0x00 to indicate false. clients need to be aware of which command
      handles the GEN_FILE mini protocol because it requires user input at
      both ends (host and client).
-  2. the library name is what ever is returned by the command object's
-     ExternCommand::libText() function. this can contain the module name
-     and/or extra informaion the client can use to identify the command.
+  2. the library name can contain the module name and/or extra informaion 
+     the client can use to identify the library the command is a part of.
 ```
 
 ```CMD_ID```
@@ -200,6 +210,30 @@ format: ```28bytes - session id (224bit sha3 hash)```
 
 ```BYTES```
 This contains arbitrary binary data of any format that is not specialized for any internal objects in the host.
+
+```CH_MEMBER_INFO```
+This contains public information about a channel member.
+
+```
+  format:
+  1. bytes[0-7]  8bytes   - channel id (64bit unsigned int)
+  2. bytes[8-39] 32bytes  - user id (256bit hash)
+  3. bytes[40]   1byte    - is invite? (0x00=false, 0x01=true)
+  4. bytes[41]   1byte    - member's channel privilege level (8bit unsigned int)
+  5. bytes[42-n] variable - user name (TEXT - 16bit null terminated)
+  6. bytes[n-n]  variable - display name (TEXT - 16bit null terminated)
+  7. bytes[n-n]  variable - channel name (TEXT - 16bit null terminated)
+  
+  notes:
+  1. a 16bit null terminated TEXT formatted string ended with 2 bytes of
+     (0x00) to indicate the end of the string data.
+  2. the member's privilege level can be any of the values discribed in
+     section [5.3](Host_Features.md).
+  3. is invite? indicates if this user has received an invite to join
+     that channel by has not accepted yet. if, accepted the user will
+     become a full member of the channel at the level indicated by this
+     data type.
+```
 
 ### 4.3 GEN_FILE Example ###
 

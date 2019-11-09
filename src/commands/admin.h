@@ -18,8 +18,9 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "../common.h"
+#include "../cmd_object.h"
 
-class CloseHost : public InternCommand
+class CloseHost : public CmdObject
 {
     Q_OBJECT
 
@@ -27,14 +28,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit CloseHost(QObject *parent = nullptr);
 };
 
 //--------------------------------------
 
-class RestartHost : public InternCommand
+class RestartHost : public CmdObject
 {
     Q_OBJECT
 
@@ -42,14 +43,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit RestartHost(QObject *parent = nullptr);
 };
 
 //--------------------------------------
 
-class ServSettings : public InternCommand
+class ServSettings : public CmdObject
 {
     Q_OBJECT
 
@@ -66,8 +67,7 @@ public:
 
     static QString cmdName();
 
-    void term();
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit ServSettings(QObject *parent = nullptr);
 };

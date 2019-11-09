@@ -16,200 +16,244 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-TableViewer::TableViewer(QObject *parent) : InternCommand(parent)
+TableViewer::TableViewer(QObject *parent) : CmdObject(parent)
 {
     delOption = false;
 
-    term();
+    idle();
 }
 
-void TableViewer::term()
+void TableViewer::idle()
 {
-    emit enableMoreInput(false);
-
-    del    = false;
-    offset = 0;
-
-    cachedArgs.clear();
-    db.setType(Query::PULL, "");
+    flags     = 0;
+    offset    = 0;
+    delMode   = false;
+    condAdded = false;
 }
 
-void TableViewer::setParams(const QString &tbl, const QStringList &colms, bool allowDel)
+void TableViewer::setParams(const QString &mainTbl, bool allowDel)
 {
-    columns   = colms;
-    table     = tbl;
+    rdQuery.setType(Query::INNER_JOIN_PULL, mainTbl);
+    delQuery.setType(Query::DEL, mainTbl);
+
     delOption = allowDel;
 }
 
-void TableViewer::procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType)
+void TableViewer::addTableColumn(const QString &tbl, const QString &column)
 {
-    Q_UNUSED(sharedObjs);
+    if (columnType(column) == "BLOB")
+    {
+        blobIndexes.append(columns.size());
+    }
 
+    if (columnRows.isEmpty())
+    {
+        columnRows.append(QStringList());
+        columnRows.append(QStringList());
+    }
+
+    tables.append(tbl);
+    columns.append(column);
+    rdQuery.addTableColumn(tbl, column);
+
+    columnRows[0].append(column);
+    columnRows[1].append("-------");
+}
+
+void TableViewer::addJointColumn(const QString &tbl, const QString &column)
+{
+    rdQuery.addJoinCondition(column, tbl);
+}
+
+void TableViewer::nextPage()
+{
+    rdQuery.setQueryLimit(MAX_LS_ENTRIES, offset);
+    rdQuery.exec();
+
+    dispData();
+
+    if (rdQuery.rows() == MAX_LS_ENTRIES)
+    {
+        offset += MAX_LS_ENTRIES;
+
+        askPage();
+    }
+    else
+    {
+        idle();
+    }
+}
+
+void TableViewer::addWhereConds(const QStringList &userArgs)
+{
+    if (delOption)
+    {
+        delMode = argExists("-delete", userArgs);
+    }
+
+    rdQuery.clearConditions();
+    delQuery.clearConditions();
+
+    for (int i = 0; i < columns.size(); ++i)
+    {
+        QString value = getParam("-" + columns[i], userArgs);
+
+        if (!value.isEmpty())
+        {
+            if (delMode)
+            {
+                mainTxt("delete parameter: " + columns[i] + " ~= " + value + "\n");
+
+                condAdded = true;
+            }
+
+            rdQuery.addCondition(columns[i], value, Query::LIKE, tables[i]);
+            delQuery.addCondition(columns[i], value, Query::LIKE, tables[i]);
+        }
+    }
+
+    if (condAdded)
+    {
+        mainTxt("\n");
+    }
+}
+
+void TableViewer::askDelete()
+{
+    if (condAdded)
+    {
+        mainTxt("This will delete rows from the table according to the parameters above. continue (y/n)?: ");
+    }
+    else
+    {
+        mainTxt("This will delete all rows in the table. continue (y/n)?: ");
+    }
+
+    flags |= MORE_INPUT;
+}
+
+void TableViewer::askPage()
+{
+    mainTxt("\nnext page (y/n)?: ");
+
+    flags |= MORE_INPUT;
+}
+
+QList<QStringList> TableViewer::toStrings(const QList<QList<QVariant> > &data)
+{
+    QList<QStringList> ret;
+
+    for (auto&& srcRow: data)
+    {
+        QStringList dstRow;
+
+        for (int i = 0; i < srcRow.size(); ++i)
+        {
+            if (blobIndexes.contains(i))
+            {
+                dstRow.append(srcRow[i].toByteArray().toHex());
+            }
+            else
+            {
+                dstRow.append(srcRow[i].toString());
+            }
+        }
+
+        ret.append(dstRow);
+    }
+
+    return ret;
+}
+
+QList<int> TableViewer::getColumnLens(const QList<QStringList> &data)
+{
+    QList<int> ret;
+
+    for (int i = 0; i < columns.size(); ++i)
+    {
+        ret.append(0);
+    }
+
+    for (auto&& row: data)
+    {
+        for (int i = 0; i < row.size(); ++i)
+        {
+            if (row[i].size() >= ret[i])
+            {
+                ret[i] = row[i].size() + 4;
+            }
+        }
+    }
+
+    return ret;
+}
+
+void TableViewer::dispData()
+{
+    QList<QStringList> tableRows = toStrings(rdQuery.allData());
+    QList<int>         lens      = getColumnLens(columnRows + tableRows);
+
+    for (auto&& row: columnRows + tableRows)
+    {
+        for (int i = 0; i < row.size(); ++i)
+        {
+            mainTxt(row[i].leftJustified(lens[i], ' '));
+        }
+
+        mainTxt("\n");
+    }
+}
+
+void TableViewer::procIn(const QByteArray &binIn, quint8 dType)
+{
     if (dType == TEXT)
     {
-        QStringList args  = parseArgs(binIn, -1);
-        bool        close = false;
-
-        if (delOption && argExists("-delete", args))
+        if (flags & MORE_INPUT)
         {
-            del = true;
-        }
+            QString text = fromTEXT(binIn).toLower();
 
-        if (moreInputEnabled() && !del)
-        {
-            if (args.contains("q", Qt::CaseInsensitive))
+            if (text == "y")
             {
-                close = true;
+                if (delMode)
+                {
+                    delQuery.exec();
+
+                    mainTxt(delQuery.errDetail());
+                    idle();
+                    onDel();
+                }
+                else
+                {
+                    nextPage();
+                }
+            }
+            else if (text == "n")
+            {
+                idle();
             }
             else
             {
-                offset += MAX_LS_ENTRIES;
-                args    = cachedArgs;
-            }
-        }
-
-        if (close)
-        {
-            term();
-        }
-        else if (moreInputEnabled() && del)
-        {
-            QString ans = fromTEXT(binIn);
-
-            if (noCaseMatch("y", ans))
-            {
-                db.exec();
-
-                term();
-            }
-            else if (noCaseMatch("n", ans))
-            {
-                term();
-            }
-            else
-            {
-                mainTxt("continue? (y/n): ");
+                if (delMode)
+                {
+                    askDelete();
+                }
+                else
+                {
+                    askPage();
+                }
             }
         }
         else
         {
-            if (del)
+            addWhereConds(parseArgs(binIn, -1));
+
+            if (delMode)
             {
-                db.setType(Query::DEL, table);
+                askDelete();
             }
             else
             {
-                db.setType(Query::PULL, table);
-                db.setQueryLimit(MAX_LS_ENTRIES, offset);
-            }
-
-            bool noDelParams = true;
-
-            for (int i = 0; i < columns.size(); ++i)
-            {
-                if (!del) db.addColumn(columns[i]);
-
-                QString param = getParam("-" + columns[i], args);
-
-                if (!param.isEmpty())
-                {
-                    if (del)
-                    {
-                        if (noDelParams) mainTxt("\n");
-
-                        mainTxt("delete param: " + columns[i] + " = " + param + "\n");
-
-                        noDelParams = false;
-                    }
-
-                    db.addCondition(columns[i], param, Query::LIKE);
-                }
-            }
-
-            if (del)
-            {
-                emit enableMoreInput(true);
-
-                if (noDelParams) mainTxt("\nabout to delete ALL entries in this table.\n");
-
-                mainTxt("\ncontinue? (y/n): ");
-            }
-            else
-            {
-                db.exec();
-
-                QStringList        separators;
-                QList<QStringList> tableData;
-                QList<int>         justLens;
-
-                for (int i = 0; i < columns.size(); ++i)
-                {
-                    justLens.append(0);
-                    separators.append("-------");
-                }
-
-                for (int i = 0; i < db.rows() + 2; ++i)
-                {
-                    QStringList columnData;
-
-                    if (i == 0)
-                    {
-                        columnData = columns;
-                    }
-                    else if (i == 1)
-                    {
-                        columnData = separators;
-                    }
-                    else
-                    {
-                        for (int j = 0; j < columns.size(); ++j)
-                        {
-                            if (columnType(columns[j]) == "BLOB")
-                            {
-                                columnData.append(db.getData(columns[j], i - 2).toByteArray().toHex());
-                            }
-                            else
-                            {
-                                columnData.append(db.getData(columns[j], i - 2).toString());
-                            }
-                        }
-                    }
-
-                    for (int k = 0; k < justLens.size(); ++k)
-                    {
-                        if (justLens[k] < columnData[k].size()) justLens[k] = columnData[k].size();
-                    }
-
-                    tableData.append(columnData);
-                }
-
-                mainTxt("\n");
-
-                for (auto&& row : tableData)
-                {
-                    for (int i = 0; i < row.size(); ++i)
-                    {
-                        mainTxt(row[i].leftJustified(justLens[i] + 2, ' '));
-                    }
-
-                    mainTxt("\n");
-                }
-
-                if (db.rows() == MAX_LS_ENTRIES)
-                {
-                    if (!moreInputEnabled())
-                    {
-                        cachedArgs = args;
-
-                        emit enableMoreInput(true);
-                    }
-
-                    mainTxt("\n[enter or any] more, [q] close: ");
-                }
-                else
-                {
-                    term();
-                }
+                nextPage();
             }
         }
     }

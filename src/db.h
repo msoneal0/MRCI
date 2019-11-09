@@ -37,38 +37,26 @@
 #include "shell.h"
 
 #define APP_NAME   "MRCI"
-#define APP_VER    "1.1.3"
+#define APP_VER    "2.0.0"
 #define APP_TARGET "mrci"
 
 #ifdef Q_OS_WIN
 
-#define DEFAULT_ZIPBIN    "%ProgramW6432%\\7-Zip\\7z.exe"
 #define DEFAULT_MAILBIN   "%COMSPEC%"
 #define DEFAULT_MAIL_SEND "echo %message_body% | mutt -s %subject% %target_email%"
 #define DEFAULT_DB_PATH   "%LOCALAPPDATA%\\%EXENAME%\\data.db"
-#define DEFAULT_MOD_PATH  "%LOCALAPPDATA%\\%EXENAME%\\modules"
-#define DEFAULT_PIPE_PATH "%LOCALAPPDATA%\\%EXENAME%\\pipes"
 
 #else
 
-#define DEFAULT_ZIPBIN    "/usr/bin/7z"
 #define DEFAULT_MAILBIN   "/bin/sh"
 #define DEFAULT_MAIL_SEND "-c \"echo %message_body% | mutt -s %subject% %target_email%\""
 #define DEFAULT_DB_PATH   "$HOME/.$EXENAME/data.db"
-#define DEFAULT_MOD_PATH  "$HOME/.$EXENAME/modules"
-#define DEFAULT_PIPE_PATH "$HOME/.$EXENAME/pipes"
 
 #endif
 
 #define ENV_DB_PATH             "MRCI_DB_PATH"
-#define ENV_MOD_PATH            "MRCI_MOD_PATH"
-#define ENV_PIPE_PATH           "MRCI_PIPE_PATH"
 #define ENV_EXENAME             "EXENAME"
 #define ROOT_USER               "root"
-#define DEFAULT_UGROUP          "users"
-#define DEFAULT_PASSWRD         "R00tPa$$w0rd"
-#define OUTPUT_DIR_SUB          "%output_dir%"
-#define INPUT_DIR_SUB           "%input_dir%"
 #define SUBJECT_SUB             "%subject%"
 #define MSG_SUB                 "%message_body%"
 #define TARGET_EMAIL_SUB        "%target_email%"
@@ -77,8 +65,6 @@
 #define USERNAME_SUB            "%user_name%"
 #define DATE_SUB                "%date%"
 #define INTERN_MOD_NAME         ":internal_mod"
-#define DEFAULT_ZIPEXTRACT      "x -y %input_dir% -o%output_dir%"
-#define DEFAULT_ZIPCOMPRESS     "a -y %output_dir% %input_dir%"
 #define DEFAULT_CONFIRM_SUBJECT "Email Verification"
 #define DEFAULT_TEMP_PW_SUBJECT "Password Reset"
 #define DEFAULT_LISTEN_ADDRESS  "127.0.0.1"
@@ -87,6 +73,7 @@
 #define DEFAULT_LOCK_LIMIT      20
 #define DEFAULT_MAXSESSIONS     100
 #define DEFAULT_MAX_SUBS        50
+#define DEFAULT_INIT_RANK       2
 #define MAX_LS_ENTRIES          50
 #define MAX_CMDS_PER_MOD        256
 
@@ -106,7 +93,6 @@ Date requested: %date%."
 #define TABLE_IPHIST        "ip_history"
 #define TABLE_IPBANS        "ban_list"
 #define TABLE_USERS         "users"
-#define TABLE_GROUPS        "groups"
 #define TABLE_SERV_SETTINGS "host_settings"
 #define TABLE_CMD_RANKS     "command_ranks"
 #define TABLE_AUTH_LOG      "auth_log"
@@ -125,17 +111,14 @@ Date requested: %date%."
 #define COLUMN_SESSION_ID      "session_id"
 #define COLUMN_TIME            "time_stamp"
 #define COLUMN_USERNAME        "user_name"
-#define COLUMN_GRNAME          "group_name"
 #define COLUMN_PORT            "port"
 #define COLUMN_BAN_LIMIT       "auto_ban_threshold"
 #define COLUMN_LOCK_LIMIT      "auto_lock_threshold"
 #define COLUMN_MAXSESSIONS     "max_sessions"
 #define COLUMN_HOST_RANK       "host_rank"
-#define COLUMN_COMMAND         "command_obj_name"
-#define COLUMN_MOD_NAME        "mod_name"
-#define COLUMN_MOD_MAIN        "mod_main_lib"
-#define COLUMN_CMD_ID_OFFS     "command_id_offset"
-#define COLUMN_INITGROUP       "initial_group"
+#define COLUMN_COMMAND         "command_name"
+#define COLUMN_MOD_MAIN        "module_executable"
+#define COLUMN_INITRANK        "initial_host_rank"
 #define COLUMN_PUB_USERS       "allow_public_registrations"
 #define COLUMN_SALT            "salt"
 #define COLUMN_HASH            "hash"
@@ -173,18 +156,27 @@ Date requested: %date%."
 #define COLUMN_LOWEST_LEVEL    "lowest_access_level"
 #define COLUMN_ACCESS_LEVEL    "access_level"
 #define COLUMN_MAX_SUB_CH      "max_sub_channels"
+#define COLUMN_APP_NAME        "client_app"
+#define COLUMN_DEFAULT_PASS    "default_password"
 
+QString    genPw();
+QList<int> genSequence(int min, int max, int len);
+QChar      genLetter();
+QChar      genNum();
+QChar      genSpecialChar();
+int        inRange(int pos, int min, int max);
 QString    sqlDataPath();
 QString    columnType(const QString &column);
-QString    columnDefault(const QString &column, const QString &table);
-QString    initGroup();
-QByteArray getSalt(const QString &userName, const QString &table);
+quint32    initHostRank();
+QByteArray getSalt(const QByteArray &uId, const QString &table);
 QByteArray genUniqueHash();
 bool       createUser(const QString &userName, const QString &email, const QString &dispName, const QString &password);
-bool       createTempPw(const QString &userName, const QString &email, const QString &password);
-bool       updatePassword(const QString &userName, const QString &password, const QString &table, bool requireNewPass = false);
-bool       auth(const QString &userName, const QString &password, const QString &table);
+bool       createTempPw(const QByteArray &uId, const QString &password);
+bool       updatePassword(const QByteArray &uId, const QString &password, const QString &table, bool requireNewPass = false);
+bool       auth(const QByteArray &uId, const QString &password, const QString &table);
 void       cleanupDbConnection();
+void       moveCharLeft(int pos, QString &str);
+void       moveCharRight(int pos, QString &str);
 
 class Query : public QObject
 {
@@ -198,6 +190,7 @@ public:
         PUSH,
         PULL,
         DEL,
+        INNER_JOIN_PULL,
         CREATE_TABLE,
         ALTER_TABLE
     };
@@ -225,30 +218,34 @@ public:
 
     explicit Query(QObject *parent = nullptr);
 
-    void        addRandBlob(const QString &column, int len);
-    void        addCondition(const QString &column, const QVariant &data, Condition cond = EQUAL);
-    void        addUnique(const QString &column);
-    void        setPrimary(const QString &column);
-    void        setPrimaryAsc(const QString &column);
-    void        setPrimaryDesc(const QString &column);
-    void        setQueryLimit(uint value, uint offset = 0);
-    void        increment(const QString &column, double value);
-    void        decrement(const QString &column, double value);
-    void        addForeign(const QString &column, const QString &refTable, const QString &refColum, FKAction onDel = RESTRICT, FKAction onUpdate = RESTRICT);
-    void        addColumn(const QString &column);
-    void        addColumn(const QString &column, const QVariant &dataIn);
-    void        setType(QueryType qType, const QString &tbl);
-    void        enableForeignKeys(bool state);
-    void        setTextEncoding(const QString &encoding);
-    int         rows();
-    int         columns();
-    bool        exec();
-    bool        createExecuted();
-    bool        inErrorstate();
-    QStringList tables();
-    QStringList columnsInTable(const QString &tbl);
-    QVariant    getData(const QString &column, int row = 0);
-    QString     errDetail();
+    void                     addRandBlob(const QString &column, int len);
+    void                     addCondition(const QString &column, const QVariant &data, Condition cond = EQUAL, const QString &tbl = QString());
+    void                     addJoinCondition(const QString &column, const QString &joinTable, Condition cond = EQUAL);
+    void                     addUnique(const QString &column);
+    void                     setPrimary(const QString &column);
+    void                     setPrimaryAsc(const QString &column);
+    void                     setPrimaryDesc(const QString &column);
+    void                     setQueryLimit(uint value, uint offset = 0);
+    void                     increment(const QString &column, double value);
+    void                     decrement(const QString &column, double value);
+    void                     addForeign(const QString &column, const QString &refTable, const QString &refColum, FKAction onDel = RESTRICT, FKAction onUpdate = RESTRICT);
+    void                     addColumn(const QString &column);
+    void                     addColumn(const QString &column, const QVariant &dataIn);
+    void                     addTableColumn(const QString &table, const QString &column);
+    void                     setType(QueryType qType, const QString &tbl);
+    void                     enableForeignKeys(bool state);
+    void                     setTextEncoding(const QString &encoding);
+    void                     clearConditions();
+    int                      rows();
+    int                      columns();
+    bool                     exec();
+    bool                     createExecuted();
+    bool                     inErrorstate();
+    QStringList              tables();
+    QStringList              columnsInTable(const QString &tbl);
+    QVariant                 getData(const QString &column, int row = 0);
+    QString                  errDetail();
+    QList<QList<QVariant> > &allData();
 
 private:
 
@@ -261,6 +258,7 @@ private:
     QString                 limit;
     QString                 qStr;
     QString                 wStr;
+    QString                 jStr;
     QueryType               type;
     QList<int>              directBind;
     QStringList             columnsAsPassed;
@@ -272,7 +270,6 @@ private:
     bool createRedirect();
     void postUpdate();
     void preExec();
-    void addComma(QString &str, bool *toggle);
     void changeValue(const QString &column, double value, const QString &sign);
 };
 

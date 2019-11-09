@@ -1,6 +1,6 @@
 ### Summary ###
 
-get detailed information about a file system object (file,directory,symlink) in the host.
+get detailed information about a file in the host file system.
 
 ### IO ###
 

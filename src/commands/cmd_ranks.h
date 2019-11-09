@@ -18,7 +18,10 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "../common.h"
+#include "../cmd_object.h"
 #include "table_viewer.h"
+
+bool commandHasRank(const QString &mod, const QString &cmdName);
 
 class LsCmdRanks : public TableViewer
 {
@@ -33,7 +36,7 @@ public:
 
 //------------------------
 
-class AssignCmdRank : public InternCommand
+class AssignCmdRank : public CmdObject
 {
     Q_OBJECT
 
@@ -41,14 +44,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit AssignCmdRank(QObject *parent = nullptr);
 };
 
 //------------------------
 
-class RemoveCmdRank : public InternCommand
+class RemoveCmdRank : public CmdObject
 {
     Q_OBJECT
 
@@ -56,7 +59,7 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit RemoveCmdRank(QObject *parent = nullptr);
 };

@@ -18,6 +18,7 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "../common.h"
+#include "../cmd_object.h"
 
 enum TemplateType
 {
@@ -26,31 +27,32 @@ enum TemplateType
     NONE
 };
 
-class RecoverAcct : public InternCommand
+bool expired(const QByteArray &uId);
+void delRecoverPw(const QByteArray &uId);
+
+class RecoverAcct : public CmdObject
 {
     Q_OBJECT
 
 private:
 
-    QString uName;
-    bool    inputOk;
+    QByteArray uId;
+    bool       inputOk;
 
-    void delRecoverPw();
-    void addToThreshold(const SharedObjs *sharedObjs);
+    void addToThreshold();
 
 public:
 
     static QString cmdName();
 
-    void term();
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit RecoverAcct(QObject *parent = nullptr);
 };
 
 //---------------
 
-class ResetPwRequest : public InternCommand
+class ResetPwRequest : public CmdObject
 {
     Q_OBJECT
 
@@ -58,34 +60,34 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, uchar dType);
 
     explicit ResetPwRequest(QObject *parent = nullptr);
 };
 
 //----------------
 
-class VerifyEmail : public InternCommand
+class VerifyEmail : public CmdObject
 {
     Q_OBJECT
 
 private:
 
-    QString code;
+    QString    code;
+    QByteArray uId;
 
 public:
 
     static QString cmdName();
 
-    void term();
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit VerifyEmail(QObject *parent = nullptr);
 };
 
 //----------------
 
-class IsEmailVerified : public InternCommand
+class IsEmailVerified : public CmdObject
 {
     Q_OBJECT
 
@@ -93,14 +95,14 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit IsEmailVerified(QObject *parent = nullptr);
 };
 
 //------------------
 
-class SetEmailTemplate : public InternCommand
+class SetEmailTemplate : public CmdObject
 {
     Q_OBJECT
 
@@ -119,16 +121,14 @@ public:
 
     static QString cmdName();
 
-    bool handlesGenfile();
-    void term();
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit SetEmailTemplate(QObject *parent = nullptr);
 };
 
 //-----------------
 
-class PreviewEmail : public InternCommand
+class PreviewEmail : public CmdObject
 {
     Q_OBJECT
 
@@ -136,7 +136,7 @@ public:
 
     static QString cmdName();
 
-    void procBin(const SharedObjs *sharedObjs, const QByteArray &binIn, uchar dType);
+    void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit PreviewEmail(QObject *parent = nullptr);
 };

@@ -1,6 +1,6 @@
 ### Summary ###
 
-change the user account email address.
+set the user account email address.
 
 ### IO ###
 
