@@ -1,6 +1,6 @@
-### 4.1 Type IDs ###
+### 3.1 Type IDs ###
 
-All mrci frames transferred throughout this application are usually passed into various functions using a ```uchar``` numeric value to indicate the type of data being passed with the ```QByteArray``` that are also usually passed into the functions. The type id enum values are as follows:
+All mrci frames transferred throughout this application have an 8bit numeric value to indicate the type of data being passed with the binary data. The type id enum values are as follows:
 
 ```
 enum TypeID : quint8
@@ -30,21 +30,24 @@ enum TypeID : quint8
     PUB_IPC_WITH_FEEDBACK = 23,
     PING_PEERS            = 24,
     CH_MEMBER_INFO        = 25,
-    CH_ID                 = 26
+    CH_ID                 = 26,
+    KILL_CMD              = 27,
+    HALT_CMD              = 28,
+    RESUME_CMD            = 29
 };
 ```
 
-### 4.2 Type Descriptions ###
+### 3.2 Type Descriptions ###
     
 ```TEXT```
-This is text that can be displayed directly to the user or pass arguments for the command object to process.
+This is text that can be displayed directly to the user, pass command line arguments to be processed or used to carry text data within other data types.
 
 format: ```[UTF-16LE_string] (no BOM)```
 
 ```GEN_FILE```
-This is a file transfer type id that can be used to transfer any type of file type (music, photos, documents, etc...). It operates in its own protocol of sorts. The 1st GEN_FILE frame received by the host or client is TEXT parameters similar to what you see in terminal command lines with at least one of the arguments listed below. The next set of GEN_FILE frames received by the host or client is then the binary data that needs to be written to an open file or streamed until the limit defined in -len is meet.
+This is a file transfer type id that can be used to transfer any file type (music, photos, documents, etc...). It operates in its own protocol of sorts. The 1st GEN_FILE frame received by the host or client is TEXT parameters similar to what you see in terminal command lines with at least one of the arguments listed below. The next set of GEN_FILE frames received by the host or client is then the binary data that needs to be written to an open file or streamed until the limit defined in -len is meet.
 
-The host or the client can be set as the sender or receiver of the GEN_FILE binary data. Which ever is designated as the receiver by the TEXT parameters need to send an empty GEN_FILE frame to start the process. An example if this can be found in section 4.3.
+The host or the client can be set as the sender or receiver of the GEN_FILE binary data. Which ever is designated as the receiver by the TEXT parameters need to send an empty GEN_FILE frame to start the process. An example if this can be found in section 3.3.
 
 arguments:
 
@@ -76,22 +79,56 @@ This id can be treated exactly like TEXT except this should tell the client to h
 Also formatted exactly like TEXT but this indicates to the client that this is a large body of text that is recommended to be word wrapped when displaying to the user. It can contain line breaks so clients are also recommended to honor those line breaks.
 
 ```IDLE```
-This doesn't carry any actual data, instead this indicates that the command id that sent it has finished it's task. Commands objects are not allowed to send this directly, the ```CmdExecutor``` will handle it.
+This doesn't carry any actual data, instead this indicates that the command-branch id that sent it has finished it's task. Modules that send this doesn't need to terminate it's process.
+
+```KILL_CMD```
+This doesn't carry any actual data, instead can be sent by the client or session object to tell the command-branch id sent in the frame to terminate the module process. Modules that receive this need to send a IDLE frame if a command is still running and then terminate itself. The module will have 3 seconds to do this before it is force killed by the session.
+
+```HALT_CMD```
+This doesn't carry any actual data, instead can be sent by the client or session object to tell the command-branch id sent in the frame to pause/halt the current task that the command is currently running. All modules are not obligated to support this feature but highly recommended.
+
+```RESUME_CMD```
+This is the other half of HALT_CMD that tells the module to resume the command task it was running. 
 
 ```HOST_CERT```
 Just as the name implies, this data type is used by the host to send the host SSL certificate while setting up an SSL connection.
+
+```HOST_VER```
+This data structure carries 3 numeric values that represent the host version as described in section [1.3](protocol.md).
+
+```
+  format:
+  1. bytes[0-1] - version major (16bit little endian uint)
+  2. bytes[2-3] - version minor (16bit little endian uint)
+  3. bytes[4-5] - version patch (16bit little endian uint)
+```
+
+```PRIV_IPC```
+This is a data structure used to by modules to run async commands on the local session object only.
+
+```
+  format:
+  1. bytes[0-1] - async command id (16bit little endian uint)
+  2. bytes[2-n] - payload (data to be processed by async command)
+```
+
+```PUB_IPC```
+This is formatted exactly like PRIV_IPC except it is used by modules to run async commands on all connected peers in the host while avoiding a run on the local session object.
+
+```PUB_IPC_WITH_FEEDBACK```
+This combines the functionality of PUB_IPC and PRIV_IPC. It runs async commands on all connected peers and on the local session object.
 
 ```FILE_INFO```
 This is a data structure that carries information about a file system object (file,dir,link).
 
 ```
   format:
-  1. bytes[0]           - flags (8bit little endian uint)
-  2. bytes[1-8]         - creation time in msec since Epoch UTC (64bit little endian uint)
-  3. bytes[9-16]        - modification time in msec since Epoch UTC (64bit little endian uint)
-  4. bytes[17-24]       - file size (64bit little endian uint)
-  5. bytes[25-variable] - file name (UTF16-LE string, 16bit terminated)
-  6. bytes[variable]    - symmlink target if it is a symmlink (UTF16-LE string, 16bit terminated)
+  1. bytes[0]     - flags (8bit little endian uint)
+  2. bytes[1-8]   - creation time in msec since Epoch UTC (64bit little endian uint)
+  3. bytes[9-16]  - modification time in msec since Epoch UTC (64bit little endian uint)
+  4. bytes[17-24] - file size (64bit little endian uint)
+  5. bytes[25-n]  - file name (UTF16-LE string, 16bit terminated)
+  6. bytes[n-n]   - symmlink target if it is a symmlink (UTF16-LE string, 16bit terminated)
 
   notes:
   1. 16bit terminated UTF-16LE strings are basically
@@ -117,9 +154,9 @@ This carry some user account and session information about a peer client connect
   format:
   1. bytes[0-27]    28bytes  - session id (224bit hash)
   2. bytes[28-59]   32bytes  - user id (256bit hash)
-  3. bytes[60-107]  48bytes  - user name (TEXT - padded with empty spaces)
-  4. bytes[108-235] 128bytes - app name (TEXT - padded with empty spaces)
-  5. bytes[236-299] 64bytes  - disp name (TEXT - padded with empty spaces)
+  3. bytes[60-107]  48bytes  - user name (TEXT - padded with 0x00)
+  4. bytes[108-235] 128bytes - app name (TEXT - padded with 0x00)
+  5. bytes[236-299] 64bytes  - disp name (TEXT - padded with 0x00)
 
   notes:
   1. the session id is unique to the peer's session connection only. it
@@ -133,12 +170,15 @@ This carry some user account and session information about a peer client connect
      name.
 ```
 
+```PING_PEERS```
+This formatted extactly as PEER_INFO except it can be used the ASYNC_LIMITED_CAST [async](async.md) command to tell all peer sessions that receive it to send PEER_INFO frame about you to their own clients and to return PEER_INFO frames about themselves to you.
+
 ```MY_INFO```
 This contains all of the information found in ```PEER_INFO``` for the local session but also includes the following:
 
 ```
   format:
-  1. bytes[300-427] 128bytes - email (TEXT - padded with empty spaces)
+  1. bytes[300-427] 128bytes - email (TEXT - padded with 0x00)
   2. bytes[428-431] 4bytes   - host rank (32bit unsigned int)
   3. bytes[432]     1byte    - is email confirmed? (0x00 false, 0x01 true)
 ```
@@ -170,6 +210,16 @@ This type id carries a 16bit unsigned LE int representing a command id.
 
 format: ```2bytes - 16bit LE unsigned int (command id)```
 
+```CH_ID```
+This type id carries a 64bit unsighed LE int indicating the channel id.
+
+format: ```8bytes - 64bit LE unsigned int (channel id)```
+
+```SESSION_ID```
+This is a fixed length 28byte(224bit) sha3 hash of a client's session id connected to the host. This is unique to just the client's tcp connection with the host. This can change upon re-connection.
+
+format: ```28bytes - session id (224bit sha3 hash)```
+
 ```PEER_STAT```
 This contain status information of a peer client when the peer changes sub-channels or disconnects from the host.
 
@@ -190,26 +240,21 @@ This contain status information of a peer client when the peer changes sub-chann
      disconnected since you will no longer send/receive data with this peer.
 ```
 
-```SESSION_ID```
-This is a fixed length 28byte(224bit) sha3 hash of a client's session id connected to the host. This is unique to just the client's tcp connection with the host. This can change upon re-connection.
-
-format: ```28bytes - session id (224bit sha3 hash)```
-
 ```P2P_REQUEST```
-This is formatted extactly like ```PEER_INFO``` except this is allowed to be sent directly to the target peer without restriction when using the ```ExternCommand::toPeer()``` signal ([Command_Objects.md](Command_Objects.md), section 2.5). It will be up to the target peer to respond with a ```P2P_OPEN``` for the host to then unrestrict ```toPeer()``` so it will then be able to send/received other TypeIDs with this peer until ```P2P_CLOSE``` is sent/received. ```P2P_CLOSE``` can also be sent to decline the request. When sending this TypeID, the ```CmdExecutor``` will ignore the data passed into ```toPeer()``` from the command object and substitute with it's own generated ```P2P_REQUEST``` to prevent fraudulent request from getting sent out to all sessions; because of this, it is ok and preferable to send an empty ```P2P_REQUEST``` with the ```toPeer()``` signal.
+This is formatted extactly like PEER_INFO except it is allowed to be sent directly to a peer session without retriction via the ASYNC_P2P [async](async.md) command. It will be up to the target peer to respond with a P2P_OPEN for the session to then unrestrict ASYNC_P2P so it will then be able to send/received other TypeIDs with this peer until P2P_CLOSE is sent/received. P2P_CLOSE can also be sent to decline the request.
 
 ```P2P_OPEN```
-This contains a 28byte session id hash of the peer session that you or the peer will allow direct communication with when using the ```ExternCommand::toPeer()``` signal.
+This contains a 28byte session id hash of the peer session that you or the peer will allow direct communication with ASYNC_P2P.
 
 format: ```28bytes - session id (224bit sha3 hash)```
 
 ```P2P_CLOSE```
-This contains a 28byte session id hash of the peer session that you or the peer want to close direct communication with when using the ```ExternCommand::toPeer()``` signal.
+This is the other half of P2P_OPEN that will close direct communication with ASYNC_P2P.
 
 format: ```28bytes - session id (224bit sha3 hash)```
 
 ```BYTES```
-This contains arbitrary binary data of any format that is not specialized for any internal objects in the host.
+This contains arbitrary binary data of any format.
 
 ```CH_MEMBER_INFO```
 This contains public information about a channel member.
@@ -228,14 +273,14 @@ This contains public information about a channel member.
   1. a 16bit null terminated TEXT formatted string ended with 2 bytes of
      (0x00) to indicate the end of the string data.
   2. the member's privilege level can be any of the values discribed in
-     section [5.3](Host_Features.md).
+     section [4.3](host_features.md).
   3. is invite? indicates if this user has received an invite to join
      that channel by has not accepted yet. if, accepted the user will
      become a full member of the channel at the level indicated by this
      data type.
 ```
 
-### 4.3 GEN_FILE Example ###
+### 3.3 GEN_FILE Example ###
 
 Setup:
 

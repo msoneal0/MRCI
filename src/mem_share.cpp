@@ -351,7 +351,6 @@ bool MemShare::createSharedMem(const QByteArray &sesId, const QString &hostKey)
     len += BLKSIZE_APP_NAME;                              // appName
     len += BLKSIZE_USER_NAME;                             // userName
     len += BLKSIZE_DISP_NAME;                             // displayName
-    len += BLKSIZE_GROUP_NAME;                            // groupName
     len += BLKSIZE_HOST_RANK;                             // hostRank
     len += BLKSIZE_ACT_UPDATE;                            // activeUpdate
     len += BLKSIZE_CH_OVERRIDE;                           // chOwnerOverride

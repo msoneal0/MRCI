@@ -101,17 +101,20 @@ bool ModProcess::allowCmdLoad(const QString &cmdName)
 {
     bool ret = false;
 
-    if (flags & (LOADING_PUB_CMDS | LOADING_EXEMPT_CMDS))
+    if (validCommandName(cmdName))
     {
-        ret = true;
-    }
-    else if (!cmdRanks.contains(cmdName))
-    {
-        ret = (hostRank == 1);
-    }
-    else
-    {
-        ret = (cmdRanks[cmdName] >= hostRank);
+        if (flags & (LOADING_PUB_CMDS | LOADING_EXEMPT_CMDS))
+        {
+            ret = true;
+        }
+        else if (!cmdRanks.contains(cmdName))
+        {
+            ret = (hostRank == 1);
+        }
+        else
+        {
+            ret = (cmdRanks[cmdName] >= hostRank);
+        }
     }
 
     return ret;
@@ -121,54 +124,63 @@ void ModProcess::onDataFromProc(quint8 typeId, const QByteArray &data)
 {
     if ((typeId == NEW_CMD) && (flags & SESSION_PARAMS_SET))
     {
-        QString cmdName = fromTEXT(data.mid(3, 128)).trimmed().toLower();
-
-        if (isCmdLoaded(cmdName))
+        if (data.size() >= 259)
         {
-            if (!allowCmdLoad(cmdName))
-            {
-                quint16 cmdId = cmdRealNames->key(cmdName);
+            // a valid NEW_CMD must have a minimum of 259 bytes.
 
-                cmdIds->removeOne(cmdId);
-                cmdRealNames->remove(cmdId);
-                cmdUniqueNames->remove(cmdId);
-                cmdAppById->remove(cmdId);
+            QString cmdName = fromTEXT(data.mid(3, 128)).trimmed().toLower();
 
-                if (modCmdNames->contains(program()))
-                {
-                    modCmdNames->operator[](program()).removeOne(cmdName);
-                }
+             if (isCmdLoaded(cmdName))
+             {
+                 if (!allowCmdLoad(cmdName))
+                 {
+                     quint16 cmdId = cmdRealNames->key(cmdName);
 
-                emit cmdUnloaded(cmdId);
-                emit dataToClient(toCmdId32(ASYNC_RM_CMD, 0), wrInt(cmdId, 16), CMD_ID);
-            }
+                     cmdIds->removeOne(cmdId);
+                     cmdRealNames->remove(cmdId);
+                     cmdUniqueNames->remove(cmdId);
+                     cmdAppById->remove(cmdId);
+
+                     if (modCmdNames->contains(program()))
+                     {
+                         modCmdNames->operator[](program()).removeOne(cmdName);
+                     }
+
+                     emit cmdUnloaded(cmdId);
+                     emit dataToClient(toCmdId32(ASYNC_RM_CMD, 0), wrInt(cmdId, 16), CMD_ID);
+                 }
+             }
+             else if (allowCmdLoad(cmdName))
+             {
+                 quint16    cmdId   = genCmdId();
+                 QByteArray cmdIdBa = wrInt(cmdId, 16);
+                 QString    unique  = makeCmdUnique(cmdName);
+
+                 cmdIds->append(cmdId);
+                 cmdRealNames->insert(cmdId, cmdName);
+                 cmdUniqueNames->insert(cmdId, unique);
+                 cmdAppById->insert(cmdId, program());
+
+                 if (modCmdNames->contains(program()))
+                 {
+                     modCmdNames->operator[](program()).append(cmdName);
+                 }
+                 else
+                 {
+                     QStringList list = QStringList() << cmdName;
+
+                     modCmdNames->insert(program(), list);
+                 }
+
+                 QByteArray frame = cmdIdBa + data.mid(2, 1) + fixedToTEXT(unique, 128) + data.mid(131);
+
+                 emit dataToClient(toCmdId32(ASYNC_ADD_CMD, 0), frame, NEW_CMD);
+             }
         }
-        else if (allowCmdLoad(cmdName))
-        {
-            quint16    cmdId   = genCmdId();
-            QByteArray cmdIdBa = wrInt(cmdId, 16);
-            QString    unique  = makeCmdUnique(cmdName);
-
-            cmdIds->append(cmdId);
-            cmdRealNames->insert(cmdId, cmdName);
-            cmdUniqueNames->insert(cmdId, unique);
-            cmdAppById->insert(cmdId, program());
-
-            if (modCmdNames->contains(program()))
-            {
-                modCmdNames->operator[](program()).append(cmdName);
-            }
-            else
-            {
-                QStringList list = QStringList() << cmdName;
-
-                modCmdNames->insert(program(), list);
-            }
-
-            QByteArray frame = cmdIdBa + data.mid(2, 1) + fixedToTEXT(unique, 128) + data.mid(131);
-
-            emit dataToClient(toCmdId32(ASYNC_ADD_CMD, 0), frame, NEW_CMD);
-        }
+    }
+    else if (typeId == ERR)
+    {
+        qDebug() << fromTEXT(data);
     }
 }
 

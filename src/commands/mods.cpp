@@ -49,7 +49,7 @@ void UploadMod::procIn(const QByteArray &binIn, quint8 dType)
         }
         else if (!validModPath(path))
         {
-            errTxt("err: The module path cannot contain the following chars: :*?\"<>|\n");
+            errTxt("err: The module path must be less then 512 chars long and cannot contain the following chars: :*?\"<>|\n");
         }
         else if (modExists(path))
         {
@@ -85,7 +85,7 @@ void DelMod::procIn(const QByteArray &binIn, quint8 dType)
         }
         else if (!validModPath(path))
         {
-            errTxt("err: The module path cannot contain the following chars: :*?\"<>|\n");
+            errTxt("err: Invalid module path.\n");
         }
         else if (!modExists(path))
         {

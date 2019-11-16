@@ -210,13 +210,16 @@ bool validModPath(const QString &modPath)
     bool    ret       = true;
     QString forbidden = "|*:\"?<>";
 
-    for (auto&& chr : forbidden)
+    if ((modPath.size() > 512) || modPath.isEmpty())
     {
-        if (modPath.contains(chr))
+        for (auto&& chr : forbidden)
         {
-           ret = false;
+            if (modPath.contains(chr))
+            {
+                ret = false;
 
-           break;
+                break;
+            }
         }
     }
 

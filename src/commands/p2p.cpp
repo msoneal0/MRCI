@@ -72,7 +72,7 @@ void P2PRequest::procIn(const QByteArray &binIn, quint8 dType)
             QByteArray src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
             QByteArray typeBa = wrInt(P2P_REQUEST, 8);
 
-            async(ASYNC_P2P, PUB_IPC, dst + src + typeBa + dst);
+            async(ASYNC_P2P, PUB_IPC, dst + src + typeBa + createPeerInfoFrame());
         }
     }
 }

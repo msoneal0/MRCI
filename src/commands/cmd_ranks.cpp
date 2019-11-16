@@ -62,6 +62,10 @@ void AssignCmdRank::procIn(const QByteArray &binIn, quint8 dType)
         {
             errTxt("err: The rank (-rank) argument was not found or is empty.\n");
         }
+        else if (mod.isEmpty())
+        {
+            errTxt("err: The module path (-mod) argument was not found or is empty.\n");
+        }
         else if (!isInt(rank))
         {
             errTxt("err: The given rank is not a valid 32bit unsigned integer.\n");
@@ -72,7 +76,7 @@ void AssignCmdRank::procIn(const QByteArray &binIn, quint8 dType)
         }
         else if (!validModPath(mod))
         {
-            errTxt("err: Invalid module path. it cannot contain any of the following chars '|*:\"?<>'\n");
+            errTxt("err: Invalid module path. it must be less than 512 chars long and it cannot contain any of the following chars '|*:\"?<>'\n");
         }
         else if (commandHasRank(mod, cmdName))
         {
@@ -104,6 +108,10 @@ void RemoveCmdRank::procIn(const QByteArray &binIn, quint8 dType)
         if (cmdName.isEmpty())
         {
             errTxt("err: The command name (-command) argument was not found or is empty.\n");
+        }
+        else if (mod.isEmpty())
+        {
+            errTxt("err: The module path (-mod) argument was not found or is empty.\n");
         }
         else if (!validCommandName(cmdName))
         {

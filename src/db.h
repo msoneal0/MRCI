@@ -37,7 +37,7 @@
 #include "shell.h"
 
 #define APP_NAME   "MRCI"
-#define APP_VER    "2.0.0"
+#define APP_VER    "2.0.1"
 #define APP_TARGET "mrci"
 
 #ifdef Q_OS_WIN
@@ -67,7 +67,7 @@
 #define INTERN_MOD_NAME         ":internal_mod"
 #define DEFAULT_CONFIRM_SUBJECT "Email Verification"
 #define DEFAULT_TEMP_PW_SUBJECT "Password Reset"
-#define DEFAULT_LISTEN_ADDRESS  "127.0.0.1"
+#define DEFAULT_LISTEN_ADDRESS  "0.0.0.0"
 #define DEFAULT_LISTEN_PORT     35516
 #define DEFAULT_BAN_LIMIT       30
 #define DEFAULT_LOCK_LIMIT      20
