@@ -4,7 +4,7 @@ Other than transporting data to be processed by modules, the host have a few oth
 
 ### 4.2 Host Ranks ###
 
-Each user registered in the host must be assigned a host rank. The lower it's numeric value, the higher the level of access the user has in the host with 0 being invalid. By default, the host defines the ```root``` user with a host rank of 1; giving it the highest level of access possible in the host. The host also defines a default initial host rank of 2 for all new accounts that are created in the host. This can be re-configured at any time using the [host_config](internal_commands.md) internal command.
+Each user registered in the host must be assigned a host rank. The lower it's numeric value, the higher the level of access the user has in the host with 0 being invalid. By default, the host defines the ```root``` user with a host rank of 1; giving it the highest level of access possible in the host. The host also defines a default initial host rank of 2 for all new accounts that are created in the host. This can be re-configured at any time using the [host_config](intern_commands.md) internal command.
 
 Some internal commands have the ability to change the user account information of other accounts. The host will in general not allow users of a lower level of access to any user information of higher access level. For example: a user of host rank ```1``` can force change another user's email address if that user's rank is ```2``` or higher but the rank ```2``` user can't do the same in reverse.
 

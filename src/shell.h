@@ -18,8 +18,14 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include <QProcess>
+#include <QFile>
+#include <QDir>
+#include <QFileInfoList>
+#include <QDebug>
 
 QStringList parseEnvVariables(const QString &txtIn);
 QString     expandEnvVariables(const QString &txtIn);
+QString     parseMd(const QString &cmdName, int offset);
+void        updateInternCmdList(const QString &dst);
 
 #endif // SHELL_H

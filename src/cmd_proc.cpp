@@ -42,7 +42,7 @@ ModProcess::ModProcess(const QString &app, const QString &memSes, const QString 
     connect(this, SIGNAL(finished(int,QProcess::ExitStatus)), this, SLOT(onFinished(int,QProcess::ExitStatus)));
 
     connect(ipcServ, &QLocalServer::newConnection, this, &ModProcess::newIPCLink);
-    connect(idleTimer, &IdleTimer::timeout, this, &ModProcess::kill);
+    connect(idleTimer, &IdleTimer::timeout, this, &ModProcess::killProc);
 
     setProgram(app);
 }
@@ -383,6 +383,13 @@ void ModProcess::wrIpcFrame(quint8 typeId, const QByteArray &data)
     }
 }
 
+void ModProcess::killProc()
+{
+    wrIpcFrame(KILL_CMD, QByteArray());
+
+    QTimer::singleShot(3000, this, SLOT(kill()));
+}
+
 CmdProcess::CmdProcess(quint32 id, const QString &cmd, const QString &modApp, const QString &memSes, const QString &memHos, const QString &pipe, QObject *parent) : ModProcess(modApp, memSes, memHos, pipe, parent)
 {
     cmdId   = id;
@@ -397,18 +404,11 @@ void CmdProcess::setSessionParams(QSharedMemory *mem, char *sesId, char *wrableS
     openWritableSubChs = wrableSubChs;
 }
 
-void CmdProcess::killCmd()
-{
-    wrIpcFrame(KILL_CMD, QByteArray());
-
-    QTimer::singleShot(3000, this, SLOT(kill()));
-}
-
 void CmdProcess::killCmd16(quint16 id16)
 {
     if (toCmdId16(cmdId) == id16)
     {
-        killCmd();
+        killProc();
     }
 }
 
@@ -416,7 +416,7 @@ void CmdProcess::killCmd32(quint32 id32)
 {
     if (cmdId == id32)
     {
-        killCmd();
+        killProc();
     }
 }
 

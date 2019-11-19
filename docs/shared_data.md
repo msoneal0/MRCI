@@ -1,10 +1,12 @@
 ### 6.1 Session/Host Shared Memory ###
 
-The host use shared shared memory segments to share data with the module processes so the modules can be made aware of various session data points like the currently logged in user id, user name, display name, etc. A shared memory segment is basically a block of memory where multiple processes have access to reading/writing data. The use of shared memory segments is entire optional so it does not need to be implemented to have a fully functional module.
+The host use shared shared memory segments to share data with the module processes so the modules can be made aware of various session data points like the currently logged in user id, user name, display name, etc. A shared memory segment is basically a block of memory where multiple processes have access to reading/writing data. The use of shared memory segments is entirely optional so it does not need to be implemented to have a fully functional module.
 
 The session object creates the shared memory segment and assigns a text key unique to just the session. When the session object calls a new module process, it will pass the [-mem_ses](modules.md) option with the shared memory key that the module can then use to attach to the segment. The session will also pass the [-mem_host](modules.md) option unique to the TCPServer object to get data relevant to the sever object.
 
-As mentioned before, the share memory segments are just blocks of memory. sections 6.2 and 6.3 describes the format of the shared memory and where to find the data based on the memory offset. 
+As mentioned before, the share memory segments are just blocks of memory. sections 6.2 and 6.3 describes the format of the shared memory and where to find the data based on the memory offset.
+
+Also note, depending on the API used, lock and unlock functions must be used when reading/writing data with the shared memory segments as a way to prevent multiple process from reading/writing the shared data at the same time. Consider reading your API's documentation before attempting to use shared memory segments.
 
 ### 6.2 Session Shared Memory Offsets ###
 

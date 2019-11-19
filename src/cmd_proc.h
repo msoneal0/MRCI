@@ -86,6 +86,10 @@ public:
     bool loadUserCmds();
     bool loadExemptCmds();
 
+public slots:
+
+    void killProc();
+
 signals:
 
     void cmdUnloaded(quint16 cmdId);
@@ -115,7 +119,6 @@ private:
 
 private slots:
 
-    void killCmd();
     void rdFromStdErr();
     void rdFromStdOut();
 

@@ -213,7 +213,7 @@ ModProcess *Session::initModProc(const QString &modApp)
     connect(proc, &ModProcess::dataToClient, this, &Session::dataToClient);
     connect(proc, &ModProcess::cmdUnloaded, this, &Session::killCmd16);
 
-    connect(this, &Session::killMods, proc, &ModProcess::kill);
+    connect(this, &Session::killMods, proc, &ModProcess::killProc);
 
     return proc;
 }

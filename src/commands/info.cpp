@@ -47,59 +47,6 @@ QString IPHist::cmdName()   {return "ls_act_log";}
 QString ListDBG::cmdName()  {return "ls_dbg";}
 QString MyInfo::cmdName()   {return "my_info";}
 
-QString ListCommands::parseMd(const QString &cmdName, int offset)
-{
-    QFile      file(":/docs/intern_commands/" + cmdName + ".md", this);
-    QByteArray data;
-
-    if (!file.open(QFile::ReadOnly))
-    {
-        qDebug() << "err: internal command: " << cmdName << " does not have a document file.";
-    }
-    else
-    {
-        data = file.readAll();
-
-        int targetTags = offset * 6;
-        int pos        = -1;
-        int len        = 0;
-
-        for (int i = 0, tags = 0; i < data.size(); ++i)
-        {
-            if (data[i] == '#')
-            {
-                ++tags;
-
-                if (pos != -1)
-                {
-                    break;
-                }
-            }
-            else if (tags == targetTags)
-            {
-                len++;
-
-                if (pos == -1)
-                {
-                    pos = i;
-                }
-            }
-        }
-
-        data = data.mid(pos, len).trimmed();
-
-        if (offset == 2)
-        {
-            data.chop(3);
-            data.remove(0, 3);
-        }
-    }
-
-    file.close();
-
-    return data;
-}
-
 QString ListCommands::shortText(const QString &cmdName)
 {
     return parseMd(cmdName, 1);

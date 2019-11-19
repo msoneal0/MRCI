@@ -1,6 +1,6 @@
 # MRCI #
 
-(Modular Remote Command Interpreter) is a command interpreter primarily designed to provide remote service to connected clients, whether text based or any kind of data. As the name implies, it is expandable via 3rd party modules by adding addtional commands that remote clients can run on the host. It has a fully feasured user account management system with access control to certain commands for certain users. All persistent data is handled by a SQLite database and all remote connections are handled via TCP and encrypted in SSL/TLS.
+(Modular Remote Command Interpreter) is a command interpreter primarily designed to provide any type of remote service to connected clients. As the name implies, it is expandable via 3rd party modules by adding addtional commands that remote clients can run on the host. It has a fully feasured user account management system with access control to certain commands for certain users. All persistent data is handled by a SQLite database and all remote connections are handled via TCP and encrypted in SSL/TLS.
 
 ### Usage ###
 
@@ -25,13 +25,13 @@ Usage: mrci <argument>
 Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:
 
  -pipe {pipe_name/path} : the named pipe used to establish a data connection with the session.
- -mem_ses {key_name}    : the shared memory key for the session.
- -mem_host {key_name}   : the shared memory key for the host main process.
+ -mem_ses {key_name}    : the shared memory key for the session object.
+ -mem_host {key_name}   : the shared memory key for the server object.
 ```
  
-Other than that, the host can only be managed via a connected client that supports text input/output so the host application is always listening for clients while running entirely in the background. By default the host listen for clients on address 0.0.0.0 and port 35516, effectively making it reachable on any network interface of the host platform via that specific port.
+The host can only be managed via a connected client that supports text input/output so the host application is always listening for clients while running entirely in the background. By default the host listen for clients on address 0.0.0.0 and port 35516, effectively making it reachable on any network interface of the host platform via that specific port.
 
-Just like any linux based OS, the host will have an administrative user called root. This account can be used to modify anything on the host without restriction. The default password is randomized and set on the root user account on running the host for the first time. To find out what the default password is, run -help or -about. When logging in as root with the default password, the host will require you to change the password before continuing.
+Just like any linux based OS, the host will have an administrative user called root. This account can be used to modify anything on the host without restriction. The default password is randomized and set on the root user account upon running the host for the first time. To find out what the default password is, run -help or -about. When logging in as root with the default password, the host will require you to change the password before continuing.
 
 ### More Than Just a Command Interpreter ###
 
@@ -61,6 +61,7 @@ Because the host is modular, the things you can customize it to do is almost lim
 * [4.1 Host Features](host_features.md)
 * [5.1 Async Commands](async.md)
 * [6.1 Shared Memory](shared_data.md)
+* [7.1 Internal Commands](intern_commands.md)
 
 ### Development Setup ###
 

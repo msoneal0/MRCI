@@ -37,7 +37,7 @@
 #include "shell.h"
 
 #define APP_NAME   "MRCI"
-#define APP_VER    "2.0.1"
+#define APP_VER    "2.0.2"
 #define APP_TARGET "mrci"
 
 #ifdef Q_OS_WIN

@@ -19,6 +19,7 @@
 
 #include "../common.h"
 #include "../cmd_object.h"
+#include "../shell.h"
 #include "table_viewer.h"
 
 class ListCommands : public CmdObject
@@ -30,7 +31,6 @@ private:
     QStringList list;
     QStringList genfileList;
 
-    QString parseMd(const QString &cmdName, int offset);
     QString shortText(const QString &cmdName);
     QString ioText(const QString &cmdName);
     QString longText(const QString &cmdName);

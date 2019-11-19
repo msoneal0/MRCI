@@ -40,20 +40,20 @@ enum TypeID : quint8
 ### 3.2 Type Descriptions ###
     
 ```TEXT```
-This is text that can be displayed directly to the user, pass command line arguments to be processed or used to carry text data within other data types.
+This is text that can be displayed directly to the user, passed as command line arguments to be processed or used to carry text data within other data types.
 
 format: ```[UTF-16LE_string] (no BOM)```
 
 ```GEN_FILE```
 This is a file transfer type id that can be used to transfer any file type (music, photos, documents, etc...). It operates in its own protocol of sorts. The 1st GEN_FILE frame received by the host or client is TEXT parameters similar to what you see in terminal command lines with at least one of the arguments listed below. The next set of GEN_FILE frames received by the host or client is then the binary data that needs to be written to an open file or streamed until the limit defined in -len is meet.
 
-The host or the client can be set as the sender or receiver of the GEN_FILE binary data. Which ever is designated as the receiver by the TEXT parameters need to send an empty GEN_FILE frame to start the process. An example if this can be found in section 3.3.
+The host or the client can be set as the sender or receiver of the GEN_FILE binary data. Which ever is designated as the receiver by the TEXT parameters need to send an empty GEN_FILE frame to start the process. An example of this can be found in section 3.3.
 
 arguments:
 
 * **-len (int)** | this is the integer value of the file size or amount of bytes to read/write.
 
-* **-offset (int)** | this integer position tells where in the source or destination file to start reading/writing.
+* **-offset (int)** | this is a integer position that indicates where in the source or destination file to start reading/writing.
 
 * **-client_file** (string) | this is the file path to the source/destination file in the client's file system.
 
@@ -61,7 +61,7 @@ arguments:
 
 * **-single_step** | the presents of this argument tells both the client and host to operate in single step mode. single step mode causes the receiver of the binary data whether host or client to send an empty GEN_FILE frame after successfully receiving the data. this then tells the sender to send the next GEN_FILE frame containing binary data for the file and the cycle continues until len is meet. if this argument is not found, the sender can simply send all GEN_FILE data without waiting for an empty GEN_FILE from the receiver.
 
-* **-to_host** | this argument should only come from host and it will define the client as the sender and the host as the receiver.
+* **-to_host** | this argument should only come from the host and it will define the client as the sender and the host as the receiver.
 
 * **-from_host** | opposite affect to *-to_host*. it defines the host as the sender and the client as the receiver.
 
@@ -79,7 +79,7 @@ This id can be treated exactly like TEXT except this should tell the client to h
 Also formatted exactly like TEXT but this indicates to the client that this is a large body of text that is recommended to be word wrapped when displaying to the user. It can contain line breaks so clients are also recommended to honor those line breaks.
 
 ```IDLE```
-This doesn't carry any actual data, instead this indicates that the command-branch id that sent it has finished it's task. Modules that send this doesn't need to terminate it's process.
+This doesn't carry any actual data, instead this indicates that the command id and branch id that sent it has finished it's task. Modules that send this doesn't need to terminate it's process.
 
 ```KILL_CMD```
 This doesn't carry any actual data, instead can be sent by the client or session object to tell the command-branch id sent in the frame to terminate the module process. Modules that receive this need to send a IDLE frame if a command is still running and then terminate itself. The module will have 3 seconds to do this before it is force killed by the session.
@@ -113,10 +113,10 @@ This is a data structure used to by modules to run async commands on the local s
 ```
 
 ```PUB_IPC```
-This is formatted exactly like PRIV_IPC except it is used by modules to run async commands on all connected peers in the host while avoiding a run on the local session object.
+This is formatted exactly like PRIV_IPC except it is used by modules to run async commands on all peer session objects in the host while avoiding a run on the local session object.
 
 ```PUB_IPC_WITH_FEEDBACK```
-This combines the functionality of PUB_IPC and PRIV_IPC. It runs async commands on all connected peers and on the local session object.
+This has the same functionality as PUB_IPC except it is also feedback into the local session object.
 
 ```FILE_INFO```
 This is a data structure that carries information about a file system object (file,dir,link).
@@ -171,7 +171,7 @@ This carry some user account and session information about a peer client connect
 ```
 
 ```PING_PEERS```
-This formatted extactly as PEER_INFO except it can be used the ASYNC_LIMITED_CAST [async](async.md) command to tell all peer sessions that receive it to send PEER_INFO frame about you to their own clients and to return PEER_INFO frames about themselves to you.
+This is formatted extactly as PEER_INFO except it can be used the ASYNC_LIMITED_CAST [async](async.md) command to tell all peer sessions that receive it to send a PEER_INFO frame about you to their own clients and return PEER_INFO frames about themselves to you.
 
 ```MY_INFO```
 This contains all of the information found in ```PEER_INFO``` for the local session but also includes the following:

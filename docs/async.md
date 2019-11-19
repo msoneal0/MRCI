@@ -1,10 +1,10 @@
 ### 5.1 Async Commands ###
 
-An async command is a virtual command that the host can use to send data to the client at any time while connected to the host. As the name implies, the occurance of a client receiving data from an async command is not always the result of running a regular command in the current session. This can occur for example when information in your account is changed by another client connected to the host; your client would not know about this change until an async command is sent notify it of the change. These commands can called directly or indirectly by a module.
+An async command is a virtual command that the host can use to send data to the client at any time while connected to the host. As the name implies, the occurance of a client receiving data from an async command is not always the result of running a regular command in the current session. This can occur for example when information in your account is changed by another client connected to the host; your client would not know about this change until an async command is sent notify it of the change. These commands can be called directly or indirectly by a module and are considered "virtual" commands because there is no defined objects attached to them. Instead, async commands are best identified by command id values 1-255.
 
-Async commands are not only used send data to the client but also used internally within the host to help objects operating in different processes to communicate with each other. Some async commands in fact are considered internal only because the client should never see any data come from them at anytime. There is also data flow contriants for aysnc commands, meaning some gets blocked or has no effect if sent from a module when not expected to or sent using the [PRIV_IPC](type_ids.md) data type when expected to be sent via [PUB_IPC](type_ids.md). The list below shows the various data flow contriants each of these async commands have.
+Async commands are not only used to send data to the client but also used internally within the host to help objects operating in different processes to communicate with each other. Some async commands in fact are considered internal only because the client should never see any data come from them at anytime. There is also data flow contriants for aysnc commands, meaning some gets blocked if sent from the module or has no effect if sent with the unexpected [IPC](type_ids.md) type id. The list below shows the various data flow contriants each of these async commands have.
 
-Here is a describtion of what those keywords mean:
+Here is a describtion of what the keywords in the list mean:
 ```
 client    - this means the async command id will be used to forward 
             data of any type to client if needed.
@@ -12,7 +12,7 @@ client    - this means the async command id will be used to forward
 internal  - this means the async command will be responded by the 
             session object but the data will not be forwarded to the 
             client or converted to an entirely different async 
-            command.
+            command before sending to the client.
            
 public    - this means the session objects will respond to this async 
             command if sent with PUB_IPC or PUB_IPC_WITH_FEEDBACK
@@ -30,8 +30,6 @@ none      - this means none of the session objects will respond to
 retricted - this means the session object will actively block this
             async command from being sent from the module (any mode).
 ```
-
-These are considered "virtual" commands because there is no defined command objects attached to them. Instead, async commands are best identified by command id values 1-255.
 
 ```
 enum AsyncCommands : quint16

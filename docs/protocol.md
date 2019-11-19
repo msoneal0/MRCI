@@ -16,7 +16,13 @@ data_len  - 3bytes   - 24bit little endian integer size of the payload.
 payload   - variable - the actual data to be processed.
 ```
 
-A full description of the type id's can be found in the [Type_IDs.md](type_ids.md) document.
+notes:
+
+* A full description of the type id's can be found in the [Type_IDs.md](type_ids.md) document.
+
+* Modules call commands via a command name but the host will assign a unique command id to all command names so clients can call them using a simple 2 byte integer instead of full text. The command ids can change as the modules change so it is recommended for clients to not depend on consistant command ids but depend on the [ASYNC_ADD_CMD](async.md) and [ASYNC_RM_CMD](async.md) async commands.
+
+* The branch id is an id that can be assigned by the client itself to run muliple instances of the same command. Commands sent by a certain branch id will result in data sent back to the client from the module with that same branch id.
 
 ### 1.3 Versioning System ###
 
@@ -64,8 +70,8 @@ notes:
 
 * **reply** is a numeric value that the host returns in it's header to communicate to the client the result of it's evaluation of the client's header.
 
-    * reply = 1, means the client version is acceptable and it does not need to take any further action.
-    * reply = 2, means the client version is acceptable but the host will now send it's Pem formatted SSL cert data in a ```HOST_CERT``` mrci frame just after sending it's header. After receiving the cert, the client will then need to send a STARTTLS signal using this cert.
-    * reply = 4, means the host was unable to load the SSL cert associated with the common name sent by the client. The session will auto close at this point.
+    * reply = 1, means the client is acceptable and it does not need to take any further action.
+    * reply = 2, means the client is acceptable but the host will now send it's Pem formatted SSL cert data in a ```HOST_CERT``` mrci frame just after sending it's header. After receiving the cert, the client will then need to send a STARTTLS signal using this cert.
+    * reply = 4, means the host was unable to find the SSL cert associated with the common name sent by the client. The session will auto close at this point.
 
 * **sesId** is the session id. It is a unique 224bit sha3 hash generated against the current date and time of session creation (down to the msec) and the machine id. This can be used by the host and client to uniquely identify the current session or past sessions.
