@@ -77,6 +77,7 @@ protected:
     QString libName();
 
     virtual void procIn(const QByteArray &, quint8) {}
+    virtual void onTerminate() {}
 
 protected slots:
 

@@ -47,7 +47,9 @@ format: ```[UTF-16LE_string] (no BOM)```
 ```GEN_FILE```
 This is a file transfer type id that can be used to transfer any file type (music, photos, documents, etc...). It operates in its own protocol of sorts. The 1st GEN_FILE frame received by the host or client is TEXT parameters similar to what you see in terminal command lines with at least one of the arguments listed below. The next set of GEN_FILE frames received by the host or client is then the binary data that needs to be written to an open file or streamed until the limit defined in -len is meet.
 
-The host or the client can be set as the sender or receiver of the GEN_FILE binary data. Which ever is designated as the receiver by the TEXT parameters need to send an empty GEN_FILE frame to start the process. An example of this can be found in section 3.3.
+The host or the client can be set as the sender or receiver of the GEN_FILE binary data. This designation is determined by what the command defined in genfile type when the NEW_CMD frame was sent. A genfile type of 2 sets the client as the sender and the host as the receiver. Genfile type 3 sets the client as the receiver and the host as the sender.
+
+see section 3.3 for an example of how GEN_FILE works.
 
 arguments:
 
@@ -60,10 +62,6 @@ arguments:
 * **-remote_file** (string) | this is the file path to the source/destination file in the host file system.
 
 * **-single_step** | the presents of this argument tells both the client and host to operate in single step mode. single step mode causes the receiver of the binary data whether host or client to send an empty GEN_FILE frame after successfully receiving the data. this then tells the sender to send the next GEN_FILE frame containing binary data for the file and the cycle continues until len is meet. if this argument is not found, the sender can simply send all GEN_FILE data without waiting for an empty GEN_FILE from the receiver.
-
-* **-to_host** | this argument should only come from the host and it will define the client as the sender and the host as the receiver.
-
-* **-from_host** | opposite affect to *-to_host*. it defines the host as the sender and the client as the receiver.
 
 * **-truncate** | this indicates to whoever is the receiver to truncate the file being written to.
 
@@ -133,6 +131,7 @@ This is a data structure that carries information about a file system object (fi
   notes:
   1. 16bit terminated UTF-16LE strings are basically
      terminated by 2 bytes of 0x00.
+     
   2. the symmlink target is empty if not a symmlink but
      the terminator should still be present.
 
@@ -161,9 +160,11 @@ This carry some user account and session information about a peer client connect
   notes:
   1. the session id is unique to the peer's session connection only. it
      can change upon reconnection.
+     
   2. the user id is unique to the peer's user account. is stays constant
      even when the user name changes and across all clients logged into
      the same account.
+     
   3. the display name is the preffered display name of the peer. clients
      are encouraged to use this rather than the user name when displaying
      peer info to the user. if empty, it's ok to just fall back to the user
@@ -189,7 +190,7 @@ This contains information about a new command that was added to the current sess
 ```
   format:
   1. bytes[0-1]     2bytes   - 16bit LE unsigned int (command id)
-  2. bytes[2]       1byte    - bool (0x01 or 0x00) (handles gen file)
+  2. bytes[2]       1byte    - 8bit LE unsigned int (genfile type)
   3. bytes[3-130]   128bytes - command name (TEXT - padded with 0x00)
   4. bytes[131-258] 128bytes - library name (TEXT - padded with 0x00)
   5. bytes[259-n]   variable - short text (16bit null terminated)
@@ -197,10 +198,13 @@ This contains information about a new command that was added to the current sess
   7. bytes[n-n]     variable - long text (16bit null terminated)
 
   notes:
-  1. the handles gen file flag is a single byte 0x01 to indicate true and
-     0x00 to indicate false. clients need to be aware of which command
-     handles the GEN_FILE mini protocol because it requires user input at
-     both ends (host and client).
+  1. the genfile type is numerical value of 2, 3 or 0. a value of 2 
+     indicates that the command handles/understands the GEN_FILE mini 
+     protocol and it can be used to upload a file or other data to the 
+     host. a value of 3 indicates the commmand downloads a file or other
+     data from the host. 0 simply indicates that the command doesn't use
+     or understand GEN_FILE.
+     
   2. the library name can contain the module name and/or extra informaion 
      the client can use to identify the library the command is a part of.
 ```
@@ -233,6 +237,7 @@ This contain status information of a peer client when the peer changes sub-chann
   1. if (is disconnected) is set true (0x01) the session id will no longer
      be valid for that peer client so you should not make anymore attempts
      to send data to it.
+     
   2. channel-sub ids is a string of 9byte channel-sub id combinations at
      a fixed length of 54bytes (padded with 0x00). this indicates what
      channels-subs the peer currently have open if the peer's channel ids
@@ -272,8 +277,10 @@ This contains public information about a channel member.
   notes:
   1. a 16bit null terminated TEXT formatted string ended with 2 bytes of
      (0x00) to indicate the end of the string data.
+     
   2. the member's privilege level can be any of the values discribed in
      section [4.3](host_features.md).
+     
   3. is invite? indicates if this user has received an invite to join
      that channel by has not accepted yet. if, accepted the user will
      become a full member of the channel at the level indicated by this
@@ -284,17 +291,19 @@ This contains public information about a channel member.
 
 Setup:
 
-* The host has a command called *upload_file* with a command id of *768* and handles the ```GEN_FILE``` data type.
+* The host has a command called *upload_file* with a command id of *768* and handles the ```GEN_FILE``` data type with a genfile type of 2.
 * The client has a file called */home/foo/bar.mp3* and wants to upload it to the host file */home/host/music/bar.mp3* and the client knows the file size is 512bytes.
+
+Process:
 
 To upload the file, the client calls command id *768* with the following text arguments (must still be sent as a GEN_FILE):
 ```-client_file "/home/foo/bar.mp3" -remote_file "/home/host/music/bar.mp3" -len 512```
 
-The host will then return the following the text arguments to the client (also sent as a GEN_FILE):
-```-to_host```
+The host can then return text arguments to the client like (also sent as a GEN_FILE):
+```-truncate and/or -single_step```
 
-This argument from the host designates it as the receiver so it will be up to the host to send an empty ```GEN_FILE``` to indicate to the client that it was ready to start receiving binary data from the client to write to */home/host/music/bar.mp3*. If that file already exists, the host will need to ask the user to overwrite or not.
+This only needs to be done if the command call needs to be modified by host and if the client supports such a thing. In this example, host will just return an empty GEN_FILE because there is no need for modification.
 
-If the host indicates that it's ready for the upload, the client can then simply read 512 bytes from */home/foo/bar.mp3* and send the read bytes to the host command id *768* as a ```GEN_FILE```.
+At this point, the host will then need to check of the destination file: /home/host/music/bar.mp3 already exists. If it does, the host will need to ask the user if it's ok to overwrite.
 
-The host will then write the bytes received from the client to */home/host/music/bar.mp3* and then auto terminate the command since 512 bytes has been meet.
+Once the host confirms it is ok to write to the destination file, it will then need to send another empty GEN_FILE to the client to confirm that it is ready to start receiving GEN_FILE frames from the client through command id *768* that will contain binary data to be written to the destination file until -len (512 bytes) is meet.

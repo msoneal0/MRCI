@@ -63,8 +63,8 @@ void mkPathForFile(const QString &path)
     mkPath(QFileInfo(path).absolutePath());
 }
 
-DownloadFile::DownloadFile(QObject *parent) : CmdObject(parent) {file = new QFile(this);}
-UploadFile::UploadFile(QObject *parent)     : CmdObject(parent) {file = new QFile(this);}
+DownloadFile::DownloadFile(QObject *parent) : CmdObject(parent) {file = new QFile(this); onTerminate();}
+UploadFile::UploadFile(QObject *parent)     : CmdObject(parent) {file = new QFile(this); onTerminate();}
 Delete::Delete(QObject *parent)             : CmdObject(parent) {}
 Copy::Copy(QObject *parent)                 : CmdObject(parent) {src = new QFile(this); dst = new QFile(this);}
 Move::Move(QObject *parent)                 : Copy(parent)      {}
@@ -85,44 +85,47 @@ QString FileInfo::cmdName()     {return "fs_info";}
 QString ChangeDir::cmdName()    {return "fs_cd";}
 QString Tree::cmdName()         {return "fs_tree";}
 
-void DownloadFile::clear()
+void DownloadFile::onTerminate()
 {
     file->close();
 
-    buffSize = static_cast<qint64>(qPow(2, MAX_FRAME_BITS) - 1);
-    dataSent = 0;
-    len      = 0;
-    flags    = 0;
+    ssMode    = false;
+    paramsSet = false;
+    dataSent  = 0;
+    len       = 0;
+    flags     = 0;
 }
 
 void DownloadFile::sendChunk()
 {
-    if (buffSize > len) buffSize = len;
-
-    QByteArray data = file->read(buffSize);
+    QByteArray data = file->read(LOCAL_BUFFSIZE);
 
     dataSent += data.size();
 
     emit procOut(data, GEN_FILE);
 
-    mainTxt(QString::number(dataSent) + "/" + QString::number(len) + "\n");
+    mainTxt(QString::number(dataSent) + " / " + QString::number(len) + "\n");
 
     if ((dataSent >= len) || file->atEnd())
     {
-        clear();
+        onTerminate();
     }
 }
 
 void DownloadFile::procIn(const QByteArray &binIn, quint8 dType)
 {
-    if ((dType == GEN_FILE) && (flags & (MORE_INPUT | LOOPING)))
+    if ((dType == GEN_FILE) && binIn.isEmpty() && ssMode && paramsSet)
     {
+        sendChunk();
+    }
+    else if (paramsSet)
+    {
+        flags |= LOOPING;
+
         sendChunk();
     }
     else if (dType == GEN_FILE)
     {
-        clear();
-
         QStringList args   = parseArgs(binIn, 11);
         QString     path   = getParam("-remote_file", args);
         QString     offStr = getParam("-offset", args);
@@ -142,53 +145,48 @@ void DownloadFile::procIn(const QByteArray &binIn, quint8 dType)
         {
             errTxt("err: Offset '" + offStr + "' is not a valid integer.\n");
         }
-        else if (!isInt(lenStr))
+        else if (!lenStr.isEmpty() && !isInt(lenStr))
         {
-            errTxt("err: Len '" + lenStr + "' is not valid integer.\n");
+            errTxt("err: Len '" + lenStr + "' is not a valid integer.\n");
         }
         else if (!QFileInfo(path).isFile())
         {
-            errTxt("err: The remote file is not a file at all.\n");
+            errTxt("err: The remote file is not a file or does not exists.\n");
         }
         else if (!file->open(QFile::ReadOnly))
         {
-            errTxt("err: Unable to open remote file for reading. reason: " + file->errorString() + "\n");
+            errTxt("err: Unable to open the remote file for reading. reason: " + file->errorString() + "\n");
         }
         else
         {
-            QString genfileRet = "-from_host";
-
-            len    = lenStr.toLongLong();
-            flags |= MORE_INPUT;
+            len       = lenStr.toLongLong();
+            ssMode    = argExists("-single_step", args);
+            paramsSet = true;
+            flags    |= MORE_INPUT;
 
             if ((len == 0) || (len > file->size()))
             {
-                genfileRet.append(" -len " + QString::number(len));
-
                 len = file->size();
-            }
-
-            if (!argExists("-single_step", args))
-            {
-                flags |= LOOPING;
             }
 
             file->seek(offStr.toLongLong());
 
-            emit procOut(toTEXT(genfileRet), GEN_FILE);
+            emit procOut(toTEXT("-len " + QString::number(len)), GEN_FILE);
         }
     }
 }
 
-void UploadFile::clear()
+void UploadFile::onTerminate()
 {
     file->close();
 
     force        = false;
     confirm      = false;
+    ssMode       = false;
     dataReceived = 0;
     len          = 0;
     flags        = 0;
+    offs         = 0;
     mode         = nullptr;
 }
 
@@ -198,13 +196,13 @@ void UploadFile::wrToFile(const QByteArray &data)
 
     file->write(data);
 
-    mainTxt(QString::number(dataReceived) + "/" + QString::number(len) + "\n");
+    mainTxt(QString::number(dataReceived) + " / " + QString::number(len) + "\n");
 
     if (dataReceived >= len)
     {
-        clear();
+        onTerminate();
     }
-    else if (flags & SINGLE_STEP_MODE)
+    else if (ssMode)
     {
         emit procOut(QByteArray(), GEN_FILE);
     }
@@ -221,12 +219,14 @@ void UploadFile::run()
 {
     if (file->open(mode))
     {
+        file->seek(offs);
+
         emit procOut(QByteArray(), GEN_FILE);
     }
     else
     {
         errTxt("err: Unable to open the remote file for writing. reason: " + file->errorString() + "\n");
-        clear();
+        onTerminate();
     }
 }
 
@@ -244,7 +244,7 @@ void UploadFile::procIn(const QByteArray &binIn, quint8 dType)
         }
         else if (noCaseMatch("n", ans))
         {
-            clear();
+            onTerminate();
         }
         else
         {
@@ -257,29 +257,10 @@ void UploadFile::procIn(const QByteArray &binIn, quint8 dType)
     }
     else if (dType == GEN_FILE)
     {
-        clear();
-
         QStringList args   = parseArgs(binIn, 11);
         QString     lenStr = getParam("-len", args);
         QString     offStr = getParam("-offset", args);
         QString     dst    = getParam("-remote_file", args);
-        bool        exists = QFileInfo(dst).exists();
-
-        file->setFileName(dst);
-
-        if (argExists("-truncate", args))
-        {
-            mode = QFile::ReadWrite | QFile::Truncate;
-        }
-        else
-        {
-            mode = QFile::ReadWrite;
-        }
-
-        if (argExists("-single_step", args))
-        {
-            flags |= SINGLE_STEP_MODE;
-        }
 
         if (dst.isEmpty())
         {
@@ -299,16 +280,33 @@ void UploadFile::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            if (argExists("-truncate", args))
+            {
+                mode = QFile::ReadWrite | QFile::Truncate;
+            }
+            else
+            {
+                mode = QFile::ReadWrite;
+            }
+
             force  = argExists("-force", args);
+            ssMode = argExists("-single_step", args);
             len    = lenStr.toLongLong();
+            offs   = offStr.toLongLong();
             flags |= MORE_INPUT;
 
-            file->seek(offStr.toLongLong());
+            file->setFileName(dst);
 
-            emit procOut(toTEXT("-to_host"), GEN_FILE);
+            emit procOut(QByteArray(), GEN_FILE);
 
-            if (exists && !force) ask();
-            else                  run();
+            if (QFileInfo(dst).exists() && !force)
+            {
+                ask();
+            }
+            else
+            {
+                run();
+            }
         }
     }
 }
@@ -396,7 +394,7 @@ void Delete::procIn(const QByteArray &binIn, uchar dType)
     }
 }
 
-void Copy::clear()
+void Copy::onTerminate()
 {
     fromQueue   = false;
     procedAFile = false;
@@ -473,7 +471,7 @@ void Copy::run()
         else
         {
             errTxt("err: Unable to re-create the source symlink at the destination path. writing to the path is not possible/denied.\n");
-            clear();
+            onTerminate();
         }
     }
     else if (QFileInfo(srcPath).isDir())
@@ -488,12 +486,12 @@ void Copy::run()
         if (!dst->open(QFile::WriteOnly | QFile::Truncate))
         {
             errTxt("err: Unable to open the destination file '" + dstPath + "' for writing. reason: " + dst->errorString() + "\n");
-            clear();
+            onTerminate();
         }
         else if (!src->open(QFile::ReadOnly))
         {
             errTxt("err: Unable to open the source file '" + srcPath + "' for reading. reason: " + src->errorString() + "\n");
-            clear();
+            onTerminate();
         }
         else
         {
@@ -553,7 +551,7 @@ void Copy::procIn(const QByteArray &binIn, uchar dType)
         else
         {
             preFinish();
-            clear();
+            onTerminate();
         }
     }
     else if ((dType == TEXT) && (flags & MORE_INPUT))
@@ -578,7 +576,7 @@ void Copy::procIn(const QByteArray &binIn, uchar dType)
             }
             else
             {
-                clear();
+                onTerminate();
             }
         }
         else if (fromQueue)
@@ -611,7 +609,7 @@ void Copy::procIn(const QByteArray &binIn, uchar dType)
     }
     else if (dType == TEXT)
     {
-        clear();
+        onTerminate();
 
         QStringList args  = parseArgs(binIn, 5);
         bool        force = argExists("-force", args);
@@ -668,7 +666,7 @@ void Move::runOnMatchingVolume()
     if (!QFile::rename(srcPath, dstPath))
     {
         errTxt("err: Unable to do move operation. it's likely the command failed to remove the existing destination object or writing to the path is not possible/denied.\n");
-        clear();
+        onTerminate();
     }
 }
 
@@ -868,7 +866,7 @@ void ChangeDir::procIn(const QByteArray &binIn, quint8 dType)
     }
 }
 
-void Tree::clear()
+void Tree::onTerminate()
 {
     queue.clear();
 
@@ -917,7 +915,7 @@ void Tree::printList(const QString &path)
 
     if (queue.isEmpty())
     {
-        clear();
+        onTerminate();
     }
     else
     {

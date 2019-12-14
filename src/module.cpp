@@ -142,17 +142,6 @@ QStringList Module::pubCmdList()
     return ret;
 }
 
-QStringList Module::genfileList()
-{
-    QStringList ret;
-
-    ret << DownloadFile::cmdName();
-    ret << UploadFile::cmdName();
-    ret << SetEmailTemplate::cmdName();
-
-    return ret;
-}
-
 QStringList Module::rankExemptList()
 {
     QStringList ret;
@@ -279,7 +268,7 @@ bool Module::runCmd(const QString &name)
 
 void Module::listCmds(const QStringList &list)
 {
-    new ListCommands(list, genfileList(), this);
+    new ListCommands(list, this);
 }
 
 bool Module::start(const QStringList &args)

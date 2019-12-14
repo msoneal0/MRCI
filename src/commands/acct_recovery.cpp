@@ -366,7 +366,7 @@ void SetEmailTemplate::procIn(const QByteArray &binIn, quint8 dType)
             proc();
         }
     }
-    else if (dType == GEN_FILE)
+    else if ((dType == GEN_FILE) || (dType == TEXT))
     {
         QStringList args = parseArgs(binIn, 9);
 
@@ -427,7 +427,7 @@ void SetEmailTemplate::procIn(const QByteArray &binIn, quint8 dType)
 
                 flags |= MORE_INPUT;
 
-                emit procOut(toTEXT("-to_host"), GEN_FILE);
+                emit procOut(QByteArray(), GEN_FILE);
                 emit procOut(QByteArray(), GEN_FILE);
             }
             else

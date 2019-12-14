@@ -116,6 +116,7 @@ void CmdObject::term()
     {
         flags = 0;
 
+        onTerminate();
         postProc();
     }
 }

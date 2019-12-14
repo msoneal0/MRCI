@@ -201,6 +201,12 @@ enum TypeID : quint8
     RESUME_CMD            = 29
 };
 
+enum GenFileType : quint8
+{
+    GEN_UPLOAD   = 2,
+    GEN_DOWNLOAD = 3
+};
+
 enum ChannelMemberLevel : quint8
 {
     OWNER   = 1,

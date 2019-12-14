@@ -616,6 +616,11 @@ void CmdProcess::onDataFromProc(quint8 typeId, const QByteArray &data)
                 QString     errMsg;
                 QTextStream errTxt(&errMsg);
 
+                if (async == ASYNC_DEBUG_TEXT)
+                {
+                    typeId = PRIV_IPC;
+                }
+
                 if (validAsync(async, payload, errTxt))
                 {
                     if (typeId == PRIV_IPC)

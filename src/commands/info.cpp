@@ -33,10 +33,9 @@ ListDBG::ListDBG(QObject *parent) : TableViewer(parent)
     addTableColumn(TABLE_DMESG, COLUMN_LOGENTRY);
 }
 
-ListCommands::ListCommands(const QStringList &cmdList, const QStringList &gen, QObject *parent) : CmdObject(parent)
+ListCommands::ListCommands(const QStringList &cmdList, QObject *parent) : CmdObject(parent)
 {
-    list        = cmdList;
-    genfileList = gen;
+    list = cmdList;
 }
 
 HostInfo::HostInfo(QObject *parent) : CmdObject(parent) {}
@@ -67,15 +66,23 @@ void ListCommands::onIPCConnected()
     for (auto&& cmdName : list)
     {
         QByteArray frame;
-        QByteArray boolByte = QByteArray(1, 0x00);
+        QByteArray genType = QByteArray(1, 0x00);
 
-        if (genfileList.contains(cmdName))
+        if (cmdName == DownloadFile::cmdName())
         {
-            boolByte = QByteArray(1, 0x01);
+            genType = QByteArray(1, GEN_DOWNLOAD);
+        }
+        else if (cmdName == UploadFile::cmdName())
+        {
+            genType = QByteArray(1, GEN_UPLOAD);
+        }
+        else if (cmdName == SetEmailTemplate::cmdName())
+        {
+            genType = QByteArray(1, GEN_UPLOAD);
         }
 
         frame.append(QByteArray(2, 0x00));
-        frame.append(boolByte);
+        frame.append(genType);
         frame.append(fixedToTEXT(cmdName, BLKSIZE_CMD_NAME));
         frame.append(fixedToTEXT(libName(), BLKSIZE_LIB_NAME));
         frame.append(nullTermTEXT(shortText(cmdName)));

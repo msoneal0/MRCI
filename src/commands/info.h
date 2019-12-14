@@ -21,6 +21,8 @@
 #include "../cmd_object.h"
 #include "../shell.h"
 #include "table_viewer.h"
+#include "fs.h"
+#include "acct_recovery.h"
 
 class ListCommands : public CmdObject
 {
@@ -29,7 +31,6 @@ class ListCommands : public CmdObject
 private:
 
     QStringList list;
-    QStringList genfileList;
 
     QString shortText(const QString &cmdName);
     QString ioText(const QString &cmdName);
@@ -41,7 +42,7 @@ private slots:
 
 public:
 
-    explicit ListCommands(const QStringList &cmdList, const QStringList &gen, QObject *parent = nullptr);
+    explicit ListCommands(const QStringList &cmdList, QObject *parent = nullptr);
 };
 
 //--------------------------------------

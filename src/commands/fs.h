@@ -31,17 +31,18 @@ class DownloadFile : public CmdObject
 private:
 
     QFile *file;
-    qint64 buffSize;
     qint64 len;
     qint64 dataSent;
+    bool   ssMode;
+    bool   paramsSet;
 
     void sendChunk();
+    void onTerminate();
 
 public:
 
     static QString cmdName();
 
-    void clear();
     void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit DownloadFile(QObject *parent = nullptr);
@@ -59,11 +60,13 @@ private:
     QFile          *file;
     qint64          len;
     qint64          dataReceived;
+    qint64          offs;
     bool            ssMode;
     bool            confirm;
     bool            force;
 
     void wrToFile(const QByteArray &data);
+    void onTerminate();
     void run();
     void ask();
 
@@ -71,7 +74,6 @@ public:
 
     static QString cmdName();
 
-    void clear();
     void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit UploadFile(QObject *parent = nullptr);
@@ -109,6 +111,7 @@ protected:
 
     void ask();
     void run();
+    void onTerminate();
 
     QFile                         *src;
     QFile                         *dst;
@@ -131,7 +134,6 @@ public:
 
     static QString cmdName();
 
-    void clear();
     void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit Copy(QObject *parent = nullptr);
@@ -231,12 +233,12 @@ private:
     bool          noHidden;
 
     void printList(const QString &path);
+    void onTerminate();
 
 public:
 
     static QString cmdName();
 
-    void clear();
     void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit Tree(QObject *parent = nullptr);

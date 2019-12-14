@@ -49,7 +49,6 @@ private:
     QStringList userCmdList();
     QStringList pubCmdList();
     QStringList rankExemptList();
-    QStringList genfileList();
 
 public:
 
