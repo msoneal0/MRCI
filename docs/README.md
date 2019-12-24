@@ -95,6 +95,6 @@ The makeself installer not only installs the application but also installs it as
 
 Start/Stop the service:
 ```
-sudo systemctl start mrci@$USER
-sudo systemctl stop mrci@$USER
+sudo systemctl start mrci
+sudo systemctl stop mrci
 ```
