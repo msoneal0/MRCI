@@ -5,12 +5,12 @@ installer_file="$2"
 
 src_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 bin_name="mrci"
-app_version="2.1.2"
+app_version="2.1.3"
 app_name="MRCI"
 install_dir="/opt/$bin_name"
+var_dir="/var/opt/$bin_name"
 bin_dir="/usr/bin"
 tmp_dir="$HOME/.cache/mrci_build"
-user="$USER"
 
 if [ ! -d "$qt_dir" ]; then
 
@@ -32,14 +32,14 @@ fi
  
 if [ -d "$tmp_dir" ]; then
  
- rm -rfv $tmp_dir
+ rm -rf $tmp_dir
   
 fi
 
 if [ $? -eq 0 -a -d "$qt_dir" ]; then
 
   mkdir -vp $tmp_dir
-  cp -rv $src_dir/. $tmp_dir
+  cp -r $src_dir/. $tmp_dir
   cd $tmp_dir
   qmake -config release
  
@@ -68,6 +68,7 @@ if [ $? -eq 0 -a -d "$qt_dir" ]; then
     echo "export QTDIR=$install_dir" >> $startup_script
     echo "export QT_PLUGIN_PATH=$install_dir" >> $startup_script
     echo "export LD_LIBRARY_PATH=\"$install_dir/lib:\$LD_LIBRARY_PATH\"" >> $startup_script
+    echo "export MRCI_DB_PATH=$var_dir/data.db" >> $startup_script
     echo "$install_dir/$bin_name \$1 \$2 \$3" >> $startup_script
    
     echo "#!/bin/sh" > $setup_script
@@ -77,43 +78,57 @@ if [ $? -eq 0 -a -d "$qt_dir" ]; then
     echo "if [ ! -d \"$install_dir\" ]; then" >> $setup_script
     echo " sudo mkdir -p $install_dir" >> $setup_script
     echo "fi" >> $setup_script
-    echo "sudo cp -rfv ./lib $install_dir" >> $setup_script
-    echo "sudo cp -rfv ./sqldrivers $install_dir" >> $setup_script
-    echo "sudo cp -fv ./$bin_name $install_dir" >> $setup_script
-    echo "sudo cp -fv ./$bin_name.sh $install_dir" >> $setup_script
-    echo "sudo cp -fv ./uninstall.sh $install_dir" >> $setup_script
-    echo "sudo cp -fv ./$bin_name.service /etc/systemd/system/$bin_name@$USER.service" >> $setup_script
-    echo "sudo chmod 755 $install_dir/$bin_name" >> $setup_script
-    echo "sudo chmod 755 $install_dir/$bin_name.sh" >> $setup_script
-    echo "sudo chmod 755 $install_dir/uninstall.sh" >> $setup_script
-    echo "sudo chmod 755 $install_dir" >> $setup_script
-    echo "sudo chmod -R 755 $install_dir/lib" >> $setup_script
-    echo "sudo chmod -R 755 $install_dir/sqldrivers" >> $setup_script
-    echo "sudo chmod 755 /etc/systemd/system/$bin_name@$USER.service" >> $setup_script
-    echo "sudo ln -sf $install_dir/$bin_name.sh $bin_dir/$bin_name" >> $setup_script
-    echo "sudo systemctl start $bin_name@$USER" >> $setup_script
-    echo "sudo systemctl enable $bin_name@$USER" >> $setup_script
-    echo "echo \"\nInstallation finished. If you ever need to uninstall this application, run this command:\n\"" >> $setup_script
-    echo "echo \"   sh $install_dir/uninstall.sh\n\"" >> $setup_script
+    echo "if [ ! -d \"$var_dir\" ]; then" >> $setup_script
+    echo " sudo mkdir -p $var_dir" >> $setup_script
+    echo "fi" >> $setup_script
+    echo "cp -rfv ./lib $install_dir" >> $setup_script
+    echo "cp -rfv ./sqldrivers $install_dir" >> $setup_script
+    echo "cp -fv ./$bin_name $install_dir" >> $setup_script
+    echo "cp -fv ./$bin_name.sh $install_dir" >> $setup_script
+    echo "cp -fv ./uninstall.sh $install_dir" >> $setup_script
+    echo "cp -fv ./$bin_name.service /etc/systemd/system/$bin_name.service" >> $setup_script
+    echo "useradd -r $bin_name" >> $setup_script
+    echo "chmod 755 $install_dir/$bin_name" >> $setup_script
+    echo "chmod 755 $install_dir/$bin_name.sh" >> $setup_script
+    echo "chmod 755 $install_dir/uninstall.sh" >> $setup_script
+    echo "chmod 755 $install_dir" >> $setup_script
+    echo "chmod -R 755 $install_dir/lib" >> $setup_script
+    echo "chmod -R 755 $install_dir/sqldrivers" >> $setup_script
+    echo "chmod 755 /etc/systemd/system/$bin_name.service" >> $setup_script
+    echo "chown -R $bin_name:$bin_name $var_dir" >> $setup_script
+    echo "chmod -R 755 $var_dir" >> $setup_script
+    echo "ln -sf $install_dir/$bin_name.sh $bin_dir/$bin_name" >> $setup_script
+    echo "systemctl start $bin_name" >> $setup_script
+    echo "systemctl enable $bin_name" >> $setup_script
+    echo "if [ \$? -eq 0 ]; then" >> $setup_script
+    echo " echo \"\nInstallation finished. If you ever need to uninstall this application, run this command:\n\"" >> $setup_script
+    echo " echo \"   $install_dir/uninstall.sh\n\"" >> $setup_script
+    echo "fi" >> $setup_script
     
     echo "[Unit]" > $service_file
-    echo "Description=$app_name host" >> $service_file
+    echo "Description=$app_name Host Daemon" >> $service_file
     echo "After=network.target" >> $service_file
     echo "" >> $service_file
     echo "[Service]" >> $service_file
     echo "Type=simple" >> $service_file
-    echo "User=%i" >> $service_file
+    echo "User=$bin_name" >> $service_file
+    echo "Restart=on-failure" >> $service_file
+    echo "RestartSec=5" >> $service_file
+    echo "TimeoutStopSec=infinity" >> $service_file
     echo "ExecStart=/usr/bin/env $bin_name -host" >> $service_file
+    echo "ExecStop=/usr/bin/env $bin_name -stop" >> $service_file
     echo "" >> $service_file
     echo "[Install]" >> $service_file
     echo "WantedBy=multi-user.target" >> $service_file
      
     echo "#!/bin/sh" > $uninstall_script
-    echo "sudo systemctl -q stop $bin_name@$USER" >> $uninstall_script
-    echo "sudo systemctl -q disable $bin_name@$USER" >> $uninstall_script
-    echo "sudo rm -v /etc/systemd/system/$bin_name@$USER.service" >> $uninstall_script
-    echo "sudo rm -v $bin_dir/$bin_name" >> $uninstall_script
-    echo "sudo rm -rv $install_dir" >> $uninstall_script
+    echo "systemctl -q stop $bin_name" >> $uninstall_script
+    echo "systemctl -q disable $bin_name" >> $uninstall_script
+    echo "rm -v /etc/systemd/system/$bin_name.service" >> $uninstall_script
+    echo "rm -v $bin_dir/$bin_name" >> $uninstall_script
+    echo "rm -rv $install_dir" >> $uninstall_script
+    echo "chown -R root:root $var_dir" >> $uninstall_script
+    echo "deluser $bin_name" >> $uninstall_script
     
     chmod +x $setup_script
     

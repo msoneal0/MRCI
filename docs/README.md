@@ -10,13 +10,12 @@ Usage: mrci <argument>
 <Arguments>
 
  -help                   : display usage information about this application.
- -start                  : start a new host instance in the background. (non-blocking)
  -stop                   : stop the current host instance if one is currently running.
  -about                  : display versioning/warranty information about this application.
  -addr {ip_address:port} : set the listening address and port for TCP clients.
  -status                 : display status information about the host instance if it is currently running.
  -reset_root             : reset the root account password to the default password.
- -host                   : this starts a blocking host instance. for internal use only.
+ -host                   : start a new host instance. (this blocks).
  -public_cmds            : run the internal module to list it's public commands. for internal use only.
  -exempt_cmds            : run the internal module to list it's rank exempt commands. for internal use only.
  -user_cmds              : run the internal module to list it's user commands. for internal use only.

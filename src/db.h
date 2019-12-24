@@ -37,25 +37,27 @@
 #include "shell.h"
 
 #define APP_NAME   "MRCI"
-#define APP_VER    "2.1.2"
+#define APP_VER    "2.1.3"
 #define APP_TARGET "mrci"
 
 #ifdef Q_OS_WIN
 
 #define DEFAULT_MAILBIN   "%COMSPEC%"
 #define DEFAULT_MAIL_SEND "echo %message_body% | mutt -s %subject% %target_email%"
-#define DEFAULT_DB_PATH   "%LOCALAPPDATA%\\%EXENAME%\\data.db"
+#define DEFAULT_DB_PATH   "%PROGRAMDATA%\\mrci\\data.db"
+#define DEFAULT_WORK_DIR  "%PROGRAMDATA%\\mrci"
 
 #else
 
 #define DEFAULT_MAILBIN   "/bin/sh"
 #define DEFAULT_MAIL_SEND "-c \"echo %message_body% | mutt -s %subject% %target_email%\""
-#define DEFAULT_DB_PATH   "$HOME/.$EXENAME/data.db"
+#define DEFAULT_DB_PATH   "/var/opt/mrci/data.db"
+#define DEFAULT_WORK_DIR  "/var/opt/mrci"
 
 #endif
 
 #define ENV_DB_PATH             "MRCI_DB_PATH"
-#define ENV_EXENAME             "EXENAME"
+#define ENV_WORK_DIR            "MRCI_WORK_DIR"
 #define ROOT_USER               "root"
 #define SUBJECT_SUB             "%subject%"
 #define MSG_SUB                 "%message_body%"

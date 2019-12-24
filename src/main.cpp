@@ -60,13 +60,12 @@ void showHelp()
     txtOut << "Usage: " << APP_TARGET << " <argument>" << endl << endl;
     txtOut << "<Arguments>" << endl << endl;
     txtOut << " -help                   : display usage information about this application." << endl;
-    txtOut << " -start                  : start a new host instance in the background. (non-blocking)" << endl;
     txtOut << " -stop                   : stop the current host instance if one is currently running." << endl;
     txtOut << " -about                  : display versioning/warranty information about this application." << endl;
     txtOut << " -addr {ip_address:port} : set the listening address and port for TCP clients." << endl;
     txtOut << " -status                 : display status information about the host instance if it is currently running." << endl;
     txtOut << " -reset_root             : reset the root account password to the default password shown below." << endl;
-    txtOut << " -host                   : this starts a blocking host instance. for internal use only." << endl;
+    txtOut << " -host                   : start a new host instance. (this blocks)" << endl;
     txtOut << " -public_cmds            : run the internal module to list it's public commands. for internal use only." << endl;
     txtOut << " -exempt_cmds            : run the internal module to list it's rank exempt commands. for internal use only." << endl;
     txtOut << " -user_cmds              : run the internal module to list it's user commands. for internal use only." << endl;
@@ -110,11 +109,11 @@ int main(int argc, char *argv[])
 
     serializeThread(app.thread());
 
-    QDir::setCurrent(QDir::homePath());
+    QString workDir = expandEnvVariables(qEnvironmentVariable(ENV_WORK_DIR, DEFAULT_WORK_DIR));
+
+    QDir::setCurrent(workDir);
     QCoreApplication::setApplicationName(APP_NAME);
     QCoreApplication::setApplicationVersion(APP_VER);
-
-    qputenv(ENV_EXENAME, APP_TARGET);
 
     QString     err;
     QStringList args   = QCoreApplication::arguments();
@@ -223,17 +222,6 @@ int main(int argc, char *argv[])
             {
                 ret = QCoreApplication::exec();
             }
-        }
-    }
-    else if (args.contains("-start", Qt::CaseInsensitive))
-    {
-        if (dbFail)
-        {
-            soeDueToDbErr(&ret);
-        }
-        else
-        {
-            QProcess::startDetached(QCoreApplication::applicationFilePath(), QStringList() << "-host");
         }
     }
     else if (args.contains("-stop", Qt::CaseInsensitive) || args.contains("-status", Qt::CaseInsensitive))
