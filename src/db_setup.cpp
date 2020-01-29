@@ -58,17 +58,6 @@ bool setupDb(QString *errMsg)
 
     if (ret)
     {
-        query.setType(Query::CREATE_TABLE, TABLE_IPBANS);
-        query.addColumn(COLUMN_IPADDR);
-        query.addColumn(COLUMN_TIME);
-        query.setPrimary(COLUMN_IPADDR);
-        query.addUnique(COLUMN_IPADDR);
-
-        ret = query.exec();
-    }
-
-    if (ret)
-    {
         query.setType(Query::CREATE_TABLE, TABLE_CMD_RANKS);
         query.addColumn(COLUMN_COMMAND);
         query.addColumn(COLUMN_HOST_RANK);
@@ -136,10 +125,10 @@ bool setupDb(QString *errMsg)
             QByteArray uId = genUniqueHash();
 
             query.setType(Query::PUSH, TABLE_USERS);
-            query.addColumn(COLUMN_USERNAME, ROOT_USER);
+            query.addColumn(COLUMN_USERNAME, DEFAULT_ROOT_USER);
             query.addColumn(COLUMN_HOST_RANK, 1);
             query.addColumn(COLUMN_NEED_PASS, true);
-            query.addColumn(COLUMN_NEED_NAME, false);
+            query.addColumn(COLUMN_NEED_NAME, true);
             query.addColumn(COLUMN_LOCKED, false);
             query.addColumn(COLUMN_EMAIL_VERIFIED, false);
             query.addColumn(COLUMN_USER_ID, uId);
@@ -152,6 +141,14 @@ bool setupDb(QString *errMsg)
                 randPw = genPw();
                 ret    = updatePassword(uId, randPw, TABLE_USERS, true);
             }
+        }
+        else
+        {
+            query.setType(Query::UPDATE, TABLE_USERS);
+            query.addColumn(COLUMN_NEED_NAME, true);
+            query.addCondition(COLUMN_USERNAME, DEFAULT_ROOT_USER);
+
+            ret = query.exec();
         }
     }
 
@@ -240,6 +237,7 @@ bool setupDb(QString *errMsg)
         query.addColumn(COLUMN_ACTIVE_UPDATE);
         query.addColumn(COLUMN_MAX_SUB_CH);
         query.addColumn(COLUMN_DEFAULT_PASS);
+        query.addColumn(COLUMN_ROOT_USER);
 
         ret = query.exec();
 
@@ -247,6 +245,8 @@ bool setupDb(QString *errMsg)
         {
             randPw = genPw();
         }
+
+        QByteArray rootUId = rootUserId();
 
         if (query.createExecuted())
         {
@@ -269,6 +269,7 @@ bool setupDb(QString *errMsg)
             query.addColumn(COLUMN_ACTIVE_UPDATE, true);
             query.addColumn(COLUMN_MAX_SUB_CH, DEFAULT_MAX_SUBS);
             query.addColumn(COLUMN_DEFAULT_PASS, randPw);
+            query.addColumn(COLUMN_ROOT_USER, rootUId);
 
             ret = query.exec();
         }
@@ -296,6 +297,7 @@ bool setupDb(QString *errMsg)
             query.addColumn(COLUMN_ACTIVE_UPDATE);
             query.addColumn(COLUMN_MAX_SUB_CH);
             query.addColumn(COLUMN_DEFAULT_PASS);
+            query.addColumn(COLUMN_ROOT_USER);
 
             ret = query.exec();
 
@@ -321,6 +323,7 @@ bool setupDb(QString *errMsg)
                 if (query.getData(COLUMN_ACTIVE_UPDATE).isNull())   defaults.addColumn(COLUMN_ACTIVE_UPDATE, true);
                 if (query.getData(COLUMN_MAX_SUB_CH).isNull())      defaults.addColumn(COLUMN_MAX_SUB_CH, DEFAULT_MAX_SUBS);
                 if (query.getData(COLUMN_DEFAULT_PASS).isNull())    defaults.addColumn(COLUMN_DEFAULT_PASS, randPw);
+                if (query.getData(COLUMN_ROOT_USER).isNull())       defaults.addColumn(COLUMN_ROOT_USER, rootUId);
 
                 if (defaults.columns())
                 {

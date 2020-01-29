@@ -118,7 +118,6 @@ signals:
     void ended();
     void closeServer();
     void resServer();
-    void updateBanList();
     void killMods();
 };
 

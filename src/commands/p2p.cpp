@@ -30,6 +30,8 @@ QString LsP2P::cmdName()      {return "ls_p2p";}
 
 void ToPeer::procIn(const QByteArray &binIn, quint8 dType)
 {
+    retCode = INVALID_PARAMS;
+
     if (binIn.size() >= BLKSIZE_SESSION_ID)
     {
         errTxt("err: The p2p data does not contain a session id header.\n");
@@ -40,11 +42,13 @@ void ToPeer::procIn(const QByteArray &binIn, quint8 dType)
     }
     else
     {
-        quint32    len    = static_cast<quint32>(binIn.size());
-        QByteArray dst    = rdFromBlock(binIn.data(), BLKSIZE_SESSION_ID);
-        QByteArray src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
-        QByteArray data   = rdFromBlock(binIn.data() + BLKSIZE_SESSION_ID, len - BLKSIZE_SESSION_ID);
-        QByteArray typeBa = wrInt(dType, 8);
+        retCode = NO_ERRORS;
+
+        auto len    = static_cast<quint32>(binIn.size());
+        auto dst    = rdFromBlock(binIn.data(), BLKSIZE_SESSION_ID);
+        auto src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
+        auto data   = rdFromBlock(binIn.data() + BLKSIZE_SESSION_ID, len - BLKSIZE_SESSION_ID);
+        auto typeBa = wrInt(dType, 8);
 
         async(ASYNC_P2P, PUB_IPC, dst + src + typeBa + data);
     }
@@ -54,6 +58,8 @@ void P2PRequest::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == SESSION_ID)
     {
+        retCode = INVALID_PARAMS;
+
         if (binIn.size() != BLKSIZE_SESSION_ID)
         {
             errTxt("err: The given client session id does not equal " + QString::number(BLKSIZE_SESSION_ID) + " bytes.\n");
@@ -68,9 +74,11 @@ void P2PRequest::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
-            QByteArray dst    = rdFromBlock(binIn.data(), BLKSIZE_SESSION_ID);
-            QByteArray src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
-            QByteArray typeBa = wrInt(P2P_REQUEST, 8);
+            retCode = NO_ERRORS;
+
+            auto dst    = rdFromBlock(binIn.data(), BLKSIZE_SESSION_ID);
+            auto src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
+            auto typeBa = wrInt(P2P_REQUEST, 8);
 
             async(ASYNC_P2P, PUB_IPC, dst + src + typeBa + createPeerInfoFrame());
         }
@@ -81,6 +89,8 @@ void P2POpen::procIn(const QByteArray &binIn, quint8 dType)
 {   
     if (dType == SESSION_ID)
     {
+        retCode = INVALID_PARAMS;
+
         if (binIn.size() != BLKSIZE_SESSION_ID)
         {
             errTxt("err: The given client session id does not equal " + QString::number(BLKSIZE_SESSION_ID) + " bytes.\n");
@@ -95,9 +105,11 @@ void P2POpen::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
-            QByteArray dst    = rdFromBlock(binIn.data(), BLKSIZE_SESSION_ID);
-            QByteArray src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
-            QByteArray typeBa = wrInt(P2P_OPEN, 8);
+            retCode = NO_ERRORS;
+
+            auto dst    = rdFromBlock(binIn.data(), BLKSIZE_SESSION_ID);
+            auto src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
+            auto typeBa = wrInt(P2P_OPEN, 8);
 
             async(ASYNC_P2P, PUB_IPC, dst + src + typeBa + dst);
         }
@@ -108,6 +120,8 @@ void P2PClose::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == SESSION_ID)
     {
+        retCode = INVALID_PARAMS;
+
         if (binIn.size() != BLKSIZE_SESSION_ID)
         {
             errTxt("err: The given client session id does not equal " + QString::number(BLKSIZE_SESSION_ID) + " bytes.\n");
@@ -119,9 +133,11 @@ void P2PClose::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
-            QByteArray dst    = rdFromBlock(binIn.data(), BLKSIZE_SESSION_ID);
-            QByteArray src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
-            QByteArray typeBa = wrInt(P2P_CLOSE, 8);
+            retCode = NO_ERRORS;
+
+            auto dst    = rdFromBlock(binIn.data(), BLKSIZE_SESSION_ID);
+            auto src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
+            auto typeBa = wrInt(P2P_CLOSE, 8);
 
             async(P2P_CLOSE, PUB_IPC, dst + src + typeBa + dst);
         }
@@ -153,8 +169,9 @@ void LsP2P::procIn(const QByteArray &binIn, quint8 dType)
 
     if (dType == TEXT)
     {
-        QList<QByteArray>  peerIds = lsBlocks(p2pAccepted, MAX_P2P_LINKS, BLKSIZE_SESSION_ID) +
-                                     lsBlocks(p2pPending, MAX_P2P_LINKS, BLKSIZE_SESSION_ID);
+        auto peerIds = lsBlocks(p2pAccepted, MAX_P2P_LINKS, BLKSIZE_SESSION_ID) +
+                       lsBlocks(p2pPending, MAX_P2P_LINKS, BLKSIZE_SESSION_ID);
+
         QList<QStringList> tableData;
         QStringList        separators;
         QList<int>         justLens;
@@ -170,7 +187,8 @@ void LsP2P::procIn(const QByteArray &binIn, quint8 dType)
 
         for (auto&& peerId: peerIds)
         {
-            QString     pending = "0";
+            auto pending = "0";
+            
             QStringList columnData;
 
             if (posOfBlock(peerId.data(), p2pPending, MAX_P2P_LINKS, BLKSIZE_SESSION_ID) != -1)

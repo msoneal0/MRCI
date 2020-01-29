@@ -6,8 +6,6 @@ The host is extendable via 3rd party modules but the host itself is an internal 
 
 * [add_acct](intern_commands/add_acct.md) - create a new host user account.
 
-* [add_ban](intern_commands/add_ban.md) - add an ip address to the host ban list.
-
 * [add_cert](intern_commands/add_cert.md) - install a new SSL/TLS cert into the host.
 
 * [add_ch](intern_commands/add_ch.md) - create a new channel.
@@ -72,8 +70,6 @@ The host is extendable via 3rd party modules but the host itself is an internal 
 
 * [ls_auth_log](intern_commands/ls_auth_log.md) - display the host authorization activity log.
 
-* [ls_bans](intern_commands/ls_bans.md) - display or manage the host ip address ban table.
-
 * [ls_certs](intern_commands/ls_certs.md) - display a list of all SSL/TLS certificates installed in the host database.
 
 * [ls_ch_members](intern_commands/ls_ch_members.md) - list all members in a channel.
@@ -127,8 +123,6 @@ The host is extendable via 3rd party modules but the host itself is an internal 
 * [restart_host](intern_commands/restart_host.md) - re-start the host instance.
 
 * [rm_acct](intern_commands/rm_acct.md) - delete a user account from the host database.
-
-* [rm_ban](intern_commands/rm_ban.md) - remove an ip address from the ban list.
 
 * [rm_cert](intern_commands/rm_cert.md) - remove the SSL/TLS cert associated with the given common name.
 

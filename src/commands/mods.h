@@ -24,7 +24,7 @@
 QString rmFileSuffix(const QString &filePath);
 bool    validFileOnlyName(const QString &fileName);
 
-class UploadMod : public CmdObject
+class AddMod : public CmdObject
 {
     Q_OBJECT
 
@@ -38,7 +38,7 @@ public:
 
     void procIn(const QByteArray &binIn, quint8 dType);
 
-    explicit UploadMod(QObject *parent = nullptr);
+    explicit AddMod(QObject *parent = nullptr);
 };
 
 //-------------------------------

@@ -77,7 +77,27 @@ This id can be treated exactly like TEXT except this should tell the client to h
 Also formatted exactly like TEXT but this indicates to the client that this is a large body of text that is recommended to be word wrapped when displaying to the user. It can contain line breaks so clients are also recommended to honor those line breaks.
 
 ```IDLE```
-This doesn't carry any actual data, instead this indicates that the command id and branch id that sent it has finished it's task. Modules that send this doesn't need to terminate it's process.
+All commands started during the session returns this type id when it has finished it's task. by default, it carries a 16bit unsigned integer indicating the result of the task that the command was running.
+
+```
+enum RetCode : quint16
+{
+    NO_ERRORS       = 1, // task execution completed without any issues.
+    ABORTED         = 2, // the task aborted via user or host intervention.
+    INVALID_PARAMS  = 3, // invalid/missing parameters prevented the task from executing.
+    CRASH           = 4, // the command process has crashed.
+    FAILED_TO_START = 5, // the command process could not start.
+    EXECUTION_FAIL  = 6, // command specific error prevented execution of the task.
+    CUSTOM          = 7  // indicates a custom return code.
+};
+
+notes:
+1. the custom return code can be additional data added to the end of the 16bit
+   integer that can carry additional data about the result of the task. it can
+   be any format that the module itself decides it should be. nothing is
+   stopping modules from defining return codes beyond the value of 7 but it is
+   advised not to because this enum might be expanded in the future.
+``` 
 
 ```KILL_CMD```
 This doesn't carry any actual data, instead can be sent by the client or session object to tell the command-branch id sent in the frame to terminate the module process. Modules that receive this need to send a IDLE frame if a command is still running and then terminate itself. The module will have 3 seconds to do this before it is force killed by the session.

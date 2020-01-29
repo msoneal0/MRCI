@@ -30,7 +30,7 @@ QByteArray toFILE_INFO(const QFileInfo &info)
     //         note: the integer data found in flags, modTime, createTime and fileSize
     //               are formatted in little endian byte order (unsigned).
 
-    char flags = 0;
+    auto flags = 0x00;
 
     if (info.isFile())       flags |= IS_FILE;
     if (info.isDir())        flags |= IS_DIR;
@@ -98,17 +98,27 @@ void DownloadFile::onTerminate()
 
 void DownloadFile::sendChunk()
 {
-    QByteArray data = file->read(LOCAL_BUFFSIZE);
+    auto data = file->read(LOCAL_BUFFSIZE);
 
-    dataSent += data.size();
-
-    emit procOut(data, GEN_FILE);
-
-    mainTxt(QString::number(dataSent) + " / " + QString::number(len) + "\n");
-
-    if ((dataSent >= len) || file->atEnd())
+    if (file->error() != QFile::NoError)
     {
+        retCode = EXECUTION_FAIL;
+
+        errTxt("err: File IO failure: " + file->errorString() + ".\n");
         onTerminate();
+    }
+    else
+    {
+        dataSent += data.size();
+
+        emit procOut(data, GEN_FILE);
+
+        mainTxt(QString::number(dataSent) + " / " + QString::number(len) + "\n");
+
+        if ((dataSent >= len) || file->atEnd())
+        {
+            onTerminate();
+        }
     }
 }
 
@@ -126,10 +136,12 @@ void DownloadFile::procIn(const QByteArray &binIn, quint8 dType)
     }
     else if (dType == GEN_FILE)
     {
-        QStringList args   = parseArgs(binIn, 11);
-        QString     path   = getParam("-remote_file", args);
-        QString     offStr = getParam("-offset", args);
-        QString     lenStr = getParam("-len", args);
+        auto args   = parseArgs(binIn, 11);
+        auto path   = getParam("-remote_file", args);
+        auto offStr = getParam("-offset", args);
+        auto lenStr = getParam("-len", args);
+
+        retCode = INVALID_PARAMS;
 
         file->setFileName(path);
 
@@ -155,6 +167,8 @@ void DownloadFile::procIn(const QByteArray &binIn, quint8 dType)
         }
         else if (!file->open(QFile::ReadOnly))
         {
+            retCode = EXECUTION_FAIL;
+
             errTxt("err: Unable to open the remote file for reading. reason: " + file->errorString() + "\n");
         }
         else
@@ -162,6 +176,7 @@ void DownloadFile::procIn(const QByteArray &binIn, quint8 dType)
             len       = lenStr.toLongLong();
             ssMode    = argExists("-single_step", args);
             paramsSet = true;
+            retCode   = NO_ERRORS;
             flags    |= MORE_INPUT;
 
             if ((len == 0) || (len > file->size()))
@@ -192,19 +207,29 @@ void UploadFile::onTerminate()
 
 void UploadFile::wrToFile(const QByteArray &data)
 {
-    dataReceived += data.size();
+    auto written = file->write(data);
 
-    file->write(data);
-
-    mainTxt(QString::number(dataReceived) + " / " + QString::number(len) + "\n");
-
-    if (dataReceived >= len)
+    if (written == -1)
     {
+        retCode = EXECUTION_FAIL;
+
+        errTxt("err: File IO failure: " + file->errorString() + ".\n");
         onTerminate();
     }
-    else if (ssMode)
+    else
     {
-        emit procOut(QByteArray(), GEN_FILE);
+        dataReceived += written;
+
+        mainTxt(QString::number(dataReceived) + " / " + QString::number(len) + "\n");
+
+        if (dataReceived >= len)
+        {
+            onTerminate();
+        }
+        else if (ssMode)
+        {
+            emit procOut(QByteArray(), GEN_FILE);
+        }
     }
 }
 
@@ -225,6 +250,8 @@ void UploadFile::run()
     }
     else
     {
+        retCode = EXECUTION_FAIL;
+
         errTxt("err: Unable to open the remote file for writing. reason: " + file->errorString() + "\n");
         onTerminate();
     }
@@ -234,7 +261,7 @@ void UploadFile::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (((dType == GEN_FILE) || (dType == TEXT)) && confirm)
     {
-        QString ans = fromTEXT(binIn);
+        auto ans = fromTEXT(binIn);
 
         if (noCaseMatch("y", ans))
         {
@@ -244,6 +271,8 @@ void UploadFile::procIn(const QByteArray &binIn, quint8 dType)
         }
         else if (noCaseMatch("n", ans))
         {
+            retCode = ABORTED;
+
             onTerminate();
         }
         else
@@ -257,10 +286,12 @@ void UploadFile::procIn(const QByteArray &binIn, quint8 dType)
     }
     else if (dType == GEN_FILE)
     {
-        QStringList args   = parseArgs(binIn, 11);
-        QString     lenStr = getParam("-len", args);
-        QString     offStr = getParam("-offset", args);
-        QString     dst    = getParam("-remote_file", args);
+        auto args   = parseArgs(binIn, 11);
+        auto lenStr = getParam("-len", args);
+        auto offStr = getParam("-offset", args);
+        auto dst    = getParam("-remote_file", args);
+
+        retCode = INVALID_PARAMS;
 
         if (dst.isEmpty())
         {
@@ -289,11 +320,12 @@ void UploadFile::procIn(const QByteArray &binIn, quint8 dType)
                 mode = QFile::ReadWrite;
             }
 
-            force  = argExists("-force", args);
-            ssMode = argExists("-single_step", args);
-            len    = lenStr.toLongLong();
-            offs   = offStr.toLongLong();
-            flags |= MORE_INPUT;
+            force   = argExists("-force", args);
+            ssMode  = argExists("-single_step", args);
+            len     = lenStr.toLongLong();
+            offs    = offStr.toLongLong();
+            retCode = NO_ERRORS;
+            flags  |= MORE_INPUT;
 
             file->setFileName(dst);
 
@@ -333,6 +365,11 @@ void Delete::run()
         ok = QDir(path).removeRecursively();
     }
 
+    if (!ok)
+    {
+        retCode = EXECUTION_FAIL;
+    }
+
     if (!ok && !info.exists())
     {
         errTxt("err: '" + path + "' already does not exists.\n");
@@ -351,7 +388,7 @@ void Delete::procIn(const QByteArray &binIn, uchar dType)
 {
     if ((flags & MORE_INPUT) && (dType == TEXT))
     {
-        QString ans = fromTEXT(binIn);
+        auto ans = fromTEXT(binIn);
 
         if (noCaseMatch("y", ans))
         {
@@ -361,7 +398,8 @@ void Delete::procIn(const QByteArray &binIn, uchar dType)
         }
         else if (noCaseMatch("n", ans))
         {
-            flags &= ~MORE_INPUT;
+            retCode = ABORTED;
+            flags  &= ~MORE_INPUT;
         }
         else
         {
@@ -370,9 +408,10 @@ void Delete::procIn(const QByteArray &binIn, uchar dType)
     }
     else if (dType == TEXT)
     {
-        QStringList args = parseArgs(binIn, 3);
+        auto args = parseArgs(binIn, 3);
 
-        path = getParam("-path", args);
+        path    = getParam("-path", args);
+        retCode = INVALID_PARAMS;
 
         if (path.isEmpty())
         {
@@ -430,7 +469,7 @@ bool Copy::matchingVolumeMatters()
 
 bool Copy::permissionsOk(bool dstExists)
 {
-    bool ret = true;
+    auto ret = true;
 
     if (!QFileInfo(srcPath).isReadable())
     {
@@ -443,6 +482,15 @@ bool Copy::permissionsOk(bool dstExists)
         errTxt("err: Write permission to '" + dstPath + "' is denied\n");
 
         ret = false;
+    }
+
+    if (ret)
+    {
+        retCode = NO_ERRORS;
+    }
+    else
+    {
+        retCode = EXECUTION_FAIL;
     }
 
     return ret;
@@ -471,7 +519,11 @@ void Copy::run()
         else
         {
             errTxt("err: Unable to re-create the source symlink at the destination path. writing to the path is not possible/denied.\n");
-            onTerminate();
+
+            if (queue.isEmpty())
+            {
+                onTerminate();
+            }
         }
     }
     else if (QFileInfo(srcPath).isDir())
@@ -486,12 +538,20 @@ void Copy::run()
         if (!dst->open(QFile::WriteOnly | QFile::Truncate))
         {
             errTxt("err: Unable to open the destination file '" + dstPath + "' for writing. reason: " + dst->errorString() + "\n");
-            onTerminate();
+
+            if (queue.isEmpty())
+            {
+                onTerminate();
+            }
         }
         else if (!src->open(QFile::ReadOnly))
         {
             errTxt("err: Unable to open the source file '" + srcPath + "' for reading. reason: " + src->errorString() + "\n");
-            onTerminate();
+
+            if (queue.isEmpty())
+            {
+                onTerminate();
+            }
         }
         else
         {
@@ -526,7 +586,7 @@ void Copy::procIn(const QByteArray &binIn, uchar dType)
         }
         else if (!queue.isEmpty())
         {
-            QPair<QString,QString> srcToDst = queue.takeFirst();
+            auto srcToDst = queue.takeFirst();
 
             srcPath   = srcToDst.first;
             dstPath   = srcToDst.second;
@@ -535,7 +595,7 @@ void Copy::procIn(const QByteArray &binIn, uchar dType)
             src->setFileName(srcPath);
             dst->setFileName(dstPath);
 
-            bool exists = QFileInfo(dstPath).exists();
+            auto exists = QFileInfo(dstPath).exists();
 
             if (exists && !yToAll && !nToAll)
             {
@@ -556,7 +616,7 @@ void Copy::procIn(const QByteArray &binIn, uchar dType)
     }
     else if ((dType == TEXT) && (flags & MORE_INPUT))
     {
-        QString ans = fromTEXT(binIn);
+        auto ans = fromTEXT(binIn);
 
         if (noCaseMatch("y", ans))
         {
@@ -611,14 +671,15 @@ void Copy::procIn(const QByteArray &binIn, uchar dType)
     {
         onTerminate();
 
-        QStringList args  = parseArgs(binIn, 5);
-        bool        force = argExists("-force", args);
+        auto args  = parseArgs(binIn, 5);
+        auto force = argExists("-force", args);
 
         srcPath    = getParam("-src", args);
         dstPath    = getParam("-dst", args);
         oriSrcPath = srcPath;
+        retCode    = INVALID_PARAMS;
 
-        bool dstExists = QFileInfo(dstPath).exists();
+        auto dstExists = QFileInfo(dstPath).exists();
 
         src->setFileName(srcPath);
         dst->setFileName(dstPath);
@@ -665,6 +726,8 @@ void Move::runOnMatchingVolume()
 
     if (!QFile::rename(srcPath, dstPath))
     {
+        retCode = EXECUTION_FAIL;
+
         errTxt("err: Unable to do move operation. it's likely the command failed to remove the existing destination object or writing to the path is not possible/denied.\n");
         onTerminate();
     }
@@ -685,7 +748,7 @@ void Move::preFinish()
 
 bool Move::permissionsOk(bool dstExists)
 {
-    bool ret = true;
+    auto ret = true;
 
     if (!QFileInfo(srcPath).isReadable() || !QFileInfo(srcPath).isWritable())
     {
@@ -700,6 +763,15 @@ bool Move::permissionsOk(bool dstExists)
         ret = false;
     }
 
+    if (ret)
+    {
+        retCode = NO_ERRORS;
+    }
+    else
+    {
+        retCode = EXECUTION_FAIL;
+    }
+
     return ret;
 }
 
@@ -707,11 +779,13 @@ void MakePath::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args = parseArgs(binIn, 2);
-        QString     path = getParam("-path", args);
+        auto args = parseArgs(binIn, 2);
+        auto path = getParam("-path", args);
 
         if (path.isEmpty())
         {
+            retCode = INVALID_PARAMS;
+
             errTxt("err: The path argument (-path) was not found or is empty.\n");
         }
         else
@@ -725,10 +799,10 @@ void ListFiles::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args      = parseArgs(binIn, 4);
-        QString     path      = getParam("-path", args);
-        bool        infoFrame = argExists("-info_frame", args);
-        bool        noHidden  = argExists("-no_hidden", args);
+        auto args      = parseArgs(binIn, 4);
+        auto path      = getParam("-path", args);
+        auto infoFrame = argExists("-info_frame", args);
+        auto noHidden  = argExists("-no_hidden", args);
 
         if (path.isEmpty())
         {
@@ -736,6 +810,8 @@ void ListFiles::procIn(const QByteArray &binIn, quint8 dType)
         }
 
         QFileInfo pathInfo(path);
+
+        retCode = INVALID_PARAMS;
 
         if (!pathInfo.exists())
         {
@@ -751,6 +827,8 @@ void ListFiles::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             QDir dir(path);
 
             if (noHidden)
@@ -789,11 +867,13 @@ void FileInfo::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args      = parseArgs(binIn, 3);
-        QString     path      = getParam("-path", args);
-        bool        infoFrame = argExists("-info_frame", args);
+        auto args      = parseArgs(binIn, 3);
+        auto path      = getParam("-path", args);
+        auto infoFrame = argExists("-info_frame", args);
 
         QFileInfo info(path);
+
+        retCode = INVALID_PARAMS;
 
         if (path.isEmpty())
         {
@@ -805,6 +885,8 @@ void FileInfo::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             if (infoFrame)
             {
                 emit procOut(toFILE_INFO(info), FILE_INFO);
@@ -841,8 +923,10 @@ void ChangeDir::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args = parseArgs(binIn, 3);
-        QString     path = getParam("-path", args);
+        auto args = parseArgs(binIn, 3);
+        auto path = getParam("-path", args);
+
+        retCode = INVALID_PARAMS;
 
         if (path.isEmpty())
         {
@@ -858,6 +942,8 @@ void ChangeDir::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             QDir::setCurrent(path);
 
             mainTxt(QDir::currentPath() + "\n");
@@ -931,11 +1017,12 @@ void Tree::procIn(const QByteArray &binIn, quint8 dType)
     }
     else if (dType == TEXT)
     {
-        QStringList args = parseArgs(binIn, 4);
-        QString     path = getParam("-path", args);
+        auto args = parseArgs(binIn, 4);
+        auto path = getParam("-path", args);
 
         infoFrames = argExists("-info_frame", args);
         noHidden   = argExists("-no_hidden", args);
+        retCode    = INVALID_PARAMS;
 
         if (path.isEmpty())
         {
@@ -958,6 +1045,8 @@ void Tree::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+            
             printList(path);
         }
     }

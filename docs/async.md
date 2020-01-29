@@ -2,7 +2,7 @@
 
 An async command is a virtual command that the host can use to send data to the client at any time while connected to the host. As the name implies, the occurance of a client receiving data from an async command is not always the result of running a regular command in the current session. This can occur for example when information in your account is changed by another client connected to the host; your client would not know about this change until an async command is sent notify it of the change. These commands can be called directly or indirectly by a module and are considered "virtual" commands because there is no defined objects attached to them. Instead, async commands are best identified by command id values 1-255.
 
-Async commands are not only used to send data to the client but also used internally within the host to help objects operating in different processes to communicate with each other. Some async commands in fact are considered internal only because the client should never see any data come from them at anytime. There is also data flow contriants for aysnc commands, meaning some gets blocked if sent from the module or has no effect if sent with the unexpected [IPC](type_ids.md) type id. The list below shows the various data flow contriants each of these async commands have.
+Async commands are not only used to send data to the client but also used internally within the host to help objects operating in different processes to communicate with each other. Some async commands in fact are considered internal only because the client should never see any data come from them at anytime. There is also data flow contriants for async commands, meaning some gets blocked if sent from the module or has no effect if sent with the unexpected [IPC](type_ids.md) type id. The list below shows the various data flow contriants each of these async commands have.
 
 Here is a describtion of what the keywords in the list mean:
 ```
@@ -74,7 +74,6 @@ enum AsyncCommands : quint16
     ASYNC_PING_PEERS        = 38,  // internal | private
     ASYNC_OPEN_SUBCH        = 39,  // internal | private
     ASYNC_CLOSE_SUBCH       = 40,  // internal | private
-    ASYNC_UPDATE_BANS       = 41,  // internal | private
     ASYNC_KEEP_ALIVE        = 42,  // internal | private
     ASYNC_SET_DIR           = 43,  // internal | private
     ASYNC_DEBUG_TEXT        = 44   // internal | private
@@ -288,9 +287,6 @@ format: [8bytes(64bit_ch_id)][1byte(8bit_sub_ch_id)]
 
 ```ASYNC_CLOSE_SUBCH (40)```
 This is the other half to ASYNC_OPEN_SUBCH that tells the session to close the requested sub-channel.
-
-```ASYNC_UPDATE_BANS (41)```
-This internal only async command doesn't carry any data. It can be use by modules to tell the TCPServer object to update it's ip ban list cache from the database. This generally only needs to be used if the ip ban list in the database has changed in anyway.
 
 ```ASYNC_KEEP_ALIVE (42)```
 This internal only async command doesn't carry any data. The session object normally sends a [KILL_CMD](type_ids.md) to the module when it detects that the module process has not sent an IPC frame in 2 minutes to terminate the module process. If desired, the module can send this async command in regular intervals to reset this 2 minute idle timer to prevent auto termination.

@@ -35,8 +35,10 @@ void CertInfo::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args   = parseArgs(binIn, 2);
-        QString     coName = getParam("-name", args);
+        auto args   = parseArgs(binIn, 2);
+        auto coName = getParam("-name", args);
+
+        retCode = INVALID_PARAMS;
 
         if (coName.isEmpty())
         {
@@ -52,6 +54,8 @@ void CertInfo::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             QString     txt;
             QTextStream txtOut(&txt);
 
@@ -62,7 +66,7 @@ void CertInfo::procIn(const QByteArray &binIn, quint8 dType)
             db.addCondition(COLUMN_COMMON_NAME, coName);
             db.exec();
 
-            QSslCertificate cert = toSSLCert(db.getData(COLUMN_CERT).toByteArray());
+            auto cert = toSSLCert(db.getData(COLUMN_CERT).toByteArray());
 
             txtOut << "Self Signed:    " << boolStr(cert.isSelfSigned()) << endl;
             txtOut << "Black Listed:   " << boolStr(cert.isBlacklisted()) << endl;
@@ -98,11 +102,12 @@ void AddCert::procIn(const QByteArray &binIn, quint8 dType)
 {
     if ((dType == TEXT) && (flags & MORE_INPUT))
     {
-        QString ans = fromTEXT(binIn);
+        auto ans = fromTEXT(binIn);
 
         if (noCaseMatch("n", ans))
         {
-            flags &= ~MORE_INPUT;
+            retCode = ABORTED;
+            flags  &= ~MORE_INPUT;
         }
         else if (noCaseMatch("y", ans))
         {
@@ -115,12 +120,13 @@ void AddCert::procIn(const QByteArray &binIn, quint8 dType)
     }
     else if (dType == TEXT)
     {
-        QStringList args  = parseArgs(binIn, 7);
-        QString     cert  = getParam("-cert", args);
-        QString     priv  = getParam("-priv", args);
-        bool        force = argExists("-force", args);
+        auto args  = parseArgs(binIn, 7);
+        auto cert  = getParam("-cert", args);
+        auto priv  = getParam("-priv", args);
+        auto force = argExists("-force", args);
 
-        coName = getParam("-name", args);
+        coName  = getParam("-name", args);
+        retCode = INVALID_PARAMS;
 
         QFile certFile(cert, this);
         QFile privFile(priv, this);
@@ -167,8 +173,9 @@ void AddCert::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
-            certBa = certFile.readAll();
-            privBa = privFile.readAll();
+            retCode = NO_ERRORS;
+            certBa  = certFile.readAll();
+            privBa  = privFile.readAll();
 
             if (certExists(coName))
             {
@@ -216,7 +223,8 @@ void RemoveCert::procIn(const QByteArray &binIn, quint8 dType)
 
         if (noCaseMatch("n", ans))
         {
-            flags &= ~MORE_INPUT;
+            retCode = ABORTED;
+            flags  &= ~MORE_INPUT;
         }
         else if (noCaseMatch("y", ans))
         {
@@ -229,9 +237,11 @@ void RemoveCert::procIn(const QByteArray &binIn, quint8 dType)
     }
     else if (dType == TEXT)
     {
-        QStringList args  = parseArgs(binIn, -1);
-        QString     name  = getParam("-name", args);
-        bool        force = argExists("-force", args);
+        auto args  = parseArgs(binIn, -1);
+        auto name  = getParam("-name", args);
+        auto force = argExists("-force", args);
+
+        retCode = INVALID_PARAMS;
 
         if (name.isEmpty())
         {
@@ -247,7 +257,8 @@ void RemoveCert::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
-            coName = name;
+            retCode = NO_ERRORS;
+            coName  = name;
 
             if (force) run();
             else       ask();

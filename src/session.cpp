@@ -18,9 +18,9 @@
 
 QByteArray wrFrame(quint32 cmdId, const QByteArray &data, uchar dType)
 {
-    QByteArray typeBa  = wrInt(dType, 8);
-    QByteArray cmdBa   = wrInt(cmdId, 32);
-    QByteArray sizeBa  = wrInt(data.size(), MAX_FRAME_BITS);
+    auto typeBa  = wrInt(dType, 8);
+    auto cmdBa   = wrInt(cmdId, 32);
+    auto sizeBa  = wrInt(data.size(), MAX_FRAME_BITS);
 
     return typeBa + cmdBa + sizeBa + data;
 }
@@ -55,8 +55,8 @@ void Session::init()
 
 QByteArray Session::genSessionId()
 {
-    QByteArray serial = genSerialNumber().toUtf8();
-    QByteArray sysId  = QSysInfo::machineUniqueId();
+    auto serial = genSerialNumber().toUtf8();
+    auto sysId  = QSysInfo::machineUniqueId();
 
     QCryptographicHash hasher(QCryptographicHash::Sha3_224);
 
@@ -106,9 +106,9 @@ void Session::addIpAction(const QString &action)
 {
     Query db(this);
 
-    QString    ip  = rdStringFromBlock(clientIp, BLKSIZE_CLIENT_IP);
-    QString    app = rdStringFromBlock(appName, BLKSIZE_APP_NAME);
-    QByteArray id  = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
+    auto ip  = rdStringFromBlock(clientIp, BLKSIZE_CLIENT_IP);
+    auto app = rdStringFromBlock(appName, BLKSIZE_APP_NAME);
+    auto id  = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
 
     db.setType(Query::PUSH, TABLE_IPHIST);
     db.addColumn(COLUMN_IPADDR, ip);
@@ -593,10 +593,6 @@ void Session::privAsyncDataIn(quint16 cmdId, const QByteArray &data)
     else if (cmdId == ASYNC_MAXSES)
     {
         emit setMaxSessions(static_cast<quint32>(rdInt(data)));
-    }
-    else if (cmdId == ASYNC_UPDATE_BANS)
-    {
-        emit updateBanList();
     }
     else if (cmdId == ASYNC_PING_PEERS)
     {

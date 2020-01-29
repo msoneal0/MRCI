@@ -2,7 +2,15 @@
 
 Modules in this project are independent applications that communicate with the host application's session objects via named pipes and/or shared memory segments. The host will call multiple instances of these modules if needed using the command line options described in section 2.3 depending on session activity. The format for data transport between the session and module via the named pipe is a modified version of the MRCI frame described in section 2.2 called the IPC frame.
 
-Basically the module's main job is to input and output IPC frames with the session object with the option to read session data from shared memory.
+Basically the module's main job is to input and output IPC frames with the session object with the option to read session data from shared memory. The MRCI host have internal commands that are loaded using the module interface so the MRCI host project itself is a good example of a module. See the following classes and source files to understand how the internal module works and to understand how to make an external module based on it.
+
+```
+int main()      - main.cpp
+class Module    - module.h, module.cpp
+class MemShare  - mem_share.h, mem_share.cpp
+class CmdObject - cmd_object.h, cmd_object.cpp
+class IPCWorker - cmd_object.h, cmd_object.cpp
+```
 
 ### 2.2 IPC Frame ###
 

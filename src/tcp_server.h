@@ -34,7 +34,6 @@ private:
     QLocalServer  *controlPipe;
     QLocalSocket  *controlSocket;
     char          *hostLoad;
-    QStringList    banList;
     QString        controlPipePath;
     QString        hostKey;
     quint32        maxSessions;
@@ -50,7 +49,6 @@ private slots:
     void newPipeConnection();
     void closedPipeConnection();
     void sessionEnded();
-    void updateBanList();
     void setMaxSessions(quint32 value);
 
 public slots:

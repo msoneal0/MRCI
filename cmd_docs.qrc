@@ -2,7 +2,6 @@
     <qresource prefix="/">
         <file>docs/intern_commands/accept_ch.md</file>
         <file>docs/intern_commands/add_acct.md</file>
-        <file>docs/intern_commands/add_ban.md</file>
         <file>docs/intern_commands/add_cert.md</file>
         <file>docs/intern_commands/add_ch.md</file>
         <file>docs/intern_commands/add_mod.md</file>
@@ -34,7 +33,6 @@
         <file>docs/intern_commands/lock_acct.md</file>
         <file>docs/intern_commands/ls_act_log.md</file>
         <file>docs/intern_commands/ls_auth_log.md</file>
-        <file>docs/intern_commands/ls_bans.md</file>
         <file>docs/intern_commands/ls_certs.md</file>
         <file>docs/intern_commands/ls_ch_members.md</file>
         <file>docs/intern_commands/ls_chs.md</file>
@@ -62,7 +60,6 @@
         <file>docs/intern_commands/request_pw_reset.md</file>
         <file>docs/intern_commands/restart_host.md</file>
         <file>docs/intern_commands/rm_acct.md</file>
-        <file>docs/intern_commands/rm_ban.md</file>
         <file>docs/intern_commands/rm_cert.md</file>
         <file>docs/intern_commands/rm_ch.md</file>
         <file>docs/intern_commands/rm_mod.md</file>

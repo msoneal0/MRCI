@@ -226,6 +226,69 @@ bool validModPath(const QString &modPath)
     return ret;
 }
 
+bool acceptablePw(const QString &pw, const QString &uName, const QString &dispName, const QString &email, QString *errMsg)
+{
+    auto ret = validPassword(pw);
+
+    if (!ret)
+    {
+        *errMsg = "err: Invalid password. it must be between 8-200 chars long containing numbers, mixed case letters and special chars.\n";
+    }
+    else if (ret && !email.isEmpty()) 
+    {
+        if (pw.contains(email, Qt::CaseInsensitive))
+        {
+            *errMsg = "err: Invalid password. it contains your email address.\n"; ret = false;
+        }
+    }
+    else if (ret && !uName.isEmpty())
+    {
+        if (pw.contains(uName, Qt::CaseInsensitive))
+        {
+            *errMsg = "err: Invalid password. it contains your user name.\n"; ret = false;
+        }
+    }
+    else if (ret && !dispName.isEmpty())
+    {
+        if (pw.contains(dispName, Qt::CaseInsensitive))
+        {
+            *errMsg = "err: Invalid password. it contains your display name.\n"; ret = false;
+        }
+    }
+
+    return ret;
+}
+
+bool acceptablePw(const QString &pw, const QByteArray &uId, QString *errMsg)
+{
+    auto ret = false;
+
+    if (auth(uId, pw, TABLE_USERS))
+    {
+        *errMsg = "err: Invaild password. you cannot re-use your old password.\n";
+    }
+    else
+    {
+
+        Query db;
+        
+        db.setType(Query::PULL, TABLE_USERS);
+        db.addColumn(COLUMN_EMAIL);
+        db.addColumn(COLUMN_USERNAME);
+        db.addColumn(COLUMN_DISPLAY_NAME);
+        db.addCondition(COLUMN_USER_ID, uId);
+        db.exec();
+
+        auto email = db.getData(COLUMN_EMAIL).toString();
+        auto uName = db.getData(COLUMN_USERNAME).toString();
+        auto dName = db.getData(COLUMN_DISPLAY_NAME).toString();
+
+        ret = acceptablePw(pw, uName, dName, email, errMsg);
+    }
+
+    return ret;
+}
+
 bool validPassword(const QString &pw)
 {
     bool ret = false;
@@ -656,6 +719,18 @@ QString getDispName(const QByteArray &uId)
     return db.getData(COLUMN_DISPLAY_NAME).toString();
 }
 
+QString getUserName(const QByteArray &uId)
+{
+    Query db;
+
+    db.setType(Query::PULL, TABLE_USERS);
+    db.addColumn(COLUMN_USERNAME);
+    db.addCondition(COLUMN_USER_ID, uId);
+    db.exec();
+
+    return db.getData(COLUMN_USERNAME).toString();
+}
+
 QString getEmailForUser(const QByteArray &uId)
 {
     Query db;
@@ -866,7 +941,14 @@ bool ShellIPC::connectToHost()
 
     if (!waitForConnected())
     {
-        QTextStream(stdout) << "" << endl << "Host instance not running." << endl << endl;
+        if (QFileInfo(QDir::tempPath() + "/" + HOST_CONTROL_PIPE).exists())
+        {
+            QTextStream(stdout) << "" << endl << "Permission denied." << endl << endl;
+        }
+        else
+        {
+            QTextStream(stdout) << "" << endl << "Host instance not running." << endl << endl;
+        }
     }
 
     return state() == QLocalSocket::ConnectedState;

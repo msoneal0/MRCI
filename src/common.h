@@ -130,7 +130,6 @@ enum AsyncCommands : quint16
     ASYNC_PING_PEERS        = 38,  // internal | private
     ASYNC_OPEN_SUBCH        = 39,  // internal | private
     ASYNC_CLOSE_SUBCH       = 40,  // internal | private
-    ASYNC_UPDATE_BANS       = 41,  // internal | private
     ASYNC_KEEP_ALIVE        = 42,  // internal | private
     ASYNC_SET_DIR           = 43,  // internal | private
     ASYNC_DEBUG_TEXT        = 44   // internal | private
@@ -201,6 +200,17 @@ enum TypeID : quint8
     RESUME_CMD            = 29
 };
 
+enum RetCode : quint16
+{
+    NO_ERRORS       = 1, // task execution completed without any issues.
+    ABORTED         = 2, // the task aborted via user or host intervention.
+    INVALID_PARAMS  = 3, // invalid/missing parameters prevented the task from executing.
+    CRASH           = 4, // the command process has crashed.
+    FAILED_TO_START = 5, // the command process could not start.
+    EXECUTION_FAIL  = 6, // command specific error prevented execution of the task.
+    CUSTOM          = 7  // indicates a custom return code.
+};
+
 enum GenFileType : quint8
 {
     GEN_UPLOAD   = 2,
@@ -227,6 +237,8 @@ void        serializeThread(QThread *thr);
 void        mkPath(const QString &path);
 void        listDir(QList<QPair<QString,QString> > &list, const QString &srcPath, const QString &dstPath);
 void        containsActiveCh(const char *subChs, char *actBlock);
+bool        acceptablePw(const QString &pw, const QByteArray &uId, QString *errMsg);
+bool        acceptablePw(const QString &pw, const QString &uName, const QString &dispName, const QString &email, QString *errMsg);
 bool        containsNewLine(const QString &str);
 bool        validModPath(const QString &modPath);
 bool        validUserName(const QString &uName);
@@ -264,6 +276,7 @@ QString     fromTEXT(const QByteArray &txt);
 QString     getUserNameForEmail(const QString &email);
 QString     getEmailForUser(const QByteArray &uId);
 QString     getDispName(const QByteArray &uId);
+QString     getUserName(const QByteArray &uId);
 QString     boolStr(bool state);
 QString     getParam(const QString &key, const QStringList &args);
 QString     escapeChars(const QString &str, const QChar &escapeChr, const QChar &chr);

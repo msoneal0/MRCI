@@ -73,10 +73,13 @@ void LockUser::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args  = parseArgs(binIn, 4);
-        QString     uName = getParam("-user", args);
-        QString     state = getParam("-state", args);
-        QByteArray  uId;
+        auto args  = parseArgs(binIn, 4);
+        auto uName = getParam("-user", args);
+        auto state = getParam("-state", args);
+
+        QByteArray uId;
+
+        retCode = INVALID_PARAMS;
 
         if (uName.isEmpty())
         {
@@ -104,6 +107,8 @@ void LockUser::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::UPDATE, TABLE_USERS);
@@ -128,19 +133,25 @@ void CreateUser::procIn(const QByteArray &binIn, quint8 dType)
     {
         if (flags & MORE_INPUT)
         {
-            QString password = fromTEXT(binIn);
+            auto password = fromTEXT(binIn);
+
+            QString errMsg;
 
             if (password.isEmpty())
             {
+                retCode = ABORTED;
+
                 clear();
             }
-            else if (!validPassword(password))
+            else if (!acceptablePw(password, newName, dispName, email, &errMsg))
             {
-                errTxt("err: Invalid password. it must be 8-200 chars long containing numbers, mixed case letters and special chars.\n\n");
+                errTxt(errMsg + "\n");
                 privTxt("Enter a new password (leave blank to cancel): ");
             }
             else if (!createUser(newName, email, dispName, password))
             {
+                retCode = INVALID_PARAMS;
+
                 errTxt("err: The requested User name already exists.\n");
                 clear();
             }
@@ -151,11 +162,12 @@ void CreateUser::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
-            QStringList args = parseArgs(binIn, 6);
+            auto args = parseArgs(binIn, 6);
 
             dispName = getParam("-disp", args);
             newName  = getParam("-name", args);
             email    = getParam("-email", args);
+            retCode  = INVALID_PARAMS;
 
             if (newName.isEmpty())
             {
@@ -168,6 +180,14 @@ void CreateUser::procIn(const QByteArray &binIn, quint8 dType)
             else if (!validUserName(newName))
             {
                 errTxt("err: Invalid username. it must be 2-24 chars long and contain no spaces.\n");
+            }
+            else if (noCaseMatch(DEFAULT_ROOT_USER, newName))
+            {
+                errTxt("err: '" + QString(DEFAULT_ROOT_USER) + "' is a reserved keyword. invalid for use as a username.\n");
+            }
+            else if (validEmailAddr(newName))
+            {
+                errTxt("err: Invaild username. it looks like an email address.\n");
             }
             else if (!validEmailAddr(email))
             {
@@ -187,7 +207,8 @@ void CreateUser::procIn(const QByteArray &binIn, quint8 dType)
             }
             else
             {
-                flags |= MORE_INPUT;
+                retCode = NO_ERRORS;
+                flags  |= MORE_INPUT;
 
                 privTxt("Enter a new password (leave blank to cancel): ");
             }
@@ -221,7 +242,7 @@ void RemoveUser::procIn(const QByteArray &binIn, quint8 dType)
     {
         if (flags & MORE_INPUT)
         {
-            QString ans = fromTEXT(binIn);
+            auto ans = fromTEXT(binIn);
 
             if (noCaseMatch("y", ans))
             {
@@ -229,7 +250,8 @@ void RemoveUser::procIn(const QByteArray &binIn, quint8 dType)
             }
             else if (noCaseMatch("n", ans))
             {
-                flags &= ~MORE_INPUT;
+                retCode = ABORTED;
+                flags  &= ~MORE_INPUT;
             }
             else
             {
@@ -238,16 +260,14 @@ void RemoveUser::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
-            QStringList args  = parseArgs(binIn, 2);
-            QString     uName = getParam("-name", args);
+            auto args  = parseArgs(binIn, 2);
+            auto uName = getParam("-name", args);
+
+            retCode = INVALID_PARAMS;
 
             if (uName.isEmpty())
             {
                 errTxt("err: User name argument (-name) not found or is empty.\n");
-            }
-            else if (noCaseMatch(ROOT_USER, uName))
-            {
-                errTxt("err: Unable to delete protected user: '" + QString(ROOT_USER) + "'\n");
             }
             else if (!validUserName(uName))
             {
@@ -256,6 +276,10 @@ void RemoveUser::procIn(const QByteArray &binIn, quint8 dType)
             else if (!userExists(uName, &uId))
             {
                 errTxt("err: The requested user name does not exists.\n");
+            }
+            else if (rootUserId() == uId)
+            {
+                errTxt("err: Unable to delete root user: '" + uName + "'\n");
             }
             else if (isChOwner(uId))
             {
@@ -267,6 +291,8 @@ void RemoveUser::procIn(const QByteArray &binIn, quint8 dType)
             }
             else
             {
+                retCode = NO_ERRORS;
+
                 if (argExists("-force", args))
                 {
                     rm();
@@ -284,10 +310,13 @@ void ChangeUserRank::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args  = parseArgs(binIn, 4);
-        QString     uName = getParam("-user", args);
-        QString     rank  = getParam("-rank", args);
-        QByteArray  uId;
+        auto args  = parseArgs(binIn, 4);
+        auto uName = getParam("-user", args);
+        auto rank  = getParam("-rank", args);
+
+        QByteArray uId;
+
+        retCode = INVALID_PARAMS;
 
         if (uName.isEmpty())
         {
@@ -296,10 +325,6 @@ void ChangeUserRank::procIn(const QByteArray &binIn, quint8 dType)
         else if (rank.isEmpty())
         {
             errTxt("err: New rank argument (-rank) not found or is empty.\n");
-        }
-        else if (noCaseMatch(ROOT_USER, uName))
-        {
-            errTxt("err: You are not allowed to change the rank of protected user: '" + QString(ROOT_USER) + "'\n");
         }
         else if (!validUserName(uName))
         {
@@ -321,12 +346,18 @@ void ChangeUserRank::procIn(const QByteArray &binIn, quint8 dType)
         {
             errTxt("err: The requested user account does not exists.\n");
         }
+        else if (rootUserId() == uId)
+        {
+            errTxt("err: You are not allowed to change the rank of root user: '" + uName + "'\n");
+        }
         else if (!canModifyUser(uId, rd32BitFromBlock(hostRank), false))
         {
             errTxt("err: The target user out ranks you or is equal to your own rank. access denied.\n");
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::UPDATE, TABLE_USERS);
@@ -345,15 +376,18 @@ void ChangePassword::procIn(const QByteArray &binIn, quint8 dType)
     {
         if (flags & MORE_INPUT)
         {
-            QString password = fromTEXT(binIn);
+            auto password = fromTEXT(binIn);
+
+            QString errMsg;
 
             if (password.isEmpty())
             {
-                flags &= ~MORE_INPUT;
+                retCode = ABORTED;
+                flags  &= ~MORE_INPUT;
             }
-            else if (!validPassword(password))
+            else if (!acceptablePw(password, rdFromBlock(userId, BLKSIZE_USER_ID), &errMsg))
             {
-                errTxt("err: Invalid password. it must be 8-200 chars long containing numbers, mixed case letters and special chars.\n\n");
+                errTxt(errMsg + "\n");
                 privTxt("Enter a new password (leave blank to cancel): ");
             }
             else
@@ -376,8 +410,10 @@ void ChangeUsername::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args    = parseArgs(binIn, 2);
-        QString     newName = getParam("-new_name", args);
+        auto args    = parseArgs(binIn, 2);
+        auto newName = getParam("-new_name", args);
+
+        retCode = INVALID_PARAMS;
 
         if (newName.isEmpty())
         {
@@ -387,14 +423,24 @@ void ChangeUsername::procIn(const QByteArray &binIn, quint8 dType)
         {
             errTxt("err: Invalid username. it must be 2-24 chars long and contain no spaces.\n");
         }
+        else if (noCaseMatch(DEFAULT_ROOT_USER, newName))
+        {
+            errTxt("err: '" + QString(DEFAULT_ROOT_USER) + "' is a reserved keyword. invalid for use as a username.\n");
+        }
+        else if (validEmailAddr(newName))
+        {
+            errTxt("err: Invaild username. it looks like an email address.\n");
+        }
         else if (userExists(newName))
         {
             errTxt("err: The requested user name already exists.\n");
         }
         else
         {
-            QByteArray uId       = rdFromBlock(userId, BLKSIZE_USER_ID);
-            QByteArray newNameBa = fixedToTEXT(newName, BLKSIZE_USER_NAME);
+            retCode = NO_ERRORS;
+
+            auto uId       = rdFromBlock(userId, BLKSIZE_USER_ID);
+            auto newNameBa = fixedToTEXT(newName, BLKSIZE_USER_NAME);
 
             Query db(this);
 
@@ -412,8 +458,10 @@ void ChangeDispName::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args = parseArgs(binIn, 2);
-        QString     name = getParam("-new_name", args).trimmed();
+        auto args = parseArgs(binIn, 2);
+        auto name = getParam("-new_name", args).trimmed();
+
+        retCode = INVALID_PARAMS;
 
         if (argExists("-new_name", args))
         {
@@ -425,10 +473,12 @@ void ChangeDispName::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
-            QByteArray uId       = rdFromBlock(userId, BLKSIZE_USER_ID);
-            QByteArray newNameBa = fixedToTEXT(name, BLKSIZE_DISP_NAME);
+            auto uId       = rdFromBlock(userId, BLKSIZE_USER_ID);
+            auto newNameBa = fixedToTEXT(name, BLKSIZE_DISP_NAME);
 
             db.setType(Query::UPDATE, TABLE_USERS);
             db.addColumn(COLUMN_DISPLAY_NAME, name);
@@ -443,6 +493,8 @@ void ChangeDispName::procIn(const QByteArray &binIn, quint8 dType)
 void OverWriteEmail::procArgs(const QString &uName, const QString &newEmail, bool sameRank)
 {
     QByteArray uId;
+
+    retCode = INVALID_PARAMS;
 
     if (newEmail.isEmpty())
     {
@@ -474,6 +526,8 @@ void OverWriteEmail::procArgs(const QString &uName, const QString &newEmail, boo
     }
     else
     {
+        retCode = NO_ERRORS;
+
         Query db(this);
 
         db.setType(Query::UPDATE, TABLE_USERS);
@@ -490,9 +544,9 @@ void OverWriteEmail::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args     = parseArgs(binIn, 4);
-        QString     uName    = getParam("-user", args);
-        QString     newEmail = getParam("-new_email", args);
+        auto args     = parseArgs(binIn, 4);
+        auto uName    = getParam("-user", args);
+        auto newEmail = getParam("-new_email", args);
 
         procArgs(uName, newEmail, false);
     }
@@ -502,8 +556,8 @@ void ChangeEmail::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args     = parseArgs(binIn, 2);
-        QString     newEmail = getParam("-new_email", args);
+        auto args     = parseArgs(binIn, 2);
+        auto newEmail = getParam("-new_email", args);
 
         procArgs(rdStringFromBlock(userName, BLKSIZE_USER_NAME), newEmail, true);
     }
@@ -523,10 +577,13 @@ void PasswordChangeRequest::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args  = parseArgs(binIn, 4);
-        QString     uName = getParam("-user", args);
-        QString     req   = getParam("-req", args);
-        QByteArray  uId;
+        auto args  = parseArgs(binIn, 4);
+        auto uName = getParam("-user", args);
+        auto req   = getParam("-req", args);
+
+        QByteArray uId;
+
+        retCode = INVALID_PARAMS;
 
         if (uName.isEmpty())
         {
@@ -554,6 +611,8 @@ void PasswordChangeRequest::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+            
             exec(uId, static_cast<bool>(req.toUInt()));
         }
     }

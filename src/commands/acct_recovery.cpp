@@ -48,7 +48,7 @@ void delRecoverPw(const QByteArray &uId)
 
 bool expired(const QByteArray &uId)
 {
-    bool ret = true;
+    auto ret = true;
 
     Query db;
 
@@ -57,7 +57,7 @@ bool expired(const QByteArray &uId)
     db.addCondition(COLUMN_USER_ID, uId);
     db.exec();
 
-    QDateTime expiry = db.getData(COLUMN_TIME).toDateTime().addSecs(3600); // pw datetime + 1hour;
+    auto expiry = db.getData(COLUMN_TIME).toDateTime().addSecs(3600); // pw datetime + 1hour;
 
     if (expiry > QDateTime::currentDateTime().toUTC())
     {
@@ -88,7 +88,7 @@ void RecoverAcct::addToThreshold()
     db.addColumn(COLUMN_LOCK_LIMIT);
     db.exec();
 
-    quint32 maxAttempts = db.getData(COLUMN_LOCK_LIMIT).toUInt();
+    auto maxAttempts = db.getData(COLUMN_LOCK_LIMIT).toUInt();
 
     db.setType(Query::PULL, TABLE_AUTH_LOG);
     db.addColumn(COLUMN_IPADDR);
@@ -107,7 +107,7 @@ void RecoverAcct::addToThreshold()
     else
     {
         errTxt("err: Access denied.\n");
-        privTxt("Enter the temporary password: ");
+        privTxt("Enter the temporary password (leave blank to cancel): ");
     }
 }
 
@@ -115,14 +115,21 @@ void RecoverAcct::procIn(const QByteArray &binIn, quint8 dType)
 {
     if ((flags & MORE_INPUT) && (dType == TEXT))
     {
-        QString pw = fromTEXT(binIn);
+        auto pw = fromTEXT(binIn);
 
         if (inputOk)
         {
-            if (!validPassword(pw))
+            QString errMsg;
+
+            if (pw.isEmpty())
             {
-                errTxt("err: Invalid password. it must be 8-200 chars long containing numbers, mixed case letters and special chars.\n");
-                privTxt("Enter a new password: ");
+                retCode = ABORTED;
+                flags  &= ~MORE_INPUT;
+            }
+            else if (!acceptablePw(pw, uId, &errMsg))
+            {
+                errTxt(errMsg + "\n");
+                privTxt("Enter a new password (leave blank to cancel): ");
             }
             else
             {
@@ -136,7 +143,8 @@ void RecoverAcct::procIn(const QByteArray &binIn, quint8 dType)
         {
             if (pw.isEmpty())
             {
-                flags &= ~MORE_INPUT;
+                retCode = ABORTED;
+                flags  &= ~MORE_INPUT;
             }
             else if (!validPassword(pw))
             {
@@ -148,7 +156,7 @@ void RecoverAcct::procIn(const QByteArray &binIn, quint8 dType)
             }
             else
             {
-                privTxt("Enter a new password: ");
+                privTxt("Enter a new password (leave blank to cancel): ");
 
                 inputOk = true;
             }
@@ -156,14 +164,16 @@ void RecoverAcct::procIn(const QByteArray &binIn, quint8 dType)
     }
     else if (dType == TEXT)
     {
-        QStringList args  = parseArgs(binIn, 2);
-        QString     email = getParam("-email", args);
-        QString     name  = getParam("-user", args);
+        auto args  = parseArgs(binIn, 2);
+        auto email = getParam("-email", args);
+        auto name  = getParam("-user", args);
 
         if (!email.isEmpty() && validEmailAddr(email))
         {
             name = getUserNameForEmail(email);
         }
+
+        retCode = INVALID_PARAMS;
 
         if (name.isEmpty() || !validUserName(name))
         {
@@ -186,6 +196,7 @@ void RecoverAcct::procIn(const QByteArray &binIn, quint8 dType)
             privTxt("Enter the temporary password (leave blank to cancel): ");
 
             inputOk = false;
+            retCode = NO_ERRORS;
             flags  |= MORE_INPUT;
         }
     }
@@ -195,15 +206,18 @@ void ResetPwRequest::procIn(const QByteArray &binIn, uchar dType)
 {
     if (dType == TEXT)
     {
-        QStringList args  = parseArgs(binIn, 2);
-        QString     email = getParam("-email", args);
-        QString     name  = getParam("-user", args);
-        QByteArray  uId;
+        auto args  = parseArgs(binIn, 2);
+        auto email = getParam("-email", args);
+        auto name  = getParam("-user", args);
+
+        QByteArray uId;
 
         if (!email.isEmpty() && validEmailAddr(email))
         {
             name = getUserNameForEmail(email);
         }
+
+        retCode = INVALID_PARAMS;
 
         if (name.isEmpty() || !validUserName(name))
         {
@@ -215,9 +229,10 @@ void ResetPwRequest::procIn(const QByteArray &binIn, uchar dType)
         }
         else
         {
-            QString pw   = genPw();
-            QString date = QDateTime::currentDateTimeUtc().toString("YYYY-MM-DD HH:MM:SS");
+            retCode = NO_ERRORS;
 
+            auto pw = genPw();
+            
             if (recoverPWExists(uId))
             {
                 updatePassword(uId, pw, TABLE_PW_RECOVERY);
@@ -236,10 +251,11 @@ void ResetPwRequest::procIn(const QByteArray &binIn, uchar dType)
             db.addColumn(COLUMN_MAIL_SEND);
             db.exec();
 
-            QString subject = db.getData(COLUMN_TEMP_PW_SUBJECT).toString();
-            QString body    = db.getData(COLUMN_TEMP_PW_MSG).toString();
-            QString app     = db.getData(COLUMN_MAILERBIN).toString();
-            QString cmdLine = db.getData(COLUMN_MAIL_SEND).toString();
+            auto date    = QDateTime::currentDateTimeUtc().toString("YYYY-MM-DD HH:MM:SS");
+            auto subject = db.getData(COLUMN_TEMP_PW_SUBJECT).toString();
+            auto body    = db.getData(COLUMN_TEMP_PW_MSG).toString();
+            auto app     = db.getData(COLUMN_MAILERBIN).toString();
+            auto cmdLine = db.getData(COLUMN_MAIL_SEND).toString();
 
             body.replace(DATE_SUB, date);
             body.replace(USERNAME_SUB, name);
@@ -260,11 +276,12 @@ void VerifyEmail::procIn(const QByteArray &binIn, quint8 dType)
 {
     if ((flags & MORE_INPUT) && (dType == TEXT))
     {
-        QString txt = fromTEXT(binIn);
+        auto txt = fromTEXT(binIn);
 
         if (txt.isEmpty())
         {
-            flags &= ~MORE_INPUT;
+            retCode = ABORTED;
+            flags  &= ~MORE_INPUT;
         }
         else if (txt == code)
         {
@@ -289,10 +306,12 @@ void VerifyEmail::procIn(const QByteArray &binIn, quint8 dType)
     {
         uId = rdFromBlock(userId, BLKSIZE_USER_ID);
 
-        QString email = getEmailForUser(uId);
+        auto email = getEmailForUser(uId);
 
         if (email.isEmpty())
         {
+            retCode = INVALID_PARAMS;
+
             errTxt("err: Your account currently has no email address, please update it.\n");
         }
         else
@@ -309,12 +328,12 @@ void VerifyEmail::procIn(const QByteArray &binIn, quint8 dType)
             db.addColumn(COLUMN_MAIL_SEND);
             db.exec();
 
-            QString uName   = rdStringFromBlock(userName, BLKSIZE_USER_NAME);
-            QString date    = QDateTime::currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss");
-            QString subject = db.getData(COLUMN_CONFIRM_SUBJECT).toString();
-            QString body    = db.getData(COLUMN_CONFIRM_MSG).toString();
-            QString app     = db.getData(COLUMN_MAILERBIN).toString();
-            QString cmdLine = db.getData(COLUMN_MAIL_SEND).toString();
+            auto uName   = rdStringFromBlock(userName, BLKSIZE_USER_NAME);
+            auto date    = QDateTime::currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss");
+            auto subject = db.getData(COLUMN_CONFIRM_SUBJECT).toString();
+            auto body    = db.getData(COLUMN_CONFIRM_MSG).toString();
+            auto app     = db.getData(COLUMN_MAILERBIN).toString();
+            auto cmdLine = db.getData(COLUMN_MAIL_SEND).toString();
 
             body.replace(DATE_SUB, date);
             body.replace(USERNAME_SUB, uName);
@@ -337,7 +356,7 @@ void IsEmailVerified::procIn(const QByteArray &binIn, quint8 dType)
 
     if (dType == TEXT)
     {
-        QByteArray uId = rdFromBlock(userId, BLKSIZE_USER_ID);
+        auto uId = rdFromBlock(userId, BLKSIZE_USER_ID);
 
         Query db(this);
 
@@ -368,7 +387,7 @@ void SetEmailTemplate::procIn(const QByteArray &binIn, quint8 dType)
     }
     else if ((dType == GEN_FILE) || (dType == TEXT))
     {
-        QStringList args = parseArgs(binIn, 9);
+        auto args = parseArgs(binIn, 9);
 
         dataSent     = 0;
         textFromFile = argExists("-client_file", args);
@@ -389,6 +408,8 @@ void SetEmailTemplate::procIn(const QByteArray &binIn, quint8 dType)
             eType = NONE;
         }
 
+        retCode = INVALID_PARAMS;
+
         if (eType == NONE)
         {
             errTxt("err: Which template do you want to change? -reset_template or -confirm_template not found.\n");
@@ -407,6 +428,8 @@ void SetEmailTemplate::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             if (argExists("-subject", args) && subject.isEmpty())
             {
                 if (eType == CONFIRM_EMAIL) subject = DEFAULT_CONFIRM_SUBJECT;
@@ -442,6 +465,8 @@ void SetEmailTemplate::proc()
 {
     if (bodyText.isEmpty() && subject.isEmpty())
     {
+        retCode = INVALID_PARAMS;
+
         errTxt("err: The email body and subject text are empty, nothing will be changed.\n");
     }
     else
@@ -453,7 +478,8 @@ void SetEmailTemplate::proc()
         QString codeSub;
         QString bodyColumn;
         QString subjectColumn;
-        bool    execQuery = false;
+
+        auto execQuery = false;
 
         if (eType == PW_RESET)
         {
@@ -470,6 +496,8 @@ void SetEmailTemplate::proc()
 
         if (!bodyText.isEmpty())
         {
+            retCode = INVALID_PARAMS;
+
             if (!bodyText.contains(DATE_SUB, Qt::CaseInsensitive))
             {
                 errTxt("err: The email body does not contain: " + QString(DATE_SUB) + "\n");
@@ -493,11 +521,14 @@ void SetEmailTemplate::proc()
                 db.addColumn(bodyColumn, bodyText);
 
                 execQuery = true;
+                retCode   = NO_ERRORS;
             }
         }
 
         if (!subject.isEmpty())
         {
+            retCode = INVALID_PARAMS;
+
             if (subject.size() > 120)
             {
                 errTxt("err: The subject is too large. it cannot exceed 120 chars.\n");
@@ -509,6 +540,7 @@ void SetEmailTemplate::proc()
                 db.addColumn(subjectColumn, subject);
 
                 execQuery = true;
+                retCode   = NO_ERRORS;
             }
         }
 
@@ -522,14 +554,16 @@ void PreviewEmail::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList  args  = parseArgs(binIn, 4);
-        TemplateType eType = NONE;
+        auto args  = parseArgs(binIn, 4);
+        auto eType = NONE;
 
         if      (argExists("-reset_email", args))   eType = PW_RESET;
         else if (argExists("-confirm_email", args)) eType = CONFIRM_EMAIL;
 
         if (eType == NONE)
         {
+            retCode = INVALID_PARAMS;
+
             errTxt("err: which template do you want to preview? -reset_email or -confirm_email not found.\n");
         }
         else
@@ -538,7 +572,8 @@ void PreviewEmail::procIn(const QByteArray &binIn, quint8 dType)
             QString code;
             QString bodyColumn;
             QString subjectColumn;
-            QString date = QDateTime::currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss");
+
+            auto date = QDateTime::currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss");
 
             if (eType == PW_RESET)
             {
@@ -562,9 +597,9 @@ void PreviewEmail::procIn(const QByteArray &binIn, quint8 dType)
             db.addColumn(subjectColumn);
             db.exec();
 
-            QString uName   = rdStringFromBlock(userName, BLKSIZE_USER_NAME);
-            QString subject = db.getData(subjectColumn).toString();
-            QString body    = db.getData(bodyColumn).toString();
+            auto uName   = rdStringFromBlock(userName, BLKSIZE_USER_NAME);
+            auto subject = db.getData(subjectColumn).toString();
+            auto body    = db.getData(bodyColumn).toString();
 
             body.replace(DATE_SUB, date);
             body.replace(USERNAME_SUB, uName);

@@ -65,8 +65,7 @@ void ListCommands::onIPCConnected()
 {
     for (auto&& cmdName : list)
     {
-        QByteArray frame;
-        QByteArray genType = QByteArray(1, 0x00);
+        auto genType = QByteArray(1, 0x00);
 
         if (cmdName == DownloadFile::cmdName())
         {
@@ -80,6 +79,8 @@ void ListCommands::onIPCConnected()
         {
             genType = QByteArray(1, GEN_UPLOAD);
         }
+
+        QByteArray frame;
 
         frame.append(QByteArray(2, 0x00));
         frame.append(genType);

@@ -428,7 +428,7 @@ void CmdProcess::onReady()
 void CmdProcess::onFailToStart()
 {
     emit dataToClient(cmdId, toTEXT("err: The command failed to start. error details were logged for admin review.\n"), ERR);
-    emit dataToClient(cmdId, QByteArray(), IDLE);
+    emit dataToClient(cmdId, wrInt(FAILED_TO_START, 16), IDLE);
 }
 
 void CmdProcess::onFinished(int exitCode, QProcess::ExitStatus exitStatus)
@@ -436,7 +436,7 @@ void CmdProcess::onFinished(int exitCode, QProcess::ExitStatus exitStatus)
     if (!cmdIdle)
     {
         emit dataToClient(cmdId, toTEXT("err: The command has stopped unexpectedly or it has failed to send an IDLE frame before exiting.\n"), ERR);
-        emit dataToClient(cmdId, QByteArray(), IDLE);
+        emit dataToClient(cmdId, wrInt(CRASH, 16), IDLE);
     }
 
     emit cmdProcFinished(cmdId);
@@ -648,9 +648,20 @@ void CmdProcess::onDataFromProc(quint8 typeId, const QByteArray &data)
         if (typeId == IDLE)
         {
             cmdIdle = true;
-        }
 
-        emit dataToClient(cmdId, data, typeId);
+            if (data.isEmpty())
+            {
+                emit dataToClient(cmdId, wrInt(NO_ERRORS, 16), typeId);
+            }
+            else
+            {
+                emit dataToClient(cmdId, data, typeId);
+            }
+        }
+        else
+        {
+            emit dataToClient(cmdId, data, typeId);
+        }
     }
 }
 

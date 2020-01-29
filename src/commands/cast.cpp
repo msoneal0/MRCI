@@ -45,15 +45,15 @@ QString ListRDonlyFlags::cmdName()  {return "ls_rdonly_flags";}
 
 bool canOpenSubChannel(const QByteArray &uId, const char *override, quint64 chId, quint8 subId)
 {
-    int uLevel = channelAccessLevel(uId, override, chId);
-    int sLevel = lowestAcessLevel(chId, subId);
+    auto uLevel = channelAccessLevel(uId, override, chId);
+    auto sLevel = lowestAcessLevel(chId, subId);
 
     return uLevel <= sLevel;
 }
 
 int lowestAcessLevel(quint64 chId, quint8 subId)
 {
-    int ret = 5000;
+    auto ret = 5000;
 
     Query db;
 
@@ -80,11 +80,14 @@ void OpenSubChannel::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args = parseArgs(binIn, 4);
-        QString     ch   = getParam("-ch_name", args);
-        QString     sub  = getParam("-sub_name", args);
-        quint64     chId;
-        quint8      subId;
+        auto args = parseArgs(binIn, 4);
+        auto ch   = getParam("-ch_name", args);
+        auto sub  = getParam("-sub_name", args);
+
+        quint64 chId;
+        quint8  subId;
+
+        retCode = INVALID_PARAMS;
 
         if (ch.isEmpty())
         {
@@ -108,6 +111,8 @@ void OpenSubChannel::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             async(ASYNC_OPEN_SUBCH, PRIV_IPC, wrInt(chId, 64) + wrInt(subId, 8));
         }
     }
@@ -117,11 +122,14 @@ void CloseSubChannel::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args = parseArgs(binIn, 4);
-        QString     ch   = getParam("-ch_name", args);
-        QString     sub  = getParam("-sub_name", args);
-        quint64     chId;
-        quint8      subId;
+        auto args = parseArgs(binIn, 4);
+        auto ch   = getParam("-ch_name", args);
+        auto sub  = getParam("-sub_name", args);
+
+        quint64 chId;
+        quint8  subId;
+
+        retCode = INVALID_PARAMS;
 
         if (ch.isEmpty())
         {
@@ -141,6 +149,8 @@ void CloseSubChannel::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             async(ASYNC_CLOSE_SUBCH, PRIV_IPC, wrInt(chId, 64) + wrInt(subId, 8));
         }
     }
@@ -168,8 +178,8 @@ void LsOpenChannels::procIn(const QByteArray &binIn, quint8 dType)
 
         for (int i = 0; i < MAX_OPEN_SUB_CHANNELS; i += BLKSIZE_SUB_CHANNEL)
         {
-            quint64 chId  = rd64BitFromBlock(openSubChs + i);
-            quint8  subId = rd8BitFromBlock(openSubChs + (i + 8));
+            auto chId  = rd64BitFromBlock(openSubChs + i);
+            auto subId = rd8BitFromBlock(openSubChs + (i + 8));
 
             if (chId)
             {
@@ -183,8 +193,9 @@ void LsOpenChannels::procIn(const QByteArray &binIn, quint8 dType)
                 db.addCondition(COLUMN_SUB_CH_ID, subId);
                 db.exec();
 
-                QString chName  = db.getData(COLUMN_CHANNEL_NAME).toString();
-                QString subName = db.getData(COLUMN_SUB_CH_NAME).toString();
+                auto chName  = db.getData(COLUMN_CHANNEL_NAME).toString();
+                auto subName = db.getData(COLUMN_SUB_CH_NAME).toString();
+
                 QString rdOnly;
 
                 if (posOfBlock(openSubChs + i, openWritableSubChs, MAX_OPEN_SUB_CHANNELS, BLKSIZE_SUB_CHANNEL) == -1)
@@ -233,6 +244,8 @@ void PingPeers::procIn(const QByteArray &binIn, quint8 dType)
     {
         if (rd8BitFromBlock(activeUpdate) == 0)
         {
+            retCode = INVALID_PARAMS;
+
             errTxt("err: You don't currently have any active update sub-channels open. sending a ping request is pointless because peers won't be able to respond.\n");
         }
         else
@@ -246,11 +259,14 @@ void AddRDOnlyFlag::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args   = parseArgs(binIn, 6);
-        QString     chName = getParam("-ch_name", args);
-        QString     subId  = getParam("-sub_id", args);
-        QString     level  = getParam("-level", args);
-        quint64     chId;
+        auto args   = parseArgs(binIn, 6);
+        auto chName = getParam("-ch_name", args);
+        auto subId  = getParam("-sub_id", args);
+        auto level  = getParam("-level", args);
+
+        quint64 chId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -290,7 +306,9 @@ void AddRDOnlyFlag::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
-            QByteArray frame = wrInt(chId, 64) + wrInt(subId.toUInt(), 8) + wrInt(level.toUInt(), 8);
+            retCode = NO_ERRORS;
+
+            auto frame = wrInt(chId, 64) + wrInt(subId.toUInt(), 8) + wrInt(level.toUInt(), 8);
 
             Query db(this);
 
@@ -309,11 +327,14 @@ void RemoveRDOnlyFlag::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args   = parseArgs(binIn, 6);
-        QString     chName = getParam("-ch_name", args);
-        QString     subId  = getParam("-sub_id", args);
-        QString     level  = getParam("-level", args);
-        quint64     chId;
+        auto args   = parseArgs(binIn, 6);
+        auto chName = getParam("-ch_name", args);
+        auto subId  = getParam("-sub_id", args);
+        auto level  = getParam("-level", args);
+
+        quint64 chId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -353,7 +374,9 @@ void RemoveRDOnlyFlag::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
-            QByteArray frame = wrInt(chId, 64) + wrInt(subId.toUInt(), 8) + wrInt(level.toUInt(), 8);
+            retCode = NO_ERRORS;
+
+            auto frame = wrInt(chId, 64) + wrInt(subId.toUInt(), 8) + wrInt(level.toUInt(), 8);
 
             Query db(this);
 
@@ -378,9 +401,12 @@ void ListRDonlyFlags::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
-            QStringList args   = parseArgs(binIn, 2);
-            QString     chName = getParam("-ch_name", args);
-            quint64     chId;
+            auto args   = parseArgs(binIn, 2);
+            auto chName = getParam("-ch_name", args);
+
+            quint64 chId;
+
+            retCode = INVALID_PARAMS;
 
             if (chName.isEmpty())
             {
@@ -396,6 +422,8 @@ void ListRDonlyFlags::procIn(const QByteArray &binIn, quint8 dType)
             }
             else
             {
+                retCode = NO_ERRORS;
+                
                 if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) > REGULAR)
                 {
                     TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName + " -" + QString(COLUMN_LOWEST_LEVEL) + " " + QString::number(PUBLIC)), dType);

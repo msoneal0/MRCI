@@ -62,7 +62,7 @@ void TCPServer::closedPipeConnection()
 
 bool TCPServer::createPipe()
 {
-    bool ret = controlPipe->listen(HOST_CONTROL_PIPE);
+    auto ret = controlPipe->listen(HOST_CONTROL_PIPE);
 
     controlPipePath = controlPipe->fullServerName();
 
@@ -94,9 +94,9 @@ bool TCPServer::start()
 
     maxSessions = db.getData(COLUMN_MAXSESSIONS).toUInt();
 
-    bool    ret  = false;
-    QString addr = db.getData(COLUMN_IPADDR).toString();
-    quint16 port = static_cast<quint16>(db.getData(COLUMN_PORT).toUInt());
+    auto ret  = false;
+    auto addr = db.getData(COLUMN_IPADDR).toString();
+    auto port = static_cast<quint16>(db.getData(COLUMN_PORT).toUInt());
 
     if (!createPipe())
     {
@@ -115,8 +115,6 @@ bool TCPServer::start()
     }
     else
     {
-        updateBanList();
-
         ret    = true;
         flags |= ACCEPTING;
     }
@@ -200,7 +198,7 @@ bool TCPServer::servOverloaded()
 
 void TCPServer::procPipeIn()
 {
-    QStringList args = parseArgs(controlSocket->readAll(), -1);
+    auto args = parseArgs(controlSocket->readAll(), -1);
 
     if (args.contains("-stop", Qt::CaseInsensitive))
     {
@@ -235,22 +233,6 @@ void TCPServer::procPipeIn()
     }
 }
 
-void TCPServer::updateBanList()
-{
-    banList.clear();
-
-    Query db(this);
-
-    db.setType(Query::PULL, TABLE_IPBANS);
-    db.addColumn(COLUMN_IPADDR);
-    db.exec();
-
-    for (int i = 0; i < db.rows(); ++i)
-    {
-        banList.append(db.getData(COLUMN_IPADDR, i).toString());
-    }
-}
-
 void TCPServer::setMaxSessions(quint32 value)
 {
     Query db(this);
@@ -278,48 +260,40 @@ void TCPServer::incomingConnection(qintptr socketDescriptor)
     {
         resumeAccepting();
 
-        if (banList.contains(soc->peerAddress().toString(), Qt::CaseInsensitive))
-        {
-            soc->deleteLater();
-        }
-        else
-        {
-            auto buffSize = static_cast<uint>(qPow(2, MAX_FRAME_BITS) - 1) + (MAX_FRAME_BITS / 8) + 4;
-            //                                max_data_size_per_frame + size_of_size_bytes + size_of_cmd_id
+        auto buffSize = static_cast<uint>(qPow(2, MAX_FRAME_BITS) - 1) + (MAX_FRAME_BITS / 8) + 4;
+        //                                max_data_size_per_frame + size_of_size_bytes + size_of_cmd_id
 
-            soc->setSocketOption(QAbstractSocket::ReceiveBufferSizeSocketOption, buffSize);
-            soc->setSocketOption(QAbstractSocket::SendBufferSizeSocketOption, buffSize);
+        soc->setSocketOption(QAbstractSocket::ReceiveBufferSizeSocketOption, buffSize);
+        soc->setSocketOption(QAbstractSocket::SendBufferSizeSocketOption, buffSize);
 
-            auto *ses = new Session(hostKey, soc, nullptr);
-            auto *thr = new QThread(nullptr);
+        auto *ses = new Session(hostKey, soc, nullptr);
+        auto *thr = new QThread(nullptr);
 
-            connect(thr, &QThread::finished, soc, &QSslSocket::deleteLater);
-            connect(thr, &QThread::finished, ses, &QSslSocket::deleteLater);
-            connect(thr, &QThread::finished, thr, &QSslSocket::deleteLater);
-            connect(thr, &QThread::started, ses, &Session::init);
+        connect(thr, &QThread::finished, soc, &QSslSocket::deleteLater);
+        connect(thr, &QThread::finished, ses, &QSslSocket::deleteLater);
+        connect(thr, &QThread::finished, thr, &QSslSocket::deleteLater);
+        connect(thr, &QThread::started, ses, &Session::init);
 
-            connect(ses, &Session::ended, this, &TCPServer::sessionEnded);
-            connect(ses, &Session::ended, thr, &QThread::quit);
-            connect(ses, &Session::connectPeers, this, &TCPServer::connectPeers);
-            connect(ses, &Session::closeServer, this, &TCPServer::closeServer);
-            connect(ses, &Session::resServer, this, &TCPServer::resServer);
-            connect(ses, &Session::setMaxSessions, this, &TCPServer::setMaxSessions);
-            connect(ses, &Session::updateBanList, this, &TCPServer::updateBanList);
+        connect(ses, &Session::ended, this, &TCPServer::sessionEnded);
+        connect(ses, &Session::ended, thr, &QThread::quit);
+        connect(ses, &Session::connectPeers, this, &TCPServer::connectPeers);
+        connect(ses, &Session::closeServer, this, &TCPServer::closeServer);
+        connect(ses, &Session::resServer, this, &TCPServer::resServer);
+        connect(ses, &Session::setMaxSessions, this, &TCPServer::setMaxSessions);
 
-            connect(this, &TCPServer::connectPeers, ses, &Session::connectToPeer);
-            connect(this, &TCPServer::endAllSessions, ses, &Session::endSession);
+        connect(this, &TCPServer::connectPeers, ses, &Session::connectToPeer);
+        connect(this, &TCPServer::endAllSessions, ses, &Session::endSession);
 
-            serializeThread(thr);
+        serializeThread(thr);
 
-            ses->moveToThread(thr);
-            soc->moveToThread(thr);
-            thr->start();
+        ses->moveToThread(thr);
+        soc->moveToThread(thr);
+        thr->start();
 
-            hostSharedMem->lock();
+        hostSharedMem->lock();
 
-            wr32BitToBlock((rd32BitFromBlock(hostLoad) + 1), hostLoad);
+        wr32BitToBlock((rd32BitFromBlock(hostLoad) + 1), hostLoad);
 
-            hostSharedMem->unlock();
-        }
+        hostSharedMem->unlock();
     }
 }

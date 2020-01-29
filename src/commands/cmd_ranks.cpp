@@ -49,10 +49,12 @@ void AssignCmdRank::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args    = parseArgs(binIn, 6);
-        QString     cmdName = getParam("-command", args);
-        QString     mod     = getParam("-mod", args);
-        QString     rank    = getParam("-rank", args);
+        auto args    = parseArgs(binIn, 6);
+        auto cmdName = getParam("-command", args);
+        auto mod     = getParam("-mod", args);
+        auto rank    = getParam("-rank", args);
+
+        retCode = INVALID_PARAMS;
 
         if (cmdName.isEmpty())
         {
@@ -84,6 +86,8 @@ void AssignCmdRank::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::PUSH, TABLE_CMD_RANKS);
@@ -101,9 +105,11 @@ void RemoveCmdRank::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args    = parseArgs(binIn, 4);
-        QString     cmdName = getParam("-command", args);
-        QString     mod     = getParam("-mod", args);
+        auto args    = parseArgs(binIn, 4);
+        auto cmdName = getParam("-command", args);
+        auto mod     = getParam("-mod", args);
+
+        retCode = INVALID_PARAMS;
 
         if (cmdName.isEmpty())
         {
@@ -127,6 +133,8 @@ void RemoveCmdRank::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+            
             Query db(this);
 
             db.setType(Query::DEL, TABLE_CMD_RANKS);

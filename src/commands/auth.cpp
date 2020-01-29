@@ -48,26 +48,10 @@ void Auth::addToThreshold()
     db.exec();
 
     db.setType(Query::PULL, TABLE_SERV_SETTINGS);
+    db.addColumn(COLUMN_LOCK_LIMIT);
+    db.exec();
 
-    quint32 maxAttempts = 0;
-    bool    isRoot      = false;
-
-    if (noCaseMatch(ROOT_USER, uName))
-    {
-        isRoot = true;
-
-        db.addColumn(COLUMN_BAN_LIMIT);
-        db.exec();
-
-        maxAttempts = db.getData(COLUMN_BAN_LIMIT).toUInt();
-    }
-    else
-    {
-        db.addColumn(COLUMN_LOCK_LIMIT);
-        db.exec();
-
-        maxAttempts = db.getData(COLUMN_LOCK_LIMIT).toUInt();
-    }
+    auto maxAttempts = db.getData(COLUMN_LOCK_LIMIT).toUInt();
 
     db.setType(Query::PULL, TABLE_AUTH_LOG);
     db.addColumn(COLUMN_IPADDR);
@@ -75,32 +59,14 @@ void Auth::addToThreshold()
     db.addCondition(COLUMN_AUTH_ATTEMPT, true);
     db.addCondition(COLUMN_COUNT, true);
     db.addCondition(COLUMN_ACCEPTED, false);
-
-    if (isRoot) db.addCondition(COLUMN_IPADDR, ip);
-
     db.exec();
 
     if (static_cast<quint32>(db.rows()) > maxAttempts)
     {
-        if (isRoot)
-        {
-            if (!QHostAddress(ip).isLoopback())
-            {
-                db.setType(Query::PUSH, TABLE_IPBANS);
-                db.addColumn(COLUMN_IPADDR, ip);
-                db.exec();
-
-                async(ASYNC_UPDATE_BANS, PRIV_IPC);
-                async(ASYNC_END_SESSION, PRIV_IPC);
-            }
-        }
-        else
-        {
-            db.setType(Query::UPDATE, TABLE_USERS);
-            db.addColumn(COLUMN_LOCKED, true);
-            db.addCondition(COLUMN_USER_ID, uId);
-            db.exec();
-        }
+        db.setType(Query::UPDATE, TABLE_USERS);
+        db.addColumn(COLUMN_LOCKED, true);
+        db.addCondition(COLUMN_USER_ID, uId);
+        db.exec();
 
         flags &= ~MORE_INPUT;
     }
@@ -121,7 +87,7 @@ void Auth::confirmAuth()
     db.addCondition(COLUMN_USER_ID, uId);
     db.addCondition(COLUMN_AUTH_ATTEMPT, true);
 
-    if (noCaseMatch(ROOT_USER, uName))
+    if (rootUserId() == uId)
     {
         db.addCondition(COLUMN_IPADDR, ip);
     }
@@ -155,15 +121,18 @@ void Auth::procIn(const QByteArray &binIn, quint8 dType)
             {
                 if (newPassword)
                 {
+                    QString errMsg;
+
                     if (text.isEmpty())
                     {
                         mainTxt("\n");
 
-                        flags &= ~MORE_INPUT;
+                        flags  &= ~MORE_INPUT;
+                        retCode = ABORTED;
                     }
-                    else if (!validPassword(text))
+                    else if (!acceptablePw(text, uId, &errMsg))
                     {
-                        errTxt("err: Invalid password. it must be 8-200 chars long containing numbers, mixed case letters and special chars.\n\n");
+                        errTxt(errMsg + "\n");
                         privTxt("Enter a new password (leave blank to cancel): ");
                     }
                     else
@@ -195,16 +164,32 @@ void Auth::procIn(const QByteArray &binIn, quint8 dType)
                     {
                         mainTxt("\n");
 
-                        flags &= ~MORE_INPUT;
+                        flags  &= ~MORE_INPUT;
+                        retCode = ABORTED;
+                    }
+                    else if (noCaseMatch(DEFAULT_ROOT_USER, text))
+                    {
+                        errTxt("err: '" + QString(DEFAULT_ROOT_USER) + "' is a reserved keyword. invalid for use as a user name.\n");
+                        mainTxt("Enter a new user name (leave blank to cancel): ");
+                    }
+                    else if (validEmailAddr(text))
+                    {
+                        errTxt("err: Invaild use rname. it looks like an email address.\n");
+                        mainTxt("Enter a new user name (leave blank to cancel): ");
                     }
                     else if (!validUserName(text))
                     {
-                        errTxt("err: Invalid username. it must be 2-24 chars long and contain no spaces.\n\n");
+                        errTxt("err: Invalid user name. it must be 2-24 chars long and contain no spaces.\n\n");
                         mainTxt("Enter a new user name (leave blank to cancel): ");
                     }
-                    else if (!userExists(text))
+                    else if (noCaseMatch(text, uName))
                     {
-                        errTxt("err: The requested User name already exists.\n\n");
+                        errTxt("err: You cannot re-apply your old user name.\n\n");
+                        mainTxt("Enter a new user name (leave blank to cancel): ");
+                    }
+                    else if (userExists(text))
+                    {
+                        errTxt("err: The requested user name already exists.\n\n");
                         mainTxt("Enter a new user name (leave blank to cancel): ");
                     }
                     else
@@ -230,7 +215,8 @@ void Auth::procIn(const QByteArray &binIn, quint8 dType)
             {
                 mainTxt("\n");
 
-                flags &= ~MORE_INPUT;
+                flags  &= ~MORE_INPUT;
+                retCode = ABORTED;
             }
             else if (!validPassword(text))
             {
@@ -260,14 +246,16 @@ void Auth::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
-            QStringList args  = parseArgs(binIn, 2);
-            QString     email = getParam("-email", args);
-            QString     name  = getParam("-user", args);
+            auto args  = parseArgs(binIn, 2);
+            auto email = getParam("-email", args);
+            auto name  = getParam("-user", args);
 
             if (!email.isEmpty() && validEmailAddr(email))
             {
                 name = getUserNameForEmail(email);
             }
+
+            retCode = INVALID_PARAMS;
 
             if (name.isEmpty() || !validUserName(name))
             {
@@ -294,6 +282,7 @@ void Auth::procIn(const QByteArray &binIn, quint8 dType)
 
                 loginOk     = false;
                 uName       = name;
+                retCode     = NO_ERRORS;
                 flags      |= MORE_INPUT;
                 ip          = rdStringFromBlock(clientIp, BLKSIZE_CLIENT_IP);
                 newPassword = db.getData(COLUMN_NEED_PASS).toBool();

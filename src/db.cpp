@@ -222,6 +222,29 @@ QByteArray getSalt(const QByteArray &uId, const QString &table)
     return db.getData(COLUMN_SALT).toByteArray();
 }
 
+QByteArray rootUserId()
+{
+    Query db;
+
+    db.setType(Query::PULL, TABLE_SERV_SETTINGS);
+    db.addColumn(COLUMN_ROOT_USER);
+    db.exec();
+
+    QByteArray id = db.getData(COLUMN_ROOT_USER).toByteArray();
+
+    if (id.isEmpty())
+    {
+        db.setType(Query::PULL, TABLE_USERS);
+        db.addColumn(COLUMN_USER_ID);
+        db.addCondition(COLUMN_USERNAME, DEFAULT_ROOT_USER);
+        db.exec();
+
+        id = db.getData(COLUMN_USER_ID).toByteArray();
+    }
+
+    return id;
+}
+
 bool createUser(const QString &userName, const QString &email, const QString &dispName, const QString &password)
 {
     bool ret = false;
@@ -237,6 +260,7 @@ bool createUser(const QString &userName, const QString &email, const QString &di
     db.addColumn(COLUMN_EMAIL_VERIFIED, false);
     db.addColumn(COLUMN_NEED_PASS, false);
     db.addColumn(COLUMN_NEED_NAME, false);
+    db.addColumn(COLUMN_LOCKED, false);
     db.addColumn(COLUMN_USER_ID, newUId);
     db.addRandBlob(COLUMN_SALT, 128);
 

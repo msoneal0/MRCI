@@ -20,7 +20,6 @@
 #include "common.h"
 #include "cmd_object.h"
 #include "commands/admin.h"
-#include "commands/bans.h"
 #include "commands/cast.h"
 #include "commands/info.h"
 #include "commands/mods.h"

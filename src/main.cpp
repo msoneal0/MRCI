@@ -40,18 +40,6 @@ void msgHandler(QtMsgType type, const QMessageLogContext &context, const QString
     }
 }
 
-QByteArray rootUserId()
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_USERS);
-    db.addColumn(COLUMN_USER_ID);
-    db.addCondition(COLUMN_USERNAME, ROOT_USER);
-    db.exec();
-
-    return db.getData(COLUMN_USER_ID).toByteArray();
-}
-
 void showHelp()
 {
     QTextStream txtOut(stdout);
@@ -64,8 +52,9 @@ void showHelp()
     txtOut << " -about                  : display versioning/warranty information about this application." << endl;
     txtOut << " -addr {ip_address:port} : set the listening address and port for TCP clients." << endl;
     txtOut << " -status                 : display status information about the host instance if it is currently running." << endl;
-    txtOut << " -reset_root             : reset the root account password to the default password shown below." << endl;
+    txtOut << " -reset_root             : reset the root account password to the default password." << endl;
     txtOut << " -host                   : start a new host instance. (this blocks)" << endl;
+    txtOut << " -default_pw             : show the default password." << endl;
     txtOut << " -public_cmds            : run the internal module to list it's public commands. for internal use only." << endl;
     txtOut << " -exempt_cmds            : run the internal module to list it's rank exempt commands. for internal use only." << endl;
     txtOut << " -user_cmds              : run the internal module to list it's user commands. for internal use only." << endl;
@@ -74,19 +63,19 @@ void showHelp()
     txtOut << " -pipe {pipe_name/path} : the named pipe used to establish a data connection with the session." << endl;
     txtOut << " -mem_ses {key_name}    : the shared memory key for the session." << endl;
     txtOut << " -mem_host {key_name}   : the shared memory key for the host main process." << endl << endl;
-    txtOut << " default password: " << defaultPw() << endl << endl;
 }
 
-void soeDueToDbErr(int *retCode)
+void soeDueToDbErr(int *retCode, const QString *errMsg)
 {
     *retCode = 1;
 
-    QTextStream(stderr) << "" << endl << "err: Unable to continue due to an unclean or non-existent database structure." << endl;
+    QTextStream(stderr) << "" << endl << "err: Stop error." << endl;
+    QTextStream(stderr) << "     what happened: " << endl << *errMsg << endl << endl;
 }
 
 int shellToHost(const QStringList &args, QCoreApplication &app)
 {
-    int   ret = 0;
+    auto  ret = 0;
     auto *ipc = new ShellIPC(args, &app);
 
     QObject::connect(ipc, SIGNAL(closeInstance()), &app, SLOT(quit()));
@@ -109,28 +98,19 @@ int main(int argc, char *argv[])
 
     serializeThread(app.thread());
 
-    QString workDir = expandEnvVariables(qEnvironmentVariable(ENV_WORK_DIR, DEFAULT_WORK_DIR));
+    auto workDir = expandEnvVariables(qEnvironmentVariable(ENV_WORK_DIR, DEFAULT_WORK_DIR));
+    auto args    = QCoreApplication::arguments();
+    auto ret     = 0;
 
     QDir::setCurrent(workDir);
     QCoreApplication::setApplicationName(APP_NAME);
     QCoreApplication::setApplicationVersion(APP_VER);
 
-    QString     err;
-    QStringList args   = QCoreApplication::arguments();
-    bool        dbFail = false;
-    int         ret    = 0;
-
-    if (!setupDb(&err))
-    {
-        QTextStream(stderr) << "" << endl << "err: Database setup error, the host will not be able to start without a solid database structure." << endl;
-        QTextStream(stderr) << "     what happened: " << endl << err << endl;
-
-        dbFail = true;
-    }
+    QString err;
 
     qInstallMessageHandler(msgHandler);
 
-    //args.append("-host"); // debug
+    //args.append("-default_pw"); // debug
 
     if (args.contains("-help", Qt::CaseInsensitive))
     {
@@ -142,18 +122,23 @@ int main(int argc, char *argv[])
         QTextStream(stdout) << "Based on QT " << QT_VERSION_STR << " " << 8 * QT_POINTER_SIZE << "bit" << endl << endl;
         QTextStream(stdout) << "The program is provided AS IS with NO WARRANTY OF ANY KIND, INCLUDING THE" << endl;
         QTextStream(stdout) << "WARRANTY OF DESIGN, MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE." << endl << endl;
-        QTextStream(stdout) << " default password: " << defaultPw() << endl << endl;
+
+    }
+    else if (args.contains("-default_pw", Qt::CaseInsensitive))
+    {
+        QTextStream(stdout) << "" << endl << " Root User       : " << getUserName(rootUserId()) << endl;
+        QTextStream(stdout) << " Default Password: " << defaultPw() << endl << endl;
     }
     else if (args.contains("-addr", Qt::CaseInsensitive))
     {
-        QString     params = getParam("-addr", args);
-        QStringList addr   = params.split(':');
+        auto params = getParam("-addr", args);
+        auto addr   = params.split(':');
 
         ret = 128;
 
-        if (dbFail)
+        if (!setupDb(&err))
         {
-            soeDueToDbErr(&ret);
+            soeDueToDbErr(&ret, &err);
         }
         else if (addr.size() != 2)
         {
@@ -194,9 +179,9 @@ int main(int argc, char *argv[])
              args.contains("-exempt_cmds", Qt::CaseInsensitive) ||
              args.contains("-user_cmds", Qt::CaseInsensitive))
     {
-        if (dbFail)
+        if (!setupDb(&err))
         {
-            soeDueToDbErr(&ret);
+            soeDueToDbErr(&ret, &err);
         }
         else
         {
@@ -210,9 +195,9 @@ int main(int argc, char *argv[])
     }
     else if (args.contains("-host", Qt::CaseInsensitive))
     {
-        if (dbFail)
+        if (!setupDb(&err))
         {
-            soeDueToDbErr(&ret);
+            soeDueToDbErr(&ret, &err);
         }
         else
         {
@@ -230,13 +215,22 @@ int main(int argc, char *argv[])
     }
     else if (args.contains("-reset_root", Qt::CaseInsensitive))
     {
-        if (dbFail)
+        if (!setupDb(&err))
         {
-            soeDueToDbErr(&ret);
+            soeDueToDbErr(&ret, &err);
         }
         else
         {
-            updatePassword(rootUserId(), defaultPw(), TABLE_USERS, true);
+            auto uId = rootUserId();
+
+            Query db(&app);
+
+            db.setType(Query::UPDATE, TABLE_USERS);
+            db.addColumn(COLUMN_LOCKED, false);
+            db.addCondition(COLUMN_USER_ID, uId);
+            db.exec();
+
+            updatePassword(uId, defaultPw(), TABLE_USERS, true);
         }
     }
     else

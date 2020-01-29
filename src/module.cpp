@@ -46,9 +46,6 @@ QStringList Module::userCmdList()
 
     ret << CloseHost::cmdName();
     ret << RestartHost::cmdName();
-    ret << ListBans::cmdName();
-    ret << BanIP::cmdName();
-    ret << UnBanIP::cmdName();
     ret << Cast::cmdName();
     ret << OpenSubChannel::cmdName();
     ret << CloseSubChannel::cmdName();
@@ -57,7 +54,7 @@ QStringList Module::userCmdList()
     ret << IPHist::cmdName();
     ret << ListMods::cmdName();
     ret << DelMod::cmdName();
-    ret << UploadMod::cmdName();
+    ret << AddMod::cmdName();
     ret << ListUsers::cmdName();
     ret << CreateUser::cmdName();
     ret << RecoverAcct::cmdName();
@@ -171,9 +168,6 @@ bool Module::runCmd(const QString &name)
         if      (noCaseMatch(name, CloseHost::cmdName()))             new CloseHost(this);
         else if (noCaseMatch(name, RestartHost::cmdName()))           new RestartHost(this);
         else if (noCaseMatch(name, Auth::cmdName()))                  new Auth(this);
-        else if (noCaseMatch(name, ListBans::cmdName()))              new ListBans(this);
-        else if (noCaseMatch(name, BanIP::cmdName()))                 new BanIP(this);
-        else if (noCaseMatch(name, UnBanIP::cmdName()))               new UnBanIP(this);
         else if (noCaseMatch(name, Cast::cmdName()))                  new Cast(this);
         else if (noCaseMatch(name, OpenSubChannel::cmdName()))        new OpenSubChannel(this);
         else if (noCaseMatch(name, CloseSubChannel::cmdName()))       new CloseSubChannel(this);
@@ -182,7 +176,7 @@ bool Module::runCmd(const QString &name)
         else if (noCaseMatch(name, IPHist::cmdName()))                new IPHist(this);
         else if (noCaseMatch(name, ListMods::cmdName()))              new ListMods(this);
         else if (noCaseMatch(name, DelMod::cmdName()))                new DelMod(this);
-        else if (noCaseMatch(name, UploadMod::cmdName()))             new UploadMod(this);
+        else if (noCaseMatch(name, AddMod::cmdName()))                new AddMod(this);
         else if (noCaseMatch(name, ListUsers::cmdName()))             new ListUsers(this);
         else if (noCaseMatch(name, CreateUser::cmdName()))            new CreateUser(this);
         else if (noCaseMatch(name, RecoverAcct::cmdName()))           new RecoverAcct(this);

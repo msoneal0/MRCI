@@ -70,12 +70,13 @@ void IPCWorker::connectIPC()
 
 CmdObject::CmdObject(QObject *parent) : MemShare(parent)
 {
-    flags = 0;
+    flags   = 0;
+    retCode = NO_ERRORS;
 
-    QStringList args    = QCoreApplication::instance()->arguments();
-    QString     pipe    = getParam("-pipe_name", args);
-    QString     sMemKey = getParam("-mem_ses", args);
-    QString     hMemKey = getParam("-mem_host", args);
+    auto args    = QCoreApplication::instance()->arguments();
+    auto pipe    = getParam("-pipe_name", args);
+    auto sMemKey = getParam("-mem_ses", args);
+    auto hMemKey = getParam("-mem_host", args);
 
     if (attachSharedMem(sMemKey, hMemKey))
     {
@@ -114,7 +115,8 @@ void CmdObject::term()
 {
     if (flags & (MORE_INPUT | HALT_STATE | LOOPING))
     {
-        flags = 0;
+        flags   = 0;
+        retCode = ABORTED;
 
         onTerminate();
         postProc();
@@ -180,7 +182,9 @@ void CmdObject::postProc()
     {
         keepAliveTimer->stop();
 
-        emit procOut(QByteArray(), IDLE);
+        emit procOut(wrInt(retCode, 16), IDLE);
+
+        retCode = NO_ERRORS;
     }
 }
 

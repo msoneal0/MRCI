@@ -16,6 +16,7 @@ Usage: mrci <argument>
  -status                 : display status information about the host instance if it is currently running.
  -reset_root             : reset the root account password to the default password.
  -host                   : start a new host instance. (this blocks).
+ -default_pw             : show the default password.
  -public_cmds            : run the internal module to list it's public commands. for internal use only.
  -exempt_cmds            : run the internal module to list it's rank exempt commands. for internal use only.
  -user_cmds              : run the internal module to list it's user commands. for internal use only.
@@ -30,7 +31,7 @@ Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:
  
 The host can only be managed via a connected client that supports text input/output so the host application is always listening for clients while running entirely in the background. By default the host listen for clients on address 0.0.0.0 and port 35516, effectively making it reachable on any network interface of the host platform via that specific port.
 
-Just like any linux based OS, the host will have an administrative user called root. This account can be used to modify anything on the host without restriction. The default password is randomized and set on the root user account upon running the host for the first time. To find out what the default password is, run -help or -about. When logging in as root with the default password, the host will require you to change the password before continuing.
+Any one user account registered with the host can be given root privileges which basically gives this user unrestricted access to anything in the host for administrative purposes. When a host instance is created for the first time, it will create a new user account called 'root' with a randomized default password. To find out what the default password is, run -default_pw. When logging in for the fist time, the host will require you to change the user name and password before continuing.
 
 ### More Than Just a Command Interpreter ###
 

@@ -22,26 +22,28 @@ ListMods::ListMods(QObject *parent) : TableViewer(parent)
     addTableColumn(TABLE_MODULES, COLUMN_MOD_MAIN);
 }
 
-UploadMod::UploadMod(QObject *parent) : CmdObject(parent) {}
-DelMod::DelMod(QObject *parent)       : CmdObject(parent) {}
+AddMod::AddMod(QObject *parent) : CmdObject(parent) {}
+DelMod::DelMod(QObject *parent) : CmdObject(parent) {}
 
-QString ListMods::cmdName()  {return "ls_mods";}
-QString DelMod::cmdName()    {return "rm_mod";}
-QString UploadMod::cmdName() {return "add_mod";}
+QString ListMods::cmdName() {return "ls_mods";}
+QString DelMod::cmdName()   {return "rm_mod";}
+QString AddMod::cmdName()   {return "add_mod";}
 
-bool UploadMod::isExecutable(const QString &path)
+bool AddMod::isExecutable(const QString &path)
 {
     QFileInfo info(expandEnvVariables(path));
 
     return info.exists() && info.isExecutable();
 }
 
-void UploadMod::procIn(const QByteArray &binIn, quint8 dType)
+void AddMod::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args = parseArgs(binIn, 2);
-        QString     path = getParam("-mod_path", args);
+        auto args = parseArgs(binIn, 2);
+        auto path = getParam("-mod_path", args);
+
+        retCode = INVALID_PARAMS;
 
         if (path.isEmpty())
         {
@@ -61,6 +63,8 @@ void UploadMod::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::PUSH, TABLE_MODULES);
@@ -76,8 +80,10 @@ void DelMod::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args = parseArgs(binIn, 2);
-        QString     path = getParam("-mod_path", args);
+        auto args = parseArgs(binIn, 2);
+        auto path = getParam("-mod_path", args);
+
+        retCode = INVALID_PARAMS;
 
         if (path.isEmpty())
         {
@@ -93,6 +99,8 @@ void DelMod::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+            
             Query db(this);
 
             db.setType(Query::DEL, TABLE_MODULES);

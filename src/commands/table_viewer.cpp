@@ -96,7 +96,7 @@ void TableViewer::addWhereConds(const QStringList &userArgs)
 
     for (int i = 0; i < columns.size(); ++i)
     {
-        QString value = getParam("-" + columns[i], userArgs);
+        auto value = getParam("-" + columns[i], userArgs);
 
         if (!value.isEmpty())
         {
@@ -190,8 +190,8 @@ QList<int> TableViewer::getColumnLens(const QList<QStringList> &data)
 
 void TableViewer::dispData()
 {
-    QList<QStringList> tableRows = toStrings(rdQuery.allData());
-    QList<int>         lens      = getColumnLens(columnRows + tableRows);
+    auto tableRows = toStrings(rdQuery.allData());
+    auto lens      = getColumnLens(columnRows + tableRows);
 
     for (auto&& row: columnRows + tableRows)
     {
@@ -210,7 +210,7 @@ void TableViewer::procIn(const QByteArray &binIn, quint8 dType)
     {
         if (flags & MORE_INPUT)
         {
-            QString text = fromTEXT(binIn).toLower();
+            auto text = fromTEXT(binIn).toLower();
 
             if (text == "y")
             {

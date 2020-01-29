@@ -130,9 +130,12 @@ void ListSubCh::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args   = parseArgs(binIn, 2);
-        QString     chName = getParam("-ch_name", args);
-        quint64     chId;
+        auto args   = parseArgs(binIn, 2);
+        auto chName = getParam("-ch_name", args);
+
+        quint64 chId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -148,6 +151,8 @@ void ListSubCh::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) > REGULAR)
             {
                 TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName + " -" + QString(COLUMN_LOWEST_LEVEL) + " " + QString::number(PUBLIC)), dType);
@@ -170,9 +175,11 @@ void SearchChannels::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
-            QStringList args = parseArgs(binIn, 4);
-            QString     name = getParam("-name", args);
-            QString     chId = getParam("-id", args);
+            auto args = parseArgs(binIn, 4);
+            auto name = getParam("-name", args);
+            auto chId = getParam("-id", args);
+
+            retCode = INVALID_PARAMS;
 
             if (!name.isEmpty() && !validChName(name))
             {
@@ -184,14 +191,20 @@ void SearchChannels::procIn(const QByteArray &binIn, quint8 dType)
             }
             else if (!name.isEmpty())
             {
+                retCode = NO_ERRORS;
+
                 TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + name), dType);
             }
             else if (!chId.isEmpty())
             {
+                retCode = NO_ERRORS;
+
                 TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_ID) + " " + chId), dType);
             }
             else
             {
+                retCode = NO_ERRORS;
+
                 TableViewer::procIn(QByteArray(), dType);
             }
         }
@@ -208,11 +221,14 @@ void ListMembers::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
-            QStringList args     = parseArgs(binIn, 6);
-            QString     chName   = getParam("-ch_name", args);
-            QString     userFind = getParam("-user_name", args);
-            QString     dispFind = getParam("-disp_name", args);
-            quint64     chId;
+            auto args     = parseArgs(binIn, 6);
+            auto chName   = getParam("-ch_name", args);
+            auto userFind = getParam("-user_name", args);
+            auto dispFind = getParam("-disp_name", args);
+
+            quint64 chId;
+
+            retCode = INVALID_PARAMS;
 
             if (chName.isEmpty())
             {
@@ -232,7 +248,9 @@ void ListMembers::procIn(const QByteArray &binIn, quint8 dType)
             }
             else
             {
-                QByteArray argsBa = toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName);
+                retCode = NO_ERRORS;
+
+                auto argsBa = toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName);
 
                 if (!userFind.isEmpty())
                 {
@@ -254,9 +272,12 @@ void CreateChannel::procIn(const QByteArray &binIn, uchar dType)
 {
     if (dType == TEXT)
     {
-        QStringList args   = parseArgs(binIn, 2);
-        QString     chName = getParam("-ch_name", args);
-        quint64     chId;
+        auto args   = parseArgs(binIn, 2);
+        auto chName = getParam("-ch_name", args);
+
+        quint64 chId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -272,15 +293,17 @@ void CreateChannel::procIn(const QByteArray &binIn, uchar dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::PUSH, TABLE_CHANNELS);
             db.addColumn(COLUMN_CHANNEL_NAME, chName);
             db.exec();
 
-            QByteArray uId   = rdFromBlock(userId, BLKSIZE_USER_ID);
-            QString    uName = rdStringFromBlock(userName, BLKSIZE_USER_NAME);
-            QString    dName = rdStringFromBlock(displayName, BLKSIZE_DISP_NAME);
+            auto uId   = rdFromBlock(userId, BLKSIZE_USER_ID);
+            auto uName = rdStringFromBlock(userName, BLKSIZE_USER_NAME);
+            auto dName = rdStringFromBlock(displayName, BLKSIZE_DISP_NAME);
 
             db.setType(Query::PUSH, TABLE_CH_MEMBERS);
             db.addColumn(COLUMN_CHANNEL_ID, chId);
@@ -289,7 +312,7 @@ void CreateChannel::procIn(const QByteArray &binIn, uchar dType)
             db.addColumn(COLUMN_PENDING_INVITE, false);
             db.exec();
 
-            QByteArray frame = createChMemberAsyncFrame(chId, uId, false, OWNER, uName, dName, chName);
+            auto frame = createChMemberAsyncFrame(chId, uId, false, OWNER, uName, dName, chName);
 
             async(ASYNC_NEW_CH_MEMBER, PUB_IPC_WITH_FEEDBACK, frame);
         }
@@ -300,9 +323,12 @@ void RemoveChannel::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args   = parseArgs(binIn, 2);
-        QString     chName = getParam("-ch_name", args);
-        quint64     chId;
+        auto args   = parseArgs(binIn, 2);
+        auto chName = getParam("-ch_name", args);
+
+        quint64 chId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -322,6 +348,8 @@ void RemoveChannel::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::DEL, TABLE_CHANNELS);
@@ -337,10 +365,13 @@ void RenameChannel::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args    = parseArgs(binIn, 4);
-        QString     chName  = getParam("-ch_name", args);
-        QString     newName = getParam("-new_name", args);
-        quint64     chId;
+        auto args    = parseArgs(binIn, 4);
+        auto chName  = getParam("-ch_name", args);
+        auto newName = getParam("-new_name", args);
+
+        quint64 chId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -372,6 +403,8 @@ void RenameChannel::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::UPDATE, TABLE_CHANNELS);
@@ -390,12 +423,15 @@ void SetActiveState::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args    = parseArgs(binIn, 6);
-        QString     chName  = getParam("-ch_name", args);
-        QString     subName = getParam("-sub_name", args);
-        QString     state   = getParam("-state", args);
-        quint64     chId;
-        quint8      subId;
+        auto args    = parseArgs(binIn, 6);
+        auto chName  = getParam("-ch_name", args);
+        auto subName = getParam("-sub_name", args);
+        auto state   = getParam("-state", args);
+
+        quint64 chId;
+        quint8  subId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -435,6 +471,8 @@ void SetActiveState::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::UPDATE, TABLE_SUB_CHANNELS);
@@ -459,11 +497,14 @@ void CreateSubCh::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args    = parseArgs(binIn, 4);
-        QString     chName  = getParam("-ch_name", args);
-        QString     subName = getParam("-sub_name", args);
-        quint64     chId;
-        quint8      subId;
+        auto args    = parseArgs(binIn, 4);
+        auto chName  = getParam("-ch_name", args);
+        auto subName = getParam("-sub_name", args);
+
+        quint64 chId;
+        quint8  subId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -499,6 +540,8 @@ void CreateSubCh::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::PUSH, TABLE_SUB_CHANNELS);
@@ -509,7 +552,7 @@ void CreateSubCh::procIn(const QByteArray &binIn, quint8 dType)
             db.addColumn(COLUMN_ACTIVE_UPDATE, false);
             db.exec();
 
-            QByteArray frame = wrInt(chId, 64) + wrInt(subId, 8) + wrInt(REGULAR, 8) + wrInt(0, 8) + nullTermTEXT(subName);
+            auto frame = wrInt(chId, 64) + wrInt(subId, 8) + wrInt(REGULAR, 8) + wrInt(0, 8) + nullTermTEXT(subName);
 
             async(ASYNC_NEW_SUB_CH, PUB_IPC_WITH_FEEDBACK, frame);
         }
@@ -520,11 +563,14 @@ void RemoveSubCh::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args    = parseArgs(binIn, 4);
-        QString     chName  = getParam("-ch_name", args);
-        QString     subName = getParam("-sub_name", args);
-        quint64     chId;
-        quint8      subId;
+        auto args    = parseArgs(binIn, 4);
+        auto chName  = getParam("-ch_name", args);
+        auto subName = getParam("-sub_name", args);
+
+        quint64 chId;
+        quint8  subId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -556,6 +602,8 @@ void RemoveSubCh::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::DEL, TABLE_SUB_CHANNELS);
@@ -572,12 +620,15 @@ void RenameSubCh::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args    = parseArgs(binIn, 6);
-        QString     chName  = getParam("-ch_name", args);
-        QString     subName = getParam("-sub_name", args);
-        QString     newName = getParam("-new_name", args);
-        quint64     chId;
-        quint8      subId;
+        auto args    = parseArgs(binIn, 6);
+        auto chName  = getParam("-ch_name", args);
+        auto subName = getParam("-sub_name", args);
+        auto newName = getParam("-new_name", args);
+
+        quint64 chId;
+        quint8  subId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -617,6 +668,8 @@ void RenameSubCh::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::UPDATE, TABLE_SUB_CHANNELS);
@@ -625,7 +678,7 @@ void RenameSubCh::procIn(const QByteArray &binIn, quint8 dType)
             db.addCondition(COLUMN_SUB_CH_ID, subId);
             db.exec();
 
-            QByteArray frame = wrInt(chId, 64) + wrInt(subId, 8) + nullTermTEXT(newName);
+            auto frame = wrInt(chId, 64) + wrInt(subId, 8) + nullTermTEXT(newName);
 
             async(ASYNC_RENAME_SUB_CH, PUB_IPC_WITH_FEEDBACK, frame);
         }
@@ -636,11 +689,14 @@ void InviteToCh::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args   = parseArgs(binIn, 4);
-        QString     chName = getParam("-ch_name", args);
-        QString     uName  = getParam("-user", args);
-        QByteArray  uId;
-        quint64     chId;
+        auto args   = parseArgs(binIn, 4);
+        auto chName = getParam("-ch_name", args);
+        auto uName  = getParam("-user", args);
+
+        QByteArray uId;
+        quint64    chId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -680,6 +736,8 @@ void InviteToCh::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::PUSH, TABLE_CH_MEMBERS);
@@ -689,7 +747,7 @@ void InviteToCh::procIn(const QByteArray &binIn, quint8 dType)
             db.addColumn(COLUMN_ACCESS_LEVEL, REGULAR);
             db.exec();
 
-            QByteArray frame = createChMemberAsyncFrame(chId, uId, true, REGULAR, uName, getDispName(uId), chName);
+            auto frame = createChMemberAsyncFrame(chId, uId, true, REGULAR, uName, getDispName(uId), chName);
 
             async(ASYNC_INVITED_TO_CH, PUB_IPC_WITH_FEEDBACK, frame);
         }
@@ -700,9 +758,12 @@ void DeclineChInvite::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args   = parseArgs(binIn, 2);
-        QString     chName = getParam("-ch_name", args);
-        quint64     chId;
+        auto args   = parseArgs(binIn, 2);
+        auto chName = getParam("-ch_name", args);
+
+        quint64 chId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -718,6 +779,8 @@ void DeclineChInvite::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::DEL, TABLE_CH_MEMBERS);
@@ -734,9 +797,12 @@ void AcceptChInvite::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args   = parseArgs(binIn, 2);
-        QString     chName = getParam("-ch_name", args);
-        quint64     chId;
+        auto args   = parseArgs(binIn, 2);
+        auto chName = getParam("-ch_name", args);
+
+        quint64 chId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -752,6 +818,8 @@ void AcceptChInvite::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::UPDATE, TABLE_CH_MEMBERS);
@@ -767,11 +835,11 @@ void AcceptChInvite::procIn(const QByteArray &binIn, quint8 dType)
 
 bool RemoveChMember::allowMemberDel(const QByteArray &uId, quint64 chId)
 {
-    QByteArray myId        = rdFromBlock(userId, BLKSIZE_USER_ID);
-    bool       ret         = false;
-    bool       leaving     = (uId == myId);
-    int        targetLevel = channelAccessLevel(uId, chId);
-    int        myLevel     = channelAccessLevel(myId, chOwnerOverride, BLKSIZE_USER_ID);
+    auto myId        = rdFromBlock(userId, BLKSIZE_USER_ID);
+    auto ret         = false;
+    auto leaving     = (uId == myId);
+    auto targetLevel = channelAccessLevel(uId, chId);
+    auto myLevel     = channelAccessLevel(myId, chOwnerOverride, BLKSIZE_USER_ID);
 
     if (leaving && (myLevel == OWNER))
     {
@@ -797,11 +865,14 @@ void RemoveChMember::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args   = parseArgs(binIn, 4);
-        QString     chName = getParam("-ch_name", args);
-        QString     uName  = getParam("-user", args);
-        QByteArray  uId;
-        quint64     chId;
+        auto args   = parseArgs(binIn, 4);
+        auto chName = getParam("-ch_name", args);
+        auto uName  = getParam("-user", args);
+
+        QByteArray uId;
+        quint64    chId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -833,6 +904,8 @@ void RemoveChMember::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::DEL, TABLE_CH_MEMBERS);
@@ -847,8 +920,8 @@ void RemoveChMember::procIn(const QByteArray &binIn, quint8 dType)
 
 bool SetMemberLevel::allowLevelChange(const QByteArray &uId, int newLevel, quint64 chId)
 {
-    int targetLevel = channelAccessLevel(uId, chId);
-    int myLevel     = channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, BLKSIZE_USER_ID);
+    auto targetLevel = channelAccessLevel(uId, chId);
+    auto myLevel     = channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, BLKSIZE_USER_ID);
 
     return (newLevel >= myLevel) && (targetLevel > myLevel);
 }
@@ -857,12 +930,15 @@ void SetMemberLevel::procIn(const QByteArray &binIn, uchar dType)
 {
     if (dType == TEXT)
     {
-        QStringList args   = parseArgs(binIn, 6);
-        QString     chName = getParam("-ch_name", args);
-        QString     uName  = getParam("-user", args);
-        QString     level  = getParam("-level", args);
-        quint64     chId;
-        QByteArray  uId;
+        auto args   = parseArgs(binIn, 6);
+        auto chName = getParam("-ch_name", args);
+        auto uName  = getParam("-user", args);
+        auto level  = getParam("-level", args);
+
+        quint64    chId;
+        QByteArray uId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -902,6 +978,8 @@ void SetMemberLevel::procIn(const QByteArray &binIn, uchar dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::PULL, TABLE_CH_MEMBERS);
@@ -910,8 +988,8 @@ void SetMemberLevel::procIn(const QByteArray &binIn, uchar dType)
             db.addCondition(COLUMN_CHANNEL_ID, chId);
             db.exec();
 
-            int        newLevel = level.toInt();
-            QByteArray owner    = db.getData(COLUMN_USER_ID).toByteArray();
+            auto newLevel = level.toInt();
+            auto owner    = db.getData(COLUMN_USER_ID).toByteArray();
 
             db.setType(Query::UPDATE, TABLE_CH_MEMBERS);
             db.addColumn(COLUMN_ACCESS_LEVEL, newLevel);
@@ -939,12 +1017,15 @@ void SetSubAcessLevel::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args    = parseArgs(binIn, 6);
-        QString     chName  = getParam("-ch_name", args);
-        QString     subName = getParam("-sub_name", args);
-        QString     level   = getParam("-level", args);
-        quint64     chId;
-        quint8      subId;
+        auto args    = parseArgs(binIn, 6);
+        auto chName  = getParam("-ch_name", args);
+        auto subName = getParam("-sub_name", args);
+        auto level   = getParam("-level", args);
+
+        quint64 chId;
+        quint8  subId;
+
+        retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
         {
@@ -984,6 +1065,8 @@ void SetSubAcessLevel::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+
             Query db(this);
 
             db.setType(Query::UPDATE, TABLE_SUB_CHANNELS);
@@ -1001,8 +1084,10 @@ void OwnerOverride::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (dType == TEXT)
     {
-        QStringList args  = parseArgs(binIn, 2);
-        QString     state = getParam("-state", args);
+        auto args  = parseArgs(binIn, 2);
+        auto state = getParam("-state", args);
+
+        retCode = INVALID_PARAMS;
 
         if (state.isEmpty())
         {
@@ -1014,6 +1099,8 @@ void OwnerOverride::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
+            retCode = NO_ERRORS;
+            
             wr8BitToBlock(static_cast<quint8>(state.toUInt()), chOwnerOverride);
         }
     }

@@ -67,6 +67,7 @@ protected:
     QTimer    *keepAliveTimer;
     IPCWorker *ipcWorker;
     quint32    flags;
+    quint16    retCode;
 
     void    mainTxt(const QString &txt);
     void    errTxt(const QString &txt);

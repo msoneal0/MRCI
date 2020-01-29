@@ -37,7 +37,7 @@
 #include "shell.h"
 
 #define APP_NAME   "MRCI"
-#define APP_VER    "2.1.3"
+#define APP_VER    "2.2.3"
 #define APP_TARGET "mrci"
 
 #ifdef Q_OS_WIN
@@ -67,6 +67,7 @@
 #define USERNAME_SUB            "%user_name%"
 #define DATE_SUB                "%date%"
 #define INTERN_MOD_NAME         ":internal_mod"
+#define DEFAULT_ROOT_USER       "root"
 #define DEFAULT_CONFIRM_SUBJECT "Email Verification"
 #define DEFAULT_TEMP_PW_SUBJECT "Password Reset"
 #define DEFAULT_LISTEN_ADDRESS  "0.0.0.0"
@@ -93,7 +94,6 @@ Your confirmation code is as follows:\n\n\
 Date requested: %date%."
 
 #define TABLE_IPHIST        "ip_history"
-#define TABLE_IPBANS        "ban_list"
 #define TABLE_USERS         "users"
 #define TABLE_SERV_SETTINGS "host_settings"
 #define TABLE_CMD_RANKS     "command_ranks"
@@ -160,6 +160,7 @@ Date requested: %date%."
 #define COLUMN_MAX_SUB_CH      "max_sub_channels"
 #define COLUMN_APP_NAME        "client_app"
 #define COLUMN_DEFAULT_PASS    "default_password"
+#define COLUMN_ROOT_USER       "root_user"
 
 QString    genPw();
 QList<int> genSequence(int min, int max, int len);
@@ -172,6 +173,7 @@ QString    columnType(const QString &column);
 quint32    initHostRank();
 QByteArray getSalt(const QByteArray &uId, const QString &table);
 QByteArray genUniqueHash();
+QByteArray rootUserId();
 bool       createUser(const QString &userName, const QString &email, const QString &dispName, const QString &password);
 bool       createTempPw(const QByteArray &uId, const QString &password);
 bool       updatePassword(const QByteArray &uId, const QString &password, const QString &table, bool requireNewPass = false);
