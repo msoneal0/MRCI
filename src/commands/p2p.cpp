@@ -50,7 +50,7 @@ void ToPeer::procIn(const QByteArray &binIn, quint8 dType)
         auto data   = rdFromBlock(binIn.data() + BLKSIZE_SESSION_ID, len - BLKSIZE_SESSION_ID);
         auto typeBa = wrInt(dType, 8);
 
-        async(ASYNC_P2P, PUB_IPC, dst + src + typeBa + data);
+        async(ASYNC_P2P, dst + src + typeBa + data);
     }
 }
 
@@ -80,7 +80,7 @@ void P2PRequest::procIn(const QByteArray &binIn, quint8 dType)
             auto src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
             auto typeBa = wrInt(P2P_REQUEST, 8);
 
-            async(ASYNC_P2P, PUB_IPC, dst + src + typeBa + createPeerInfoFrame());
+            async(ASYNC_P2P, dst + src + typeBa + createPeerInfoFrame());
         }
     }
 }
@@ -111,7 +111,7 @@ void P2POpen::procIn(const QByteArray &binIn, quint8 dType)
             auto src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
             auto typeBa = wrInt(P2P_OPEN, 8);
 
-            async(ASYNC_P2P, PUB_IPC, dst + src + typeBa + dst);
+            async(ASYNC_P2P, dst + src + typeBa + dst);
         }
     }
 }
@@ -139,7 +139,7 @@ void P2PClose::procIn(const QByteArray &binIn, quint8 dType)
             auto src    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
             auto typeBa = wrInt(P2P_CLOSE, 8);
 
-            async(P2P_CLOSE, PUB_IPC, dst + src + typeBa + dst);
+            async(P2P_CLOSE, dst + src + typeBa + dst);
         }
     }
 }

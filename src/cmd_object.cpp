@@ -82,6 +82,9 @@ CmdObject::CmdObject(QObject *parent) : MemShare(parent)
     {
         ipcWorker      = new IPCWorker(pipe, nullptr);
         keepAliveTimer = new QTimer(this);
+        progTimer      = new QTimer(this);
+        progCurrent    = 0;
+        progMax        = 0;
 
         auto *thr = new QThread(nullptr);
 
@@ -94,6 +97,7 @@ CmdObject::CmdObject(QObject *parent) : MemShare(parent)
         connect(this, &CmdObject::procOut, ipcWorker, &IPCWorker::dataIn);
 
         connect(keepAliveTimer, &QTimer::timeout, this, &CmdObject::keepAlive);
+        connect(progTimer, &QTimer::timeout, this, &CmdObject::sendProg);
 
         connect(ipcWorker, &IPCWorker::dataOut, this, &CmdObject::preProc);
         connect(ipcWorker, &IPCWorker::termProc, this, &CmdObject::kill);
@@ -102,6 +106,8 @@ CmdObject::CmdObject(QObject *parent) : MemShare(parent)
 
         keepAliveTimer->setSingleShot(false);
         keepAliveTimer->setInterval(30000); //30sec keep alive
+        progTimer->setSingleShot(false);
+        progTimer->setInterval(1000); // 1sec progress updater
         ipcWorker->moveToThread(thr);
         thr->start();
     }
@@ -113,7 +119,7 @@ CmdObject::CmdObject(QObject *parent) : MemShare(parent)
 
 void CmdObject::term()
 {
-    if (flags & (MORE_INPUT | HALT_STATE | LOOPING))
+    if (flags & (MORE_INPUT | YIELD_STATE | LOOPING))
     {
         flags   = 0;
         retCode = ABORTED;
@@ -140,20 +146,20 @@ void CmdObject::preProc(const QByteArray &data, quint8 typeId)
     {
         kill();
     }
-    else if (typeId == HALT_CMD)
+    else if (typeId == YIELD_CMD)
     {
         if (flags & LOOPING)
         {
-            flags |=  HALT_STATE;
+            flags |=  YIELD_STATE;
             flags &= ~LOOPING;
         }
     }
     else if (typeId == RESUME_CMD)
     {
-        if (flags & HALT_STATE)
+        if (flags & YIELD_STATE)
         {
             flags |=  LOOPING;
-            flags &= ~HALT_STATE;
+            flags &= ~YIELD_STATE;
         }
     }
     else
@@ -174,13 +180,18 @@ void CmdObject::postProc()
     {
         preProc(QByteArray(), TEXT);
     }
-    else if (flags & (MORE_INPUT | HALT_STATE))
+    else if (flags & (MORE_INPUT | YIELD_STATE))
     {
         keepAliveTimer->start();
     }
     else
     {
         keepAliveTimer->stop();
+
+        if (progTimer->isActive())
+        {
+            stopProgPulse();
+        }
 
         emit procOut(wrInt(retCode, 16), IDLE);
 
@@ -208,14 +219,50 @@ void CmdObject::bigTxt(const QString &txt)
     emit procOut(toTEXT(txt), BIG_TEXT);
 }
 
-void CmdObject::async(quint16 asyncId, quint8 asyncType, const QByteArray &data)
+void CmdObject::promptTxt(const QString &txt)
 {
-    emit procOut(wrInt(asyncId, 16) + data, asyncType);
+    emit procOut(toTEXT(txt), PROMPT_TEXT);
+}
+
+void CmdObject::async(quint16 asyncId, const QByteArray &data)
+{
+    emit procOut(wrInt(asyncId, 16) + data, ASYNC_PAYLOAD);
 }
 
 void CmdObject::keepAlive()
 {
-    async(ASYNC_KEEP_ALIVE, PRIV_IPC);
+    async(ASYNC_KEEP_ALIVE);
+}
+
+void CmdObject::startProgPulse()
+{
+    progCurrent = 0;
+
+    progTimer->start();
+}
+
+void CmdObject::stopProgPulse()
+{
+    progTimer->stop();
+
+    emit procOut(wrInt(100, 8), PROG_LAST);
+
+    progCurrent = 0;
+    progMax     = 0;
+}
+
+void CmdObject::sendProg()
+{
+    quint8 percent = progCurrent / progMax * 100;
+
+    if ((progMax == 0) || (percent >= 100))
+    {
+        stopProgPulse();
+    }
+    else
+    {
+        emit procOut(wrInt(percent, 8), PROG);
+    }
 }
 
 QString CmdObject::libName()

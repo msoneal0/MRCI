@@ -71,7 +71,7 @@ void AddMod::procIn(const QByteArray &binIn, quint8 dType)
             db.addColumn(COLUMN_MOD_MAIN, path);
             db.exec();
 
-            async(ASYNC_ENABLE_MOD, PUB_IPC_WITH_FEEDBACK, toTEXT(path));
+            async(ASYNC_ENABLE_MOD, toTEXT(path));
         }
     }
 }
@@ -107,7 +107,7 @@ void DelMod::procIn(const QByteArray &binIn, quint8 dType)
             db.addCondition(COLUMN_MOD_MAIN, path);
             db.exec();
 
-            async(ASYNC_DISABLE_MOD, PUB_IPC_WITH_FEEDBACK, toTEXT(path));
+            async(ASYNC_DISABLE_MOD, toTEXT(path));
         }
     }
 }

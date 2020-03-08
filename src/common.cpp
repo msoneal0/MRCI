@@ -469,17 +469,40 @@ bool isInt(const QString &str)
     return ret;
 }
 
-bool matchChs(const char *chsA, const char *chsB)
+bool matchAnyCh(const char *chsA, const char *chsB)
 {
     bool ret = false;
 
     for (int i = 0; i < MAX_OPEN_SUB_CHANNELS; i += BLKSIZE_SUB_CHANNEL)
     {
-        if (posOfBlock(chsA + i, chsB, MAX_OPEN_SUB_CHANNELS, BLKSIZE_SUB_CHANNEL) != -1)
+        if (!isEmptyBlock(chsA + i, BLKSIZE_SUB_CHANNEL))
         {
-            ret = true;
+            if (posOfBlock(chsA + i, chsB, MAX_OPEN_SUB_CHANNELS, BLKSIZE_SUB_CHANNEL) != -1)
+            {
+                ret = true;
 
-            break;
+                break;
+            }
+        }
+    }
+
+    return ret;
+}
+
+bool fullMatchChs(const char *openChs, const char *comp)
+{
+    bool ret = true;
+
+    for (int i = 0; i < MAX_OPEN_SUB_CHANNELS; i += BLKSIZE_SUB_CHANNEL)
+    {
+        if (!isEmptyBlock(comp + i, BLKSIZE_SUB_CHANNEL))
+        {
+            if (posOfBlock(comp + i, openChs, MAX_OPEN_SUB_CHANNELS, BLKSIZE_SUB_CHANNEL) == -1)
+            {
+                ret = false;
+
+                break;
+            }
         }
     }
 

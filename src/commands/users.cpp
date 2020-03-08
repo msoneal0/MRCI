@@ -226,14 +226,14 @@ void RemoveUser::rm()
 
     flags &= ~MORE_INPUT;
 
-    async(ASYNC_USER_DELETED, PUB_IPC_WITH_FEEDBACK, uId);
+    async(ASYNC_USER_DELETED, uId);
 }
 
 void RemoveUser::ask()
 {
     flags |= MORE_INPUT;
 
-    mainTxt("Are you sure you want to permanently remove this user account? (y/n): ");
+    promptTxt("Are you sure you want to permanently remove this user account? (y/n): ");
 }
 
 void RemoveUser::procIn(const QByteArray &binIn, quint8 dType)
@@ -365,7 +365,7 @@ void ChangeUserRank::procIn(const QByteArray &binIn, quint8 dType)
             db.addCondition(COLUMN_USER_ID, uId);
             db.exec();
 
-            async(ASYNC_USER_RANK_CHANGED, PUB_IPC_WITH_FEEDBACK, uId + wrInt(rank.toUInt(), 32));
+            async(ASYNC_USER_RANK_CHANGED, uId + wrInt(rank.toUInt(), 32));
         }
     }
 }
@@ -449,7 +449,7 @@ void ChangeUsername::procIn(const QByteArray &binIn, quint8 dType)
             db.addCondition(COLUMN_USER_ID, rdFromBlock(userId, BLKSIZE_USER_ID));
             db.exec();
 
-            async(ASYNC_USER_RENAMED, PUB_IPC_WITH_FEEDBACK, uId + newNameBa);
+            async(ASYNC_USER_RENAMED, uId + newNameBa);
         }
     }
 }
@@ -463,7 +463,7 @@ void ChangeDispName::procIn(const QByteArray &binIn, quint8 dType)
 
         retCode = INVALID_PARAMS;
 
-        if (argExists("-new_name", args))
+        if (!argExists("-new_name", args))
         {
             errTxt("err: New display name argument (-new_name) not found.\n");
         }
@@ -485,7 +485,7 @@ void ChangeDispName::procIn(const QByteArray &binIn, quint8 dType)
             db.addCondition(COLUMN_USER_ID, uId);
             db.exec();
 
-            async(ASYNC_DISP_RENAMED, PUB_IPC_WITH_FEEDBACK, uId + newNameBa);
+            async(ASYNC_DISP_RENAMED, uId + newNameBa);
         }
     }
 }
@@ -536,7 +536,7 @@ void OverWriteEmail::procArgs(const QString &uName, const QString &newEmail, boo
         db.addCondition(COLUMN_USER_ID, uId);
         db.exec();
 
-        async(ASYNC_RW_MY_INFO, PUB_IPC_WITH_FEEDBACK, uId);
+        async(ASYNC_RW_MY_INFO, uId);
     }
 }
 

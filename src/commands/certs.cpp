@@ -95,7 +95,7 @@ void AddCert::ask()
 {
     flags |= MORE_INPUT;
 
-    mainTxt("Common name: '" + coName + "' already exists. do you want to replace it? (y/n): ");
+    promptTxt("Common name: '" + coName + "' already exists. do you want to replace it? (y/n): ");
 }
 
 void AddCert::procIn(const QByteArray &binIn, quint8 dType)
@@ -212,7 +212,7 @@ void RemoveCert::ask()
 {
     flags |= MORE_INPUT;
 
-    mainTxt("Are you sure you want to remove the cert for common name: " + coName + "? (y/n): ");
+    promptTxt("Are you sure you want to remove the cert for common name: " + coName + "? (y/n): ");
 }
 
 void RemoveCert::procIn(const QByteArray &binIn, quint8 dType)

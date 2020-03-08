@@ -36,7 +36,7 @@ void CloseHost::procIn(const QByteArray &binIn, quint8 dType)
             {
                 flags &= ~MORE_INPUT;
 
-                async(ASYNC_EXIT, PRIV_IPC);
+                async(ASYNC_EXIT);
             }
             else if (input.isEmpty())
             {
@@ -46,14 +46,14 @@ void CloseHost::procIn(const QByteArray &binIn, quint8 dType)
             else
             {
                 errTxt("err: Invalid response. you need to type 'CLOSE' exactly as shown without the quotes.\n");
-                mainTxt("Enter 'CLOSE' to proceed or leave blank to cancel: ");
+                promptTxt("Enter 'CLOSE' to proceed or leave blank to cancel: ");
             }
         }
         else
         {
             flags |= MORE_INPUT;
 
-            mainTxt("You are about to shutdown the host instance, type: 'CLOSE' to proceed or leave blank to cancel: ");
+            promptTxt("You are about to shutdown the host instance, type: 'CLOSE' to proceed or leave blank to cancel: ");
         }
     }
 }
@@ -70,7 +70,7 @@ void RestartHost::procIn(const QByteArray &binIn, quint8 dType)
             {
                 flags &= ~MORE_INPUT;
 
-                async(ASYNC_RESTART, PRIV_IPC);
+                async(ASYNC_RESTART);
             }
             else if (input.isEmpty())
             {
@@ -80,14 +80,14 @@ void RestartHost::procIn(const QByteArray &binIn, quint8 dType)
             else if (!input.isEmpty())
             {
                 errTxt("err: Invalid response. you need to type 'RESTART' exactly as shown without the quotes.\n");
-                mainTxt("Enter 'RESTART' to proceed or leave blank to cancel: ");
+                promptTxt("Enter 'RESTART' to proceed or leave blank to cancel: ");
             }
         }
         else
         {
             flags |= MORE_INPUT;
 
-            mainTxt("You are about to re-start the host instance, type: 'RESTART' to proceed or leave blank to cancel: ");
+            promptTxt("You are about to re-start the host instance, type: 'RESTART' to proceed or leave blank to cancel: ");
         }
     }
 }
@@ -150,7 +150,7 @@ void ServSettings::printOptions()
 
         level = 1;
 
-        mainTxt(txt);
+        promptTxt(txt);
     }
 }
 
@@ -322,7 +322,7 @@ void ServSettings::procIn(const QByteArray &binIn, quint8 dType)
                     txtOut << "" << endl << "Select an option: ";
                 }
 
-                mainTxt(txt);
+                promptTxt(txt);
             }
             else if (level == 2)
             {
@@ -343,12 +343,12 @@ void ServSettings::procIn(const QByteArray &binIn, quint8 dType)
                         if (!ok)
                         {
                             errTxt("err: Invalid 32bit unsigned integer. valid range: 1-4294967295.\n");
-                            mainTxt("Enter a new value (leave blank to cancel): ");
+                            promptTxt("Enter a new value (leave blank to cancel): ");
                         }
                         else if (num == 0)
                         {
                             errTxt("err: This value cannot be 0, valid range: 1-4294967295.\n");
-                            mainTxt("Enter a new value (leave blank to cancel): ");
+                            promptTxt("Enter a new value (leave blank to cancel): ");
                         }
                         else
                         {
@@ -364,7 +364,7 @@ void ServSettings::procIn(const QByteArray &binIn, quint8 dType)
 
                             if (select == 2)
                             {
-                                async(ASYNC_MAXSES, PRIV_IPC, wrInt(num, BLKSIZE_HOST_LOAD * 8));
+                                async(ASYNC_MAXSES, wrInt(num, BLKSIZE_HOST_LOAD * 8));
                             }
 
                             returnToStart();
@@ -375,7 +375,7 @@ void ServSettings::procIn(const QByteArray &binIn, quint8 dType)
                         if (!isBool(value))
                         {
                             errTxt("err: Invalid boolean value. must be 0 (false) or 1 (true).\n");
-                            mainTxt("Select an option (leave blank to cancel): ");
+                            promptTxt("Select an option (leave blank to cancel): ");
                         }
                         else
                         {
@@ -400,7 +400,7 @@ void ServSettings::procIn(const QByteArray &binIn, quint8 dType)
                         if (!QFile::exists(expandEnvVariables(value)))
                         {
                             errTxt("err: The given file: '" + value + "' does not exists.\n");
-                            mainTxt("Enter a new path (leave blank to cancel): ");
+                            promptTxt("Enter a new path (leave blank to cancel): ");
                         }
                         else
                         {
@@ -418,17 +418,17 @@ void ServSettings::procIn(const QByteArray &binIn, quint8 dType)
                         if (!value.contains(SUBJECT_SUB, Qt::CaseInsensitive))
                         {
                             errTxt("err: The '" + QString(SUBJECT_SUB) + "' keyword is missing.\n");
-                            mainTxt("Enter a new command line (leave blank to cancel): ");
+                            promptTxt("Enter a new command line (leave blank to cancel): ");
                         }
                         else if (!value.contains(TARGET_EMAIL_SUB, Qt::CaseInsensitive))
                         {
                             errTxt("err: The '" + QString(TARGET_EMAIL_SUB) + "' keyword is missing.\n");
-                            mainTxt("Enter a new command line (leave blank to cancel): ");
+                            promptTxt("Enter a new command line (leave blank to cancel): ");
                         }
                         else if (!value.contains(MSG_SUB, Qt::CaseInsensitive))
                         {
                             errTxt("err: The '" + QString(MSG_SUB) + "' keyword is missing.\n");
-                            mainTxt("Enter a new command line (leave blank to cancel): ");
+                            promptTxt("Enter a new command line (leave blank to cancel): ");
                         }
                         else
                         {
@@ -446,12 +446,12 @@ void ServSettings::procIn(const QByteArray &binIn, quint8 dType)
                         if (!isInt(value))
                         {
                             errTxt("err: '" + value + "' is not a valid integer.\n");
-                            mainTxt("Enter a new value (leave blank to cancel): ");
+                            promptTxt("Enter a new value (leave blank to cancel): ");
                         }
                         else if ((value.toInt() < 1) || (value.toInt() > 256))
                         {
                             errTxt("err: A valid maximum sub-channels value ranges between 1-256.\n");
-                            mainTxt("Enter a new value (leave blank to cancel): ");
+                            promptTxt("Enter a new value (leave blank to cancel): ");
                         }
                         else
                         {
@@ -475,12 +475,12 @@ void ServSettings::procIn(const QByteArray &binIn, quint8 dType)
                         else if (!validUserName(value))
                         {
                             errTxt("err: Invalid user name. it must be 2-24 chars long and contain no spaces.\n");
-                            mainTxt("Enter a new user name (leave blank to cancel): ");
+                            promptTxt("Enter a new user name (leave blank to cancel): ");
                         }
                         else if (!userExists(value, &uId))
                         {
                             errTxt("err: The requested user name does not exists.\n");
-                            mainTxt("Enter a new user name (leave blank to cancel): ");
+                            promptTxt("Enter a new user name (leave blank to cancel): ");
                         }
                         else
                         {

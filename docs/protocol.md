@@ -26,13 +26,34 @@ notes:
 
 ### 1.3 Versioning System ###
 
-The host uses the typical 3 number versioning system: Major.Minor.Patch
+The host uses a 4 number versioning system that indicate rev numbers for the host application itself, the tcp interface and the module interface:
+```
+[Major][Minor][TCP_Rev][Mod_Rev]
+   3  .   0  .   0    .    0
+   
+Major - this indicate any changes to the host application that would cause 
+        clients to need to change behaviour to maintain compatibility.
+        changes to the core command names, type id format changes, etc.
+        will cause the version major to increment.
+        
+Minor - this indicate any changes to the host application that clients will
+        not see and would not need behaviour changes to maintain
+        compatibility. documentation changes, bug fixes, security patches,
+        etc. will cause the version minor to increment.
+        
+TCP_Rev - this indicate any changes to the MRCI protocol that interface the
+          host with the clients via the TCP connection. any changes to the
+          MRCI frames, host/client headers, etc. will cause this rev to
+          increment.
+          
+Mod_Rev - this indicate any changes to the IPC protocol that interface the
+          host with the modules via named pipes. any changes to the IPC 
+          frames, NEW_CMD/CMD_ID type ids, etc. will cause this rev to
+          increment.
+   
+```
 
-* **Major** - this indicates any major changes to the code of the application that renders versions of different majors incompatible with each other.
-* **Minor** - this indicates only minor changes to the code that may require a few conditional blocks to maintain compatibility.
-* **Patch** - this indicates changes that won't require any behaviour changes at all to maintain compatibility.
-
-Any increments to the major resets the minor and patch to 0. Any 3rd party client applications connecting to a MRCI host need to be aware of this versioning but does not need to adopt it as it's own version number.
+Any increments to the Major resets the Minor to 0. Any 3rd party client applications connecting to a MRCI host need to be aware of this versioning but does not need to adopt it as it's own version number.
 
 ### 1.4 Client Header ###
 
@@ -57,13 +78,14 @@ notes:
 ```
 Format:
 
-[reply][major][minor][patch][sesId]
+[reply][major][minor][tcp_rev][mod_rev][sesId]
 
-reply - 1byte   - 8bit little endian unsigned int
-major - 2bytes  - 16bit little endian unsigned int
-minor - 2bytes  - 16bit little endian unsigned int
-patch - 2bytes  - 16bit little endian unsigned int
-sesId - 28bytes - 224bit sha3 hash
+reply   - 1byte   - 8bit little endian unsigned int
+major   - 2bytes  - 16bit little endian unsigned int
+minor   - 2bytes  - 16bit little endian unsigned int
+tcp_rev - 2bytes  - 16bit little endian unsigned int
+mod_rev - 2bytes  - 16bit little endian unsigned int
+sesId   - 28bytes - 224bit sha3 hash
 ```
 
 notes:

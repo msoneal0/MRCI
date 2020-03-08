@@ -90,8 +90,8 @@
 
 enum AsyncCommands : quint16
 {
-    ASYNC_RDY               = 1,   // client   | none
-    ASYNC_SYS_MSG           = 2,   // client   | none
+    ASYNC_RDY               = 1,   // client   | retricted
+    ASYNC_SYS_MSG           = 2,   // client   | retricted
     ASYNC_EXIT              = 3,   // internal | private
     ASYNC_CAST              = 4,   // client   | public
     ASYNC_MAXSES            = 5,   // internal | private
@@ -105,7 +105,7 @@ enum AsyncCommands : quint16
     ASYNC_DISABLE_MOD       = 13,  // internal | public
     ASYNC_END_SESSION       = 14,  // internal | private
     ASYNC_USER_LOGIN        = 15,  // internal | private
-    ASYNC_TO_PEER           = 16,  // client   | public  | retricted
+    ASYNC_TO_PEER           = 16,  // client   | retricted
     ASYNC_LIMITED_CAST      = 17,  // client   | public
     ASYNC_RW_MY_INFO        = 18,  // internal | public
     ASYNC_P2P               = 19,  // client   | public
@@ -124,15 +124,17 @@ enum AsyncCommands : quint16
     ASYNC_SUB_CH_LEVEL_CHG  = 32,  // client   | public
     ASYNC_ADD_RDONLY        = 33,  // client   | public
     ASYNC_RM_RDONLY         = 34,  // client   | public
-    ASYNC_ADD_CMD           = 35,  // client   | none
-    ASYNC_RM_CMD            = 36,  // client   | none
+    ASYNC_ADD_CMD           = 35,  // client   | retricted
+    ASYNC_RM_CMD            = 36,  // client   | retricted
     ASYNC_USER_RENAMED      = 37,  // internal | public
     ASYNC_PING_PEERS        = 38,  // internal | private
     ASYNC_OPEN_SUBCH        = 39,  // internal | private
     ASYNC_CLOSE_SUBCH       = 40,  // internal | private
     ASYNC_KEEP_ALIVE        = 42,  // internal | private
     ASYNC_SET_DIR           = 43,  // internal | private
-    ASYNC_DEBUG_TEXT        = 44   // internal | private
+    ASYNC_DEBUG_TEXT        = 44,  // internal | private
+    ASYNC_HOOK_INPUT        = 45,  // internal | private
+    ASYNC_UNHOOK            = 46   // internal | private
 };
 
 enum Flags : quint32
@@ -153,7 +155,7 @@ enum Flags : quint32
     MORE_INPUT                 = 1 << 13,
     LOOPING                    = 1 << 14,
     SINGLE_STEP_MODE           = 1 << 15,
-    HALT_STATE                 = 1 << 16
+    YIELD_STATE                = 1 << 16
 };
 
 enum FileInfoFlags : quint8
@@ -169,35 +171,36 @@ enum FileInfoFlags : quint8
 
 enum TypeID : quint8
 {
-    GEN_FILE              = 1,
-    TEXT                  = 2,
-    ERR                   = 3,
-    PRIV_TEXT             = 4,
-    IDLE                  = 5,
-    HOST_CERT             = 6,
-    FILE_INFO             = 7,
-    PEER_INFO             = 8,
-    MY_INFO               = 9,
-    PEER_STAT             = 10,
-    P2P_REQUEST           = 11,
-    P2P_CLOSE             = 12,
-    P2P_OPEN              = 13,
-    BYTES                 = 14,
-    SESSION_ID            = 15,
-    NEW_CMD               = 16,
-    CMD_ID                = 17,
-    BIG_TEXT              = 18,
-    TERM_CMD              = 19,
-    HOST_VER              = 20,
-    PRIV_IPC              = 21,
-    PUB_IPC               = 22,
-    PUB_IPC_WITH_FEEDBACK = 23,
-    PING_PEERS            = 24,
-    CH_MEMBER_INFO        = 25,
-    CH_ID                 = 26,
-    KILL_CMD              = 27,
-    HALT_CMD              = 28,
-    RESUME_CMD            = 29
+    GEN_FILE       = 1,
+    TEXT           = 2,
+    ERR            = 3,
+    PRIV_TEXT      = 4,
+    IDLE           = 5,
+    HOST_CERT      = 6,
+    FILE_INFO      = 7,
+    PEER_INFO      = 8,
+    MY_INFO        = 9,
+    PEER_STAT      = 10,
+    P2P_REQUEST    = 11,
+    P2P_CLOSE      = 12,
+    P2P_OPEN       = 13,
+    BYTES          = 14,
+    SESSION_ID     = 15,
+    NEW_CMD        = 16,
+    CMD_ID         = 17,
+    BIG_TEXT       = 18,
+    TERM_CMD       = 19,
+    HOST_VER       = 20,
+    PING_PEERS     = 21,
+    CH_MEMBER_INFO = 22,
+    CH_ID          = 23,
+    KILL_CMD       = 24,
+    YIELD_CMD      = 25,
+    RESUME_CMD     = 26,
+    PROMPT_TEXT    = 27,
+    PROG           = 28,
+    PROG_LAST      = 29,
+    ASYNC_PAYLOAD  = 30
 };
 
 enum RetCode : quint16
@@ -265,7 +268,8 @@ bool        matchedFsObjTypes(const QString &pathA, const QString &pathB);
 bool        matchedVolume(const QString &pathA, const QString &pathB);
 bool        noCaseMatch(const QString &strA, const QString &strB);
 bool        argExists(const QString &key, const QStringList &args);
-bool        matchChs(const char *chsA, const char *chsB);
+bool        matchAnyCh(const char *chsA, const char *chsB);
+bool        fullMatchChs(const char *openChs, const char *comp);
 bool        globalActiveFlag();
 bool        genSubId(quint64 chId, quint8 *newId);
 bool        isChOwner(const QByteArray &uId);

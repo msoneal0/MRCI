@@ -31,8 +31,6 @@ class DownloadFile : public CmdObject
 private:
 
     QFile *file;
-    qint64 len;
-    qint64 dataSent;
     bool   ssMode;
     bool   paramsSet;
 
@@ -58,8 +56,6 @@ private:
 
     QFile::OpenMode mode;
     QFile          *file;
-    qint64          len;
-    qint64          dataReceived;
     qint64          offs;
     bool            ssMode;
     bool            confirm;
@@ -115,7 +111,6 @@ protected:
 
     QFile                         *src;
     QFile                         *dst;
-    bool                           procedAFile;
     bool                           fromQueue;
     bool                           yToAll;
     bool                           nToAll;

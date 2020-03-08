@@ -292,7 +292,7 @@ void VerifyEmail::procIn(const QByteArray &binIn, quint8 dType)
             db.addCondition(COLUMN_USER_ID, uId);
             db.exec();
 
-            async(ASYNC_RW_MY_INFO, PUB_IPC_WITH_FEEDBACK, uId);
+            async(ASYNC_RW_MY_INFO, uId);
 
             flags &= ~MORE_INPUT;
         }

@@ -122,11 +122,11 @@ void TableViewer::askDelete()
 {
     if (condAdded)
     {
-        mainTxt("This will delete rows from the table according to the parameters above. continue (y/n)?: ");
+        promptTxt("This will delete rows from the table according to the parameters above. continue (y/n)?: ");
     }
     else
     {
-        mainTxt("This will delete all rows in the table. continue (y/n)?: ");
+        promptTxt("This will delete all rows in the table. continue (y/n)?: ");
     }
 
     flags |= MORE_INPUT;
@@ -134,7 +134,7 @@ void TableViewer::askDelete()
 
 void TableViewer::askPage()
 {
-    mainTxt("\nnext page (y/n)?: ");
+    promptTxt("\nnext page (y/n)?: ");
 
     flags |= MORE_INPUT;
 }

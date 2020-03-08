@@ -5,35 +5,36 @@ All mrci frames transferred throughout this application have an 8bit numeric val
 ```
 enum TypeID : quint8
 {
-    GEN_FILE              = 1,
-    TEXT                  = 2,
-    ERR                   = 3,
-    PRIV_TEXT             = 4,
-    IDLE                  = 5,
-    HOST_CERT             = 6,
-    FILE_INFO             = 7,
-    PEER_INFO             = 8,
-    MY_INFO               = 9,
-    PEER_STAT             = 10,
-    P2P_REQUEST           = 11,
-    P2P_CLOSE             = 12,
-    P2P_OPEN              = 13,
-    BYTES                 = 14,
-    SESSION_ID            = 15,
-    NEW_CMD               = 16,
-    CMD_ID                = 17,
-    BIG_TEXT              = 18,
-    TERM_CMD              = 19,
-    HOST_VER              = 20,
-    PRIV_IPC              = 21,
-    PUB_IPC               = 22,
-    PUB_IPC_WITH_FEEDBACK = 23,
-    PING_PEERS            = 24,
-    CH_MEMBER_INFO        = 25,
-    CH_ID                 = 26,
-    KILL_CMD              = 27,
-    HALT_CMD              = 28,
-    RESUME_CMD            = 29
+    GEN_FILE       = 1,
+    TEXT           = 2,
+    ERR            = 3,
+    PRIV_TEXT      = 4,
+    IDLE           = 5,
+    HOST_CERT      = 6,
+    FILE_INFO      = 7,
+    PEER_INFO      = 8,
+    MY_INFO        = 9,
+    PEER_STAT      = 10,
+    P2P_REQUEST    = 11,
+    P2P_CLOSE      = 12,
+    P2P_OPEN       = 13,
+    BYTES          = 14,
+    SESSION_ID     = 15,
+    NEW_CMD        = 16,
+    CMD_ID         = 17,
+    BIG_TEXT       = 18,
+    TERM_CMD       = 19,
+    HOST_VER       = 20,
+    PING_PEERS     = 21,
+    CH_MEMBER_INFO = 22,
+    CH_ID          = 23,
+    KILL_CMD       = 24,
+    YIELD_CMD      = 25,
+    RESUME_CMD     = 26,
+    PROMPT_TEXT    = 27,
+    PROG           = 28,
+    PROG_LAST      = 29,
+    ASYNC_PAYLOAD  = 30
 };
 ```
 
@@ -71,13 +72,16 @@ arguments:
 This type id is similar to TEXT except it indicates that this is an error message that can be displayed directly to the user if needed.
 
 ```PRIV_TEXT```
-This id can be treated exactly like TEXT except this should tell the client to hide or do not echo the next TEXT data that the host is expecting, like a password or other sensitive text data.
+This id can be treated exactly like TEXT except this tells the client that the command is prompting for private information from the user so it sould hide or do not echo the next TEXT data that the command is expecting, like a password or other sensitive data.
+
+```PROMPT_TEXT```
+This is similar to PRIV_TEXT expect it is not asking for private information. It is simply prompting for non-sensitive information from the user.
 
 ```BIG_TEXT```
 Also formatted exactly like TEXT but this indicates to the client that this is a large body of text that is recommended to be word wrapped when displaying to the user. It can contain line breaks so clients are also recommended to honor those line breaks.
 
 ```IDLE```
-All commands started during the session returns this type id when it has finished it's task. by default, it carries a 16bit unsigned integer indicating the result of the task that the command was running.
+All commands started during the session returns this type id when it has finished it's task. It carries a 16bit unsigned integer indicating the result of the task that the command was running.
 
 ```
 enum RetCode : quint16
@@ -94,47 +98,45 @@ enum RetCode : quint16
 notes:
 1. the custom return code can be additional data added to the end of the 16bit
    integer that can carry additional data about the result of the task. it can
-   be any format that the module itself decides it should be. nothing is
+   be any format that the module itself decides it can should be. nothing is
    stopping modules from defining return codes beyond the value of 7 but it is
    advised not to because this enum might be expanded in the future.
 ``` 
 
-```KILL_CMD```
-This doesn't carry any actual data, instead can be sent by the client or session object to tell the command-branch id sent in the frame to terminate the module process. Modules that receive this need to send a IDLE frame if a command is still running and then terminate itself. The module will have 3 seconds to do this before it is force killed by the session.
+```TERM_CMD```
+This type id doesn't carry any actual data. It is used to tell the host to stop/terminate the command id and branch id that was used to send it. It does not actually terminate the module's process within the host, it only simply tells it to stop what it is currently doing. This will also terminate any commands in a prompt/more input state.
 
-```HALT_CMD```
-This doesn't carry any actual data, instead can be sent by the client or session object to tell the command-branch id sent in the frame to pause/halt the current task that the command is currently running. All modules are not obligated to support this feature but highly recommended.
+```KILL_CMD```
+This works similarly to TERM_CMD except it will also terminate the module process. The module process will have 3 seconds to shutdown gracefully before it is force killed by the host session.
+
+```YIELD_CMD```
+This type id doesn't carry any actual data, instead can be used to tell the host to pause/yield the command id and branch id that was used to send it. All modules are not obligated to support this feature but it is highly recommended to do so.
 
 ```RESUME_CMD```
-This is the other half of HALT_CMD that tells the module to resume the command task it was running. 
+This is the other half of YIELD_CMD that tells the host to resume the command that was running. 
 
 ```HOST_CERT```
 Just as the name implies, this data type is used by the host to send the host SSL certificate while setting up an SSL connection.
 
 ```HOST_VER```
-This data structure carries 3 numeric values that represent the host version as described in section [1.3](protocol.md).
+This data structure carries 4 numeric values that represent the host version as described in section [1.3](protocol.md).
 
 ```
   format:
   1. bytes[0-1] - version major (16bit little endian uint)
   2. bytes[2-3] - version minor (16bit little endian uint)
-  3. bytes[4-5] - version patch (16bit little endian uint)
+  3. bytes[4-5] - tcp interface rev (16bit little endian uint)
+  4. bytes[6-7] - module interface rev (16bit little endian uint)
 ```
 
-```PRIV_IPC```
-This is a data structure used to by modules to run async commands on the local session object only.
+```ASYNC_PAYLOAD```
+This is a data structure that can be used by modules to run async commands. Each async command have a specific 16bit command id followed by a payload that can contain any data of any format depending on the async command id. A full discribtion of the async commands and the data they carry can found in section [5.1](async.md) and [5.2](async.md).
 
 ```
   format:
   1. bytes[0-1] - async command id (16bit little endian uint)
   2. bytes[2-n] - payload (data to be processed by async command)
 ```
-
-```PUB_IPC```
-This is formatted exactly like PRIV_IPC except it is used by modules to run async commands on all peer session objects in the host while avoiding a run on the local session object.
-
-```PUB_IPC_WITH_FEEDBACK```
-This has the same functionality as PUB_IPC except it is also feedback into the local session object.
 
 ```FILE_INFO```
 This is a data structure that carries information about a file system object (file,dir,link).
@@ -192,7 +194,7 @@ This carry some user account and session information about a peer client connect
 ```
 
 ```PING_PEERS```
-This is formatted extactly as PEER_INFO except it can be used the ASYNC_LIMITED_CAST [async](async.md) command to tell all peer sessions that receive it to send a PEER_INFO frame about you to their own clients and return PEER_INFO frames about themselves to you.
+This is formatted extactly as PEER_INFO except it is used by the ASYNC_LIMITED_CAST [async](async.md) command to tell all peer sessions that receive it to send a PEER_INFO frame about the local session to their own clients and return PEER_INFO frames about themselves to the local session.
 
 ```MY_INFO```
 This contains all of the information found in ```PEER_INFO``` for the local session but also includes the following:
@@ -240,7 +242,7 @@ This type id carries a 64bit unsighed LE int indicating the channel id.
 format: ```8bytes - 64bit LE unsigned int (channel id)```
 
 ```SESSION_ID```
-This is a fixed length 28byte(224bit) sha3 hash of a client's session id connected to the host. This is unique to just the client's tcp connection with the host. This can change upon re-connection.
+This is a fixed length 28byte(224bit) sha3 hash of a client's session id connected to the host. This is unique to just the client's tcp connection with the host. This changes upon re-connection.
 
 format: ```28bytes - session id (224bit sha3 hash)```
 
@@ -306,6 +308,14 @@ This contains public information about a channel member.
      become a full member of the channel at the level indicated by this
      data type.
 ```
+
+```PROG```
+This is a 8bit integer value from 0-100 indicating the percentage progress of the command. All long running module commands are encouraged to use this to update the client on command progress; sending it in a 1-5 second pulse rate.
+
+format: ```1byte - 8bit integer (0-100)```
+
+```PROG_LAST```
+This is formatted and treated exactly like PROG except it indicates to the client that this is the last progress update for the current string of progress updates. So at the client side, progress strings/pulses should appear with a single or multiple PROG frame(s) and then end with PROG_LAST. Receiving an IDLE should also end the progress string if seen before PROG_LAST.
 
 ### 3.3 GEN_FILE Example ###
 

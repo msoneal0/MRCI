@@ -105,7 +105,7 @@ void Auth::confirmAuth()
 
     flags &= ~MORE_INPUT;
 
-    async(ASYNC_USER_LOGIN, PRIV_IPC, uId);
+    async(ASYNC_USER_LOGIN, uId);
     mainTxt("Access granted.\n");
 }
 
@@ -150,7 +150,7 @@ void Auth::procIn(const QByteArray &binIn, quint8 dType)
 
                         if (newUserName)
                         {
-                            mainTxt("Enter a new user name: ");
+                            promptTxt("Enter a new user name (leave blank to cancel): ");
                         }
                         else
                         {
@@ -170,27 +170,27 @@ void Auth::procIn(const QByteArray &binIn, quint8 dType)
                     else if (noCaseMatch(DEFAULT_ROOT_USER, text))
                     {
                         errTxt("err: '" + QString(DEFAULT_ROOT_USER) + "' is a reserved keyword. invalid for use as a user name.\n");
-                        mainTxt("Enter a new user name (leave blank to cancel): ");
+                        promptTxt("Enter a new user name (leave blank to cancel): ");
                     }
                     else if (validEmailAddr(text))
                     {
                         errTxt("err: Invaild use rname. it looks like an email address.\n");
-                        mainTxt("Enter a new user name (leave blank to cancel): ");
+                        promptTxt("Enter a new user name (leave blank to cancel): ");
                     }
                     else if (!validUserName(text))
                     {
                         errTxt("err: Invalid user name. it must be 2-24 chars long and contain no spaces.\n\n");
-                        mainTxt("Enter a new user name (leave blank to cancel): ");
+                        promptTxt("Enter a new user name (leave blank to cancel): ");
                     }
                     else if (noCaseMatch(text, uName))
                     {
                         errTxt("err: You cannot re-apply your old user name.\n\n");
-                        mainTxt("Enter a new user name (leave blank to cancel): ");
+                        promptTxt("Enter a new user name (leave blank to cancel): ");
                     }
                     else if (userExists(text))
                     {
                         errTxt("err: The requested user name already exists.\n\n");
-                        mainTxt("Enter a new user name (leave blank to cancel): ");
+                        promptTxt("Enter a new user name (leave blank to cancel): ");
                     }
                     else
                     {
@@ -202,7 +202,7 @@ void Auth::procIn(const QByteArray &binIn, quint8 dType)
                         db.addCondition(COLUMN_USER_ID, uId);
                         db.exec();
 
-                        async(ASYNC_USER_RENAMED, PUB_IPC, uId + fixedToTEXT(text, BLKSIZE_USER_NAME));
+                        async(ASYNC_USER_RENAMED, uId + fixedToTEXT(text, BLKSIZE_USER_NAME));
 
                         uName       = text;
                         newUserName = false;
@@ -236,7 +236,7 @@ void Auth::procIn(const QByteArray &binIn, quint8 dType)
                 }
                 else if (newUserName)
                 {
-                    mainTxt("Enter a new user name (leave blank to cancel): ");
+                    promptTxt("Enter a new user name (leave blank to cancel): ");
                 }
                 else
                 {

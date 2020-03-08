@@ -107,12 +107,14 @@ private:
     quint32        cmdId;
     QString        cmdName;
     bool           cmdIdle;
+    quint32       *hook;
     QSharedMemory *sesMem;
     char          *sessionId;
     char          *openWritableSubChs;
 
     void onReady();
     void onFailToStart();
+    void asyncDirector(quint16 id, const QByteArray &payload);
     void onFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void onDataFromProc(quint8 typeId, const QByteArray &data);
     bool validAsync(quint16 async, const QByteArray &data, QTextStream &errMsg);
@@ -132,7 +134,7 @@ public:
     explicit CmdProcess(quint32 id, const QString &cmd, const QString &modApp, const QString &memSes, const QString &memHos, const QString &pipe, QObject *parent = nullptr);
 
     void dataFromSession(quint32 id, const QByteArray &data, quint8 dType);
-    void setSessionParams(QSharedMemory *mem, char *sesId, char *wrableSubChs);
+    void setSessionParams(QSharedMemory *mem, char *sesId, char *wrableSubChs, quint32 *hookCmd);
     bool startCmdProc();
 
 signals:

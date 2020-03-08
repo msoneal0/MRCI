@@ -78,13 +78,12 @@ void Session::castCatch(const QByteArray &data)
 {
     // format: [54bytes(chIds)][1byte(typeId)][rest-of-bytes(payload)]
 
-    if (matchChs(openSubChs, data.data()))
+    if (matchAnyCh(openSubChs, data.data()))
     {
-        int     payloadOffs = (MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL) + 1;
-        quint8  typeId      = static_cast<quint8>(data[payloadOffs - 1]);
-        quint32 len         = static_cast<quint32>(data.size() - payloadOffs);
-
-        const char *payload = data.data() + payloadOffs;
+        auto payloadOffs = (MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL) + 1;
+        auto typeId      = static_cast<quint8>(data[payloadOffs - 1]);
+        auto len         = static_cast<quint32>(data.size() - payloadOffs);
+        auto *payload    = data.data() + payloadOffs;
 
         asyncToClient(ASYNC_CAST, rdFromBlock(payload, len), typeId);
     }
@@ -96,11 +95,10 @@ void Session::directDataFromPeer(const QByteArray &data)
 
     if (memcmp(sessionId, data.data(), BLKSIZE_SESSION_ID) == 0)
     {
-        int     payloadOffs = BLKSIZE_SESSION_ID + 1;
-        quint8  typeId      = static_cast<quint8>(data[payloadOffs - 1]);
-        quint32 len         = static_cast<quint32>(data.size() - payloadOffs);
-
-        const char *payload = data.data() + payloadOffs;
+        auto  payloadOffs = BLKSIZE_SESSION_ID + 1;
+        auto  typeId      = static_cast<quint8>(data[payloadOffs - 1]);
+        auto  len         = static_cast<quint32>(data.size() - payloadOffs);
+        auto *payload     = data.data() + payloadOffs;
 
         asyncToClient(ASYNC_TO_PEER, rdFromBlock(payload, len), typeId);
     }
@@ -112,13 +110,11 @@ void Session::p2p(const QByteArray &data)
 
     if (memcmp(sessionId, data.data(), BLKSIZE_SESSION_ID) == 0)
     {
-        int payloadOffs = (BLKSIZE_SESSION_ID * 2) + 1;
-
-        const char *src     = data.data() + BLKSIZE_SESSION_ID;
-        const char *payload = data.data() + payloadOffs;
-
-        quint32 len    = static_cast<quint32>(data.size() - payloadOffs);
-        quint8  typeId = static_cast<quint8>(data[payloadOffs - 1]);
+        auto  payloadOffs = (BLKSIZE_SESSION_ID * 2) + 1;
+        auto *src         = data.data() + BLKSIZE_SESSION_ID;
+        auto *payload     = data.data() + payloadOffs;
+        auto  len         = static_cast<quint32>(data.size() - payloadOffs);
+        auto  typeId      = static_cast<quint8>(data[payloadOffs - 1]);
 
         if (typeId == P2P_REQUEST)
         {
@@ -173,13 +169,12 @@ void Session::limitedCastCatch(const QByteArray &data)
 {
     // format: [54bytes(chIds)][1byte(typeId)][rest-of-bytes(payload)]
 
-    if (rd8BitFromBlock(activeUpdate) && matchChs(openSubChs, data.data()))
+    if (rd8BitFromBlock(activeUpdate) && matchAnyCh(openSubChs, data.data()))
     {
-        int     payloadOffs = (MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL) + 1;
-        quint32 len         = static_cast<quint32>(data.size() - payloadOffs);
-        quint8  typeId      = static_cast<quint8>(data[payloadOffs - 1]);
-
-        const char *payload = data.data() + payloadOffs;
+        auto  payloadOffs = (MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL) + 1;
+        auto  len         = static_cast<quint32>(data.size() - payloadOffs);
+        auto  typeId      = static_cast<quint8>(data[payloadOffs - 1]);
+        auto *payload     = data.data() + payloadOffs;
 
         if (typeId == PING_PEERS)
         {
@@ -187,9 +182,9 @@ void Session::limitedCastCatch(const QByteArray &data)
             // async command to also send PEER_INFO of this session to the session
             // that requested the ping using ASYNC_TO_PEER.
 
-            QByteArray peerId = rdFromBlock(payload, BLKSIZE_SESSION_ID);
-            QByteArray typeId = wrInt(PEER_INFO, 8);
-            QByteArray info   = createPeerInfoFrame();
+            auto peerId = rdFromBlock(payload, BLKSIZE_SESSION_ID);
+            auto typeId = wrInt(PEER_INFO, 8);
+            auto info   = createPeerInfoFrame();
 
             emit asyncToPeers(ASYNC_TO_PEER, peerId + typeId + info);
 
@@ -330,7 +325,7 @@ void Session::subChannelUpdated(quint16 cmdId, const QByteArray &data)
 
 void Session::addModule(const QByteArray &data)
 {
-    QString modApp = fromTEXT(data);
+    auto modApp = fromTEXT(data);
 
     if (!modCmdNames.contains(modApp))
     {
@@ -340,7 +335,7 @@ void Session::addModule(const QByteArray &data)
 
 void Session::rmModule(const QByteArray &data)
 {
-    QString modApp = fromTEXT(data);
+    auto modApp = fromTEXT(data);
 
     if (modCmdNames.contains(modApp) && (modApp != QCoreApplication::applicationFilePath()))
     {
@@ -362,7 +357,7 @@ void Session::rmModule(const QByteArray &data)
 
 void Session::closeSubChannel(const QByteArray &data)
 {
-    QByteArray oldSubChs = QByteArray(openSubChs, MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL);
+    auto oldSubChs = QByteArray(openSubChs, MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL);
 
     if (rmBlockFromBlockset(data.data(), openSubChs, MAX_OPEN_SUB_CHANNELS, BLKSIZE_SUB_CHANNEL))
     {

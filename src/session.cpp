@@ -30,6 +30,7 @@ Session::Session(const QString &hostKey, QSslSocket *tcp, QObject *parent) : Mem
     currentDir     = QDir::currentPath();
     hostMemKey     = hostKey;
     tcpSocket      = tcp;
+    hookCmdId32    = 0;
     tcpFrameCmdId  = 0;
     tcpPayloadSize = 0;
     tcpFrameType   = 0;
@@ -123,6 +124,11 @@ void Session::cmdProcFinished(quint32 cmdId)
     cmdProcesses.remove(cmdId);
     frameQueue.remove(cmdId);
 
+    if (hookCmdId32 == cmdId)
+    {
+        hookCmdId32 = 0;
+    }
+
     if (flags & END_SESSION_EMPTY_PROC)
     {
         endSession();
@@ -184,7 +190,7 @@ void Session::startCmdProc(quint32 cmdId)
     auto *proc = new CmdProcess(cmdId, cmdRealNames[cmdId16], modApp, sesMemKey, hostMemKey, pipe, this);
 
     proc->setWorkingDirectory(currentDir);
-    proc->setSessionParams(sharedMem, sessionId, openWritableSubChs);
+    proc->setSessionParams(sharedMem, sessionId, openWritableSubChs, &hookCmdId32);
 
     connect(proc, &CmdProcess::cmdProcFinished, this, &Session::cmdProcFinished);
     connect(proc, &CmdProcess::cmdProcReady, this, &Session::cmdProcStarted);
@@ -287,8 +293,15 @@ void Session::dataFromClient()
         if (flags & FRAME_RDY)
         {
             if (tcpSocket->bytesAvailable() >= tcpPayloadSize)
-            {   
-                dataToCmd(tcpFrameCmdId, tcpSocket->read(tcpPayloadSize), tcpFrameType);
+            {
+                if (hookCmdId32 != 0)
+                {
+                    dataToCmd(hookCmdId32, tcpSocket->read(tcpPayloadSize), tcpFrameType);
+                }
+                else
+                {
+                    dataToCmd(tcpFrameCmdId, tcpSocket->read(tcpPayloadSize), tcpFrameType);
+                }
 
                 flags ^= FRAME_RDY;
 
@@ -323,6 +336,7 @@ void Session::dataFromClient()
                 servHeader.append(wrInt(ver[0].toULongLong(), 16));
                 servHeader.append(wrInt(ver[1].toULongLong(), 16));
                 servHeader.append(wrInt(ver[2].toULongLong(), 16));
+                servHeader.append(wrInt(ver[3].toULongLong(), 16));
                 servHeader.append(sessionId, BLKSIZE_SESSION_ID);
 
                 addIpAction("Session Active");

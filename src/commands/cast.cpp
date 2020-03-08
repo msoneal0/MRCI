@@ -73,7 +73,7 @@ int lowestAcessLevel(quint64 chId, quint8 subId)
 
 void Cast::procIn(const QByteArray &binIn, quint8 dType)
 {
-    async(ASYNC_CAST, dType, binIn);
+    async(ASYNC_CAST, rdFromBlock(openWritableSubChs, BLKSIZE_SUB_CHANNEL * MAX_OPEN_SUB_CHANNELS) + wrInt(dType, 8) + binIn);
 }
 
 void OpenSubChannel::procIn(const QByteArray &binIn, quint8 dType)
@@ -113,7 +113,7 @@ void OpenSubChannel::procIn(const QByteArray &binIn, quint8 dType)
         {
             retCode = NO_ERRORS;
 
-            async(ASYNC_OPEN_SUBCH, PRIV_IPC, wrInt(chId, 64) + wrInt(subId, 8));
+            async(ASYNC_OPEN_SUBCH, wrInt(chId, 64) + wrInt(subId, 8));
         }
     }
 }
@@ -151,7 +151,7 @@ void CloseSubChannel::procIn(const QByteArray &binIn, quint8 dType)
         {
             retCode = NO_ERRORS;
 
-            async(ASYNC_CLOSE_SUBCH, PRIV_IPC, wrInt(chId, 64) + wrInt(subId, 8));
+            async(ASYNC_CLOSE_SUBCH, wrInt(chId, 64) + wrInt(subId, 8));
         }
     }
 }
@@ -250,7 +250,7 @@ void PingPeers::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
-            async(ASYNC_PING_PEERS, PUB_IPC);
+            async(ASYNC_PING_PEERS);
         }
     }
 }
@@ -318,7 +318,7 @@ void AddRDOnlyFlag::procIn(const QByteArray &binIn, quint8 dType)
             db.addColumn(COLUMN_ACCESS_LEVEL, level.toInt());
             db.exec();
 
-            async(ASYNC_ADD_RDONLY, PUB_IPC_WITH_FEEDBACK, frame);
+            async(ASYNC_ADD_RDONLY, frame);
         }
     }
 }
@@ -386,7 +386,7 @@ void RemoveRDOnlyFlag::procIn(const QByteArray &binIn, quint8 dType)
             db.addCondition(COLUMN_ACCESS_LEVEL, level.toInt());
             db.exec();
 
-            async(ASYNC_RM_RDONLY, PUB_IPC_WITH_FEEDBACK, frame);
+            async(ASYNC_RM_RDONLY, frame);
         }
     }
 }

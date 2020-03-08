@@ -40,6 +40,7 @@ private:
     QHash<quint16, QString>            cmdAppById;
     QList<quint16>                     cmdIds;
     quint32                            flags;
+    quint32                            hookCmdId32;
     quint32                            tcpPayloadSize;
     quint32                            tcpFrameCmdId;
     quint8                             tcpFrameType;

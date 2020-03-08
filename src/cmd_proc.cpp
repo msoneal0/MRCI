@@ -128,13 +128,13 @@ void ModProcess::onDataFromProc(quint8 typeId, const QByteArray &data)
         {
             // a valid NEW_CMD must have a minimum of 259 bytes.
 
-            QString cmdName = fromTEXT(data.mid(3, 128)).trimmed().toLower();
+            auto cmdName = fromTEXT(data.mid(3, 128)).trimmed().toLower();
 
              if (isCmdLoaded(cmdName))
              {
                  if (!allowCmdLoad(cmdName))
                  {
-                     quint16 cmdId = cmdRealNames->key(cmdName);
+                     auto cmdId = cmdRealNames->key(cmdName);
 
                      cmdIds->removeOne(cmdId);
                      cmdRealNames->remove(cmdId);
@@ -152,9 +152,9 @@ void ModProcess::onDataFromProc(quint8 typeId, const QByteArray &data)
              }
              else if (allowCmdLoad(cmdName))
              {
-                 quint16    cmdId   = genCmdId();
-                 QByteArray cmdIdBa = wrInt(cmdId, 16);
-                 QString    unique  = makeCmdUnique(cmdName);
+                 auto cmdId   = genCmdId();
+                 auto cmdIdBa = wrInt(cmdId, 16);
+                 auto unique  = makeCmdUnique(cmdName);
 
                  cmdIds->append(cmdId);
                  cmdRealNames->insert(cmdId, cmdName);
@@ -167,12 +167,12 @@ void ModProcess::onDataFromProc(quint8 typeId, const QByteArray &data)
                  }
                  else
                  {
-                     QStringList list = QStringList() << cmdName;
+                     auto list = QStringList() << cmdName;
 
                      modCmdNames->insert(program(), list);
                  }
 
-                 QByteArray frame = cmdIdBa + data.mid(2, 1) + fixedToTEXT(unique, 128) + data.mid(131);
+                 auto frame = cmdIdBa + data.mid(2, 1) + fixedToTEXT(unique, 128) + data.mid(131);
 
                  emit dataToClient(toCmdId32(ASYNC_ADD_CMD, 0), frame, NEW_CMD);
              }
@@ -397,8 +397,9 @@ CmdProcess::CmdProcess(quint32 id, const QString &cmd, const QString &modApp, co
     cmdIdle = false;
 }
 
-void CmdProcess::setSessionParams(QSharedMemory *mem, char *sesId, char *wrableSubChs)
+void CmdProcess::setSessionParams(QSharedMemory *mem, char *sesId, char *wrableSubChs, quint32 *hookCmd)
 {
+    hook               = hookCmd;
     sesMem             = mem;
     sessionId          = sesId;
     openWritableSubChs = wrableSubChs;
@@ -466,7 +467,7 @@ void CmdProcess::dataFromSession(quint32 id, const QByteArray &data, quint8 dTyp
 
 bool CmdProcess::validAsync(quint16 async, const QByteArray &data, QTextStream &errMsg)
 {
-    bool ret = true;
+    auto ret = true;
 
     if ((async == ASYNC_USER_DELETED) || (async == ASYNC_RW_MY_INFO) || (async == ASYNC_USER_LOGIN))
     {
@@ -505,35 +506,31 @@ bool CmdProcess::validAsync(quint16 async, const QByteArray &data, QTextStream &
     }
     else if ((async == ASYNC_CAST) || (async == ASYNC_LIMITED_CAST))
     {
-        int payloadOffs = (MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL) + 1;
+        auto payloadOffs = (MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL) + 1;
 
         sesMem->lock();
 
         if (data.size() < payloadOffs)
         {
-            ret = false; errMsg << "cast header is not at least " << payloadOffs << " bytes long.";
+            ret = false; errMsg << "the cast header is not at least " << payloadOffs << " bytes long.";
         }
-        else if (memcmp(data.data(), openWritableSubChs, static_cast<quint32>(payloadOffs - 1)) != 0)
+        else if (!fullMatchChs(openWritableSubChs, data.data()))
         {
-            ret = false; errMsg << "the open sub-channels (writable) does not match the actual open sub-channels.";
+            ret = false; errMsg << "the sub-channels header contain a sub-channel that is not actually open for writing.";
         }
         else if (rd8BitFromBlock(data.data() + (payloadOffs - 1)) == PING_PEERS)
         {
-            // casting PING_PEERS to active update sessions are blocked.
-            // command processes should use ASYNC_PING_PEERS instead.
+            // casting PING_PEERS directly is blocked. command processes should use
+            // ASYNC_PING_PEERS instead.
 
             ret = false; errMsg << "attempted to cast PING_PEERS which is forbidden for module commands.";
         }
 
         sesMem->unlock();
     }
-    else if (async == ASYNC_TO_PEER)
-    {
-        ret = false; errMsg << "ASYNC_TO_PEER is forbidden for module commands.";
-    }
     else if (async == ASYNC_P2P)
     {
-        int payloadOffs = ((BLKSIZE_SESSION_ID * 2) + 1);
+        auto payloadOffs = ((BLKSIZE_SESSION_ID * 2) + 1);
 
         if (data.size() < payloadOffs)
         {
@@ -578,62 +575,90 @@ bool CmdProcess::validAsync(quint16 async, const QByteArray &data, QTextStream &
             ret = false; errMsg << "a 72bit sub-channel id header is not present.";
         }
     }
-    else if ((cmdId == ASYNC_NEW_CH_MEMBER)   || (cmdId == ASYNC_INVITED_TO_CH) ||
-             (cmdId == ASYNC_INVITE_ACCEPTED) || (cmdId == ASYNC_RM_CH_MEMBER) ||
-             (cmdId == ASYNC_MEM_LEVEL_CHANGED))
+    else if ((async == ASYNC_NEW_CH_MEMBER)   || (async == ASYNC_INVITED_TO_CH) ||
+             (async == ASYNC_INVITE_ACCEPTED) || (async == ASYNC_RM_CH_MEMBER) ||
+             (async == ASYNC_MEM_LEVEL_CHANGED))
     {
         if (data.size() < (BLKSIZE_USER_ID + BLKSIZE_CHANNEL_ID))
         {
             ret = false; errMsg << "the channel member info header is not at least " << (BLKSIZE_USER_ID + BLKSIZE_CHANNEL_ID) << "bytes long.";
         }
     }
-    else if ((cmdId == ASYNC_RENAME_CH) || (cmdId == ASYNC_DEL_CH))
+    else if ((async == ASYNC_RENAME_CH) || (async == ASYNC_DEL_CH))
     {
         if (data.size() < BLKSIZE_CHANNEL_ID)
         {
             ret = false; errMsg << "a 64bit channel id header was not found.";
         }
     }
+    else if ((async == ASYNC_RDY)     || (async == ASYNC_SYS_MSG) || (async == ASYNC_TO_PEER) ||
+             (async == ASYNC_ADD_CMD) || (async == ASYNC_RM_CMD))
+    {
+        ret = false; errMsg << "all modules are not allowed to send this async command directly.";
+    }
+    else if ((async < 1) || (async > 46))
+    {
+        ret = false; errMsg << "undefined async command id.";
+    }
 
     return ret;
 }
 
+void CmdProcess::asyncDirector(quint16 id, const QByteArray &payload)
+{
+    if ((id == ASYNC_EXIT)        || (id == ASYNC_MAXSES)     || (id == ASYNC_LOGOUT)     || (id == ASYNC_RESTART)     ||
+        (id == ASYNC_END_SESSION) || (id == ASYNC_USER_LOGIN) || (id == ASYNC_OPEN_SUBCH) || (id == ASYNC_CLOSE_SUBCH) ||
+        (id == ASYNC_KEEP_ALIVE)  || (id == ASYNC_SET_DIR)    || (id == ASYNC_DEBUG_TEXT))
+    {
+        emit privIPC(id, payload);
+    }
+    else if ((id == ASYNC_CAST)       || (id == ASYNC_LIMITED_CAST) || (id == ASYNC_P2P) || (id == ASYNC_CLOSE_P2P) ||
+             (id == ASYNC_PING_PEERS))
+    {
+        emit pubIPC(id, payload);
+    }
+    else if ((id == ASYNC_USER_DELETED)    || (id == ASYNC_DISP_RENAMED)      || (id == ASYNC_USER_RANK_CHANGED) || (id == ASYNC_CMD_RANKS_CHANGED) ||
+             (id == ASYNC_ENABLE_MOD)      || (id == ASYNC_DISABLE_MOD)       || (id == ASYNC_RW_MY_INFO)        || (id == ASYNC_NEW_CH_MEMBER)     ||
+             (id == ASYNC_DEL_CH)          || (id == ASYNC_RENAME_CH)         || (id == ASYNC_CH_ACT_FLAG)       || (id == ASYNC_NEW_SUB_CH)        ||
+             (id == ASYNC_RM_SUB_CH)       || (id == ASYNC_RENAME_SUB_CH)     || (id == ASYNC_INVITED_TO_CH)     || (id == ASYNC_RM_CH_MEMBER)      ||
+             (id == ASYNC_INVITE_ACCEPTED) || (id == ASYNC_MEM_LEVEL_CHANGED) || (id == ASYNC_SUB_CH_LEVEL_CHG)  || (id == ASYNC_ADD_RDONLY)        ||
+             (id == ASYNC_RM_RDONLY)       || (id == ASYNC_USER_RENAMED))
+    {
+        emit pubIPCWithFeedBack(id, payload);
+    }
+}
+
 void CmdProcess::onDataFromProc(quint8 typeId, const QByteArray &data)
 {
-    if ((typeId == PRIV_IPC) || (typeId == PUB_IPC) || (typeId == PUB_IPC_WITH_FEEDBACK))
+    if (typeId == ASYNC_PAYLOAD)
     {
         if (data.size() >= 2)
         {
-            quint16 async = rd16BitFromBlock(data.data());
+            auto async = rd16BitFromBlock(data.data());
 
             // ASYNC_KEEP_ALIVE is blocked but not considered an error. it has already done
             // it's job by getting transffered so it doesn't need to go any further.
 
             if (async != ASYNC_KEEP_ALIVE)
             {
-                QByteArray payload = rdFromBlock(data.data() + 2, static_cast<quint32>(data.size() - 2));
+                auto payload = rdFromBlock(data.data() + 2, static_cast<quint32>(data.size() - 2));
 
                 QString     errMsg;
                 QTextStream errTxt(&errMsg);
 
-                if (async == ASYNC_DEBUG_TEXT)
-                {
-                    typeId = PRIV_IPC;
-                }
-
                 if (validAsync(async, payload, errTxt))
                 {
-                    if (typeId == PRIV_IPC)
+                    if (async == ASYNC_HOOK_INPUT)
                     {
-                        emit privIPC(async, payload);
+                        *hook = cmdId;
                     }
-                    else if (typeId == PUB_IPC)
+                    else if (async == ASYNC_UNHOOK)
                     {
-                        emit pubIPC(async, payload);
+                        *hook = 0;
                     }
                     else
                     {
-                        emit pubIPCWithFeedBack(async, payload);
+                        asyncDirector(async, payload);
                     }
                 }
                 else
@@ -648,6 +673,11 @@ void CmdProcess::onDataFromProc(quint8 typeId, const QByteArray &data)
         if (typeId == IDLE)
         {
             cmdIdle = true;
+
+            if (*hook == cmdId)
+            {
+                *hook = 0;
+            }
 
             if (data.isEmpty())
             {

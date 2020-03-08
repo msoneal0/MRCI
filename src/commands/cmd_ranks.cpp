@@ -96,7 +96,7 @@ void AssignCmdRank::procIn(const QByteArray &binIn, quint8 dType)
             db.addColumn(COLUMN_HOST_RANK, rank.toUInt());
             db.exec();
 
-            async(ASYNC_CMD_RANKS_CHANGED, PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_CMD_RANKS_CHANGED);
         }
     }
 }
@@ -142,7 +142,7 @@ void RemoveCmdRank::procIn(const QByteArray &binIn, quint8 dType)
             db.addCondition(COLUMN_MOD_MAIN, mod);
             db.exec();
 
-            async(ASYNC_CMD_RANKS_CHANGED, PUB_IPC_WITH_FEEDBACK);
+            async(ASYNC_CMD_RANKS_CHANGED);
         }
     }
 }

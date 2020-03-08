@@ -9,33 +9,29 @@ Here is a describtion of what the keywords in the list mean:
 client    - this means the async command id will be used to forward 
             data of any type to client if needed.
            
-internal  - this means the async command will be responded by the 
-            session object but the data will not be forwarded to the 
-            client or converted to an entirely different async 
-            command before sending to the client.
+internal  - this means the async command used by internal host
+            objects only so it never gets forwarded to a client at
+            any time.
            
-public    - this means the session objects will respond to this async 
-            command if sent with PUB_IPC or PUB_IPC_WITH_FEEDBACK
-            from the module.
+public    - this means the aysnc command will be broadcasted to all
+            session objects currently connected to the host. which
+            sessions will resond to it depends on the data being
+            sent. some async's broadcasted this way will also feed
+            back to source session depending on the data.
            
-private   - this means only the session object that has a direct IPC
-            connection with the module that sends the async command
-            via PRIV_IPC will respond to it.
+private   - this means the async command will only be sent to the
+            local session.
            
-none      - this means none of the session objects will respond to
-            this async command no matter which of the IPC data types
-            are used. it is resevered for just the session object to 
-            send to the client.
-           
-retricted - this means the session object will actively block this
-            async command from being sent from the module (any mode).
+retricted - this means the async command will be used by the local
+            session object only. any modules/commands sending it 
+            will be ignored or blocked.
 ```
 
 ```
 enum AsyncCommands : quint16
 {
-    ASYNC_RDY               = 1,   // client   | none
-    ASYNC_SYS_MSG           = 2,   // client   | none
+    ASYNC_RDY               = 1,   // client   | retricted
+    ASYNC_SYS_MSG           = 2,   // client   | retricted
     ASYNC_EXIT              = 3,   // internal | private
     ASYNC_CAST              = 4,   // client   | public
     ASYNC_MAXSES            = 5,   // internal | private
@@ -49,7 +45,7 @@ enum AsyncCommands : quint16
     ASYNC_DISABLE_MOD       = 13,  // internal | public
     ASYNC_END_SESSION       = 14,  // internal | private
     ASYNC_USER_LOGIN        = 15,  // internal | private
-    ASYNC_TO_PEER           = 16,  // client   | public  | retricted
+    ASYNC_TO_PEER           = 16,  // client   | retricted
     ASYNC_LIMITED_CAST      = 17,  // client   | public
     ASYNC_RW_MY_INFO        = 18,  // internal | public
     ASYNC_P2P               = 19,  // client   | public
@@ -68,15 +64,17 @@ enum AsyncCommands : quint16
     ASYNC_SUB_CH_LEVEL_CHG  = 32,  // client   | public
     ASYNC_ADD_RDONLY        = 33,  // client   | public
     ASYNC_RM_RDONLY         = 34,  // client   | public
-    ASYNC_ADD_CMD           = 35,  // client   | none
-    ASYNC_RM_CMD            = 36,  // client   | none
+    ASYNC_ADD_CMD           = 35,  // client   | retricted
+    ASYNC_RM_CMD            = 36,  // client   | retricted
     ASYNC_USER_RENAMED      = 37,  // internal | public
     ASYNC_PING_PEERS        = 38,  // internal | private
     ASYNC_OPEN_SUBCH        = 39,  // internal | private
     ASYNC_CLOSE_SUBCH       = 40,  // internal | private
     ASYNC_KEEP_ALIVE        = 42,  // internal | private
     ASYNC_SET_DIR           = 43,  // internal | private
-    ASYNC_DEBUG_TEXT        = 44   // internal | private
+    ASYNC_DEBUG_TEXT        = 44,  // internal | private
+    ASYNC_HOOK_INPUT        = 45,  // internal | private
+    ASYNC_UNHOOK            = 46   // internal | private
 };
 ```
 
@@ -140,7 +138,7 @@ This internal only async commmand doesn't carry any data. It is used by modules 
 This command carries a 32byte user id hash. This can be used by modules to tell the session object to login as this user.
 
 ```ASYNC_TO_PEER (16)```
-This is an async command that carry an embedded data frame directly to/from peer sessions without any restrictions. It is prepended with the 224bit hash of the target session id; however, it drops that session id before arriving at the client so it will apppear as a regular mrci frame of any data type. Modules do not have direct access to this, the host internal objects will handle this.
+This is an async command that carry an embedded data frame directly to/from peer sessions without any restrictions. It is prepended with the 224bit hash of the target session id; however, it drops that session id before arriving at the client so it will apppear as a regular mrci frame of any data type. modules do not have direct access to this, the host internal objects will handle it.
 ```
 from_module: [28bytes(sessionId)][1byte(typeId)][rest-of-bytes(payload)]
 to_client:   [type_id][cmd_id(16)][branch_id(0)][size_of_payload][payload]
@@ -292,10 +290,16 @@ This is the other half to ASYNC_OPEN_SUBCH that tells the session to close the r
 This internal only async command doesn't carry any data. The session object normally sends a [KILL_CMD](type_ids.md) to the module when it detects that the module process has not sent an IPC frame in 2 minutes to terminate the module process. If desired, the module can send this async command in regular intervals to reset this 2 minute idle timer to prevent auto termination.
 
 ```ASYNC_SET_DIR (43)```
-This internal only async command carries a [TEXT](type_ids.md) path that sets the working directory for the session object. All module processes started by the session will use this directory as the working directory and it is not shared among peer sessions. nothing happens if the path is invalid or does not exists.
+This internal only async command carries a [TEXT](type_ids.md) path that sets the working directory for the local session. All module processes started by the session will use this directory as the working directory and it is not shared among peer sessions. nothing happens if the path is invalid or does not exists.
 
 ```ASYNC_DEBUG_TEXT (44)```
 This internal only async command carries a [TEXT](type_ids.md) debug message to be logged into the host debug log from the module. Modules can use this to help with debugging issues if it doesn't have direct access to the host database.
+
+```ASYNC_HOOK_INPUT (45)```
+This async command doesn't carry any data. This just indicate to the local session that the module command is requesting to hook the tcp data input from the client. when the tcp input is hooked, all data sent from the client is redirected to the command object/process that initiated the hook until reqested to unhook. If the command that initiated the hook terminates in anyway with an active hook, the hook will automatically be removed.
+
+```ASYNC_UNHOOK (46)```
+This async command doesn't carry any data. Any module command that sends it tells the local session to unhook the tcp input data from the client if there is an active hook. This doesn't need to come from the command that initiated the hook.
 
 ### 5.3 Open Sub-Channel List ###
 

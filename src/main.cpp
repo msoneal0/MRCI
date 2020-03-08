@@ -110,7 +110,7 @@ int main(int argc, char *argv[])
 
     qInstallMessageHandler(msgHandler);
 
-    //args.append("-default_pw"); // debug
+    //args.append("-host"); // debug
 
     if (args.contains("-help", Qt::CaseInsensitive))
     {

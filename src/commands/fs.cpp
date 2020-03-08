@@ -48,7 +48,7 @@ QByteArray toFILE_INFO(const QFileInfo &info)
     ret.append(wrInt(info.lastModified().toMSecsSinceEpoch(), 64));
     ret.append(wrInt(info.size(), 64));
     ret.append(toTEXT(info.fileName()) + strTerm);
-    ret.append(toTEXT(info.symLinkTarget() + strTerm));
+    ret.append(toTEXT(info.symLinkTarget()) + strTerm);
 
     return ret;
 }
@@ -91,8 +91,6 @@ void DownloadFile::onTerminate()
 
     ssMode    = false;
     paramsSet = false;
-    dataSent  = 0;
-    len       = 0;
     flags     = 0;
 }
 
@@ -109,13 +107,11 @@ void DownloadFile::sendChunk()
     }
     else
     {
-        dataSent += data.size();
+        progCurrent += data.size();
 
         emit procOut(data, GEN_FILE);
 
-        mainTxt(QString::number(dataSent) + " / " + QString::number(len) + "\n");
-
-        if ((dataSent >= len) || file->atEnd())
+        if ((progCurrent >= progMax) || file->atEnd())
         {
             onTerminate();
         }
@@ -173,20 +169,24 @@ void DownloadFile::procIn(const QByteArray &binIn, quint8 dType)
         }
         else
         {
-            len       = lenStr.toLongLong();
+            progMax   = lenStr.toLongLong();
             ssMode    = argExists("-single_step", args);
             paramsSet = true;
             retCode   = NO_ERRORS;
             flags    |= MORE_INPUT;
 
-            if ((len == 0) || (len > file->size()))
+            if ((progMax == 0) || (progMax > file->size()))
             {
-                len = file->size();
+                progMax = file->size();
             }
 
             file->seek(offStr.toLongLong());
 
-            emit procOut(toTEXT("-len " + QString::number(len)), GEN_FILE);
+            emit mainTxt("dl_file: " + path + "\n");
+            emit mainTxt("bytes:   " + QString::number(progMax) + "\n");
+            emit procOut(toTEXT("-len " + QString::number(progMax)), GEN_FILE);
+
+            startProgPulse();
         }
     }
 }
@@ -195,14 +195,12 @@ void UploadFile::onTerminate()
 {
     file->close();
 
-    force        = false;
-    confirm      = false;
-    ssMode       = false;
-    dataReceived = 0;
-    len          = 0;
-    flags        = 0;
-    offs         = 0;
-    mode         = nullptr;
+    force   = false;
+    confirm = false;
+    ssMode  = false;
+    flags   = 0;
+    offs    = 0;
+    mode    = nullptr;
 }
 
 void UploadFile::wrToFile(const QByteArray &data)
@@ -218,11 +216,9 @@ void UploadFile::wrToFile(const QByteArray &data)
     }
     else
     {
-        dataReceived += written;
+        progCurrent += written;
 
-        mainTxt(QString::number(dataReceived) + " / " + QString::number(len) + "\n");
-
-        if (dataReceived >= len)
+        if (progCurrent >= progMax)
         {
             onTerminate();
         }
@@ -237,7 +233,7 @@ void UploadFile::ask()
 {
     confirm = true;
 
-    mainTxt("'" + file->fileName() + "' already exists, do you want to overwrite? (y/n): ");
+    promptTxt("'" + file->fileName() + "' already exists, do you want to overwrite? (y/n): ");
 }
 
 void UploadFile::run()
@@ -322,13 +318,15 @@ void UploadFile::procIn(const QByteArray &binIn, quint8 dType)
 
             force   = argExists("-force", args);
             ssMode  = argExists("-single_step", args);
-            len     = lenStr.toLongLong();
+            progMax = lenStr.toLongLong();
             offs    = offStr.toLongLong();
             retCode = NO_ERRORS;
             flags  |= MORE_INPUT;
 
             file->setFileName(dst);
 
+            emit mainTxt("ul_file: " + dst + "\n");
+            emit mainTxt("bytes:   " + QString::number(progMax) + "\n");
             emit procOut(QByteArray(), GEN_FILE);
 
             if (QFileInfo(dst).exists() && !force)
@@ -347,7 +345,7 @@ void Delete::ask()
 {
     flags |= MORE_INPUT;
 
-    mainTxt("Are you sure you want to delete the object? (y/n): ");
+    promptTxt("Are you sure you want to delete the file/folder/symmlink? (y/n): ");
 }
 
 void Delete::run()
@@ -419,7 +417,7 @@ void Delete::procIn(const QByteArray &binIn, uchar dType)
         }
         else if (!QFileInfo(path).exists())
         {
-            errTxt("err: Object not found.\n");
+            errTxt("err: file/folder/symlink not found.\n");
         }
         else if (!QFileInfo(path).isWritable())
         {
@@ -435,11 +433,10 @@ void Delete::procIn(const QByteArray &binIn, uchar dType)
 
 void Copy::onTerminate()
 {
-    fromQueue   = false;
-    procedAFile = false;
-    yToAll      = false;
-    nToAll      = false;
-    flags       = 0;
+    fromQueue = false;
+    yToAll    = false;
+    nToAll    = false;
+    flags     = 0;
 
     src->close();
     dst->close();
@@ -459,7 +456,7 @@ void Copy::ask()
     if (fromQueue) opts = "(y/n/y-all/n-all): ";
     else           opts = "(y/n): ";
 
-    mainTxt("'" + dstPath + "' already exists, do you want to overwrite? " + opts);
+    promptTxt("'" + dstPath + "' already exists, do you want to overwrite? " + opts);
 }
 
 bool Copy::matchingVolumeMatters()
@@ -506,14 +503,10 @@ void Copy::run()
     }
     else if (QFileInfo(srcPath).isSymLink())
     {
-        if (procedAFile) mainTxt("\n");
-
         mainTxt("mklink: '" + srcPath + "' --> '" + dstPath + "'\n");
 
         if (QFile::link(QFileInfo(srcPath).symLinkTarget(), dstPath))
         {
-            procedAFile = true;
-
             postProcFile();
         }
         else
@@ -528,6 +521,7 @@ void Copy::run()
     }
     else if (QFileInfo(srcPath).isDir())
     {
+        mainTxt("mkpath: '" + dstPath + "'\n");
         mkPath(dstPath);
         listDir(queue, srcPath, dstPath);
 
@@ -555,9 +549,8 @@ void Copy::run()
         }
         else
         {
-            if (procedAFile) mainTxt("\n");
-
-            mainTxt("'" + srcPath + "' --> '" + dstPath + "'\n\n");
+            mainTxt("'" + srcPath + "' --> '" + dstPath + "'\n");
+            startProgPulse();
 
             flags |= LOOPING;
         }
@@ -572,15 +565,15 @@ void Copy::procIn(const QByteArray &binIn, uchar dType)
         {
             dst->write(src->read(LOCAL_BUFFSIZE));
 
-            mainTxt(QString::number(src->pos()) + "/" + QString::number(src->size()) + "\n");
+            progMax     = src->size();
+            progCurrent = src->pos();
 
             if (src->atEnd())
             {
-                procedAFile = true;
-
                 src->close();
                 dst->close();
 
+                stopProgPulse();
                 postProcFile();
             }
         }
@@ -716,6 +709,8 @@ bool Move::matchingVolumeMatters()
 
 void Move::runOnMatchingVolume()
 {
+    mainTxt("'" + srcPath + "' --> '" + dstPath + "'\n");
+
     QFileInfo dstInfo(dstPath);
 
     if (dstInfo.exists())
@@ -947,7 +942,7 @@ void ChangeDir::procIn(const QByteArray &binIn, quint8 dType)
             QDir::setCurrent(path);
 
             mainTxt(QDir::currentPath() + "\n");
-            async(ASYNC_SET_DIR, PRIV_IPC, toTEXT(path));
+            async(ASYNC_SET_DIR, toTEXT(path));
         }
     }
 }

@@ -65,15 +65,21 @@ class CmdObject : public MemShare
 protected:
 
     QTimer    *keepAliveTimer;
+    QTimer    *progTimer;
     IPCWorker *ipcWorker;
     quint32    flags;
     quint16    retCode;
+    qint64     progCurrent;
+    qint64     progMax;
 
     void    mainTxt(const QString &txt);
     void    errTxt(const QString &txt);
     void    privTxt(const QString &txt);
     void    bigTxt(const QString &txt);
-    void    async(quint16 asyncId, quint8 asyncType, const QByteArray &data = QByteArray());
+    void    promptTxt(const QString &txt);
+    void    async(quint16 asyncId, const QByteArray &data = QByteArray());
+    void    startProgPulse();
+    void    stopProgPulse();
     void    postProc();
     QString libName();
 
@@ -83,6 +89,7 @@ protected:
 protected slots:
 
     void preProc(const QByteArray &data, quint8 typeId);
+    void sendProg();
     void keepAlive();
     void term();
     void kill();
