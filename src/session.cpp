@@ -310,7 +310,7 @@ void Session::dataFromClient()
         }
         else if (tcpSocket->bytesAvailable() >= FRAME_HEADER_SIZE)
         {
-            QByteArray header = tcpSocket->read(FRAME_HEADER_SIZE);
+            auto header = tcpSocket->read(FRAME_HEADER_SIZE);
 
             tcpFrameType   = static_cast<quint8>(header[0]);
             tcpFrameCmdId  = static_cast<quint32>(rdInt(header.mid(1, 4)));
@@ -328,9 +328,10 @@ void Session::dataFromClient()
             {
                 wrStringToBlock(fromTEXT(tcpSocket->read(BLKSIZE_APP_NAME)).trimmed(), appName, BLKSIZE_APP_NAME);
 
-                QString     coName = fromTEXT(tcpSocket->read(272)).trimmed();
-                QStringList ver    = QCoreApplication::applicationVersion().split('.');
-                QByteArray  servHeader;
+                auto coName = fromTEXT(tcpSocket->read(272)).trimmed();
+                auto ver    = QCoreApplication::applicationVersion().split('.');
+
+                QByteArray servHeader;
 
                 servHeader.append(wrInt(0, 8));
                 servHeader.append(wrInt(ver[0].toULongLong(), 16));
@@ -495,7 +496,7 @@ void Session::login(const QByteArray &uId)
 
 void Session::sendLocalInfo()
 {
-    QByteArray frame = createPeerInfoFrame();
+    auto frame = createPeerInfoFrame();
 
     Query db;
 

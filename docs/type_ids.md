@@ -176,8 +176,8 @@ This carry some user account and session information about a peer client connect
   1. bytes[0-27]    28bytes  - session id (224bit hash)
   2. bytes[28-59]   32bytes  - user id (256bit hash)
   3. bytes[60-107]  48bytes  - user name (TEXT - padded with 0x00)
-  4. bytes[108-235] 128bytes - app name (TEXT - padded with 0x00)
-  5. bytes[236-299] 64bytes  - disp name (TEXT - padded with 0x00)
+  4. bytes[108-241] 134bytes - app name (TEXT - padded with 0x00)
+  5. bytes[242-305] 64bytes  - disp name (TEXT - padded with 0x00)
 
   notes:
   1. the session id is unique to the peer's session connection only. it
@@ -201,9 +201,9 @@ This contains all of the information found in ```PEER_INFO``` for the local sess
 
 ```
   format:
-  1. bytes[300-427] 128bytes - email (TEXT - padded with 0x00)
-  2. bytes[428-431] 4bytes   - host rank (32bit unsigned int)
-  3. bytes[432]     1byte    - is email confirmed? (0x00 false, 0x01 true)
+  1. bytes[306-433] 128bytes - email (TEXT - padded with 0x00)
+  2. bytes[434-437] 4bytes   - host rank (32bit unsigned int)
+  3. bytes[438]     1byte    - is email confirmed? (0x00 false, 0x01 true)
 ```
 
 ```NEW_CMD```
