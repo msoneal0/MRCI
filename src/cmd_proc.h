@@ -31,7 +31,6 @@ private:
     QHash<quint16, QString>     *cmdRealNames;
     QHash<quint16, QString>     *cmdAppById;
     QList<quint16>              *cmdIds;
-    IdleTimer                   *idleTimer;
 
     quint16 genCmdId();
     QString makeCmdUnique(const QString &name);
@@ -47,6 +46,7 @@ protected:
     quint32       ipcDataSize;
     quint32       hostRank;
     quint32       flags;
+    IdleTimer    *idleTimer;
     QLocalServer *ipcServ;
     QLocalSocket *ipcSocket;
 
@@ -92,6 +92,7 @@ public slots:
 
 signals:
 
+    void modProcFinished();
     void cmdUnloaded(quint16 cmdId);
     void dataToClient(quint32 cmdId, const QByteArray &data, quint8 typeId);
 };
@@ -140,7 +141,7 @@ public:
 signals:
 
     void cmdProcFinished(quint32 id);
-    void cmdProcReady(quint32 id, CmdProcess *obj);
+    void cmdProcReady(quint32 id);
     void pubIPC(quint16 cmdId, const QByteArray &data);
     void privIPC(quint16 cmdId, const QByteArray &data);
     void pubIPCWithFeedBack(quint16 cmdId, const QByteArray &data);

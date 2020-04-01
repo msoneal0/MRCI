@@ -375,7 +375,20 @@ void Session::openSubChannel(const QByteArray &data)
 {
     if (addBlockToBlockset(data.data(), openSubChs, MAX_OPEN_SUB_CHANNELS, BLKSIZE_SUB_CHANNEL))
     {
+        auto chId  = rd64BitFromBlock(data.data());
+        auto sub   = rd8BitFromBlock(data.data() + 8);
+        auto level = channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId);
+
+        if (!rdOnlyFlagExists(chId, sub, level))
+        {
+            addBlockToBlockset(data.data(), openWritableSubChs, MAX_OPEN_SUB_CHANNELS, BLKSIZE_SUB_CHANNEL);
+        }
+
         containsActiveCh(openSubChs, activeUpdate);
-        rd8BitFromBlock(activeUpdate);
+
+        if (rd8BitFromBlock(activeUpdate))
+        {
+            castPeerStat(QByteArray(openSubChs, MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL), false);
+        }
     }
 }

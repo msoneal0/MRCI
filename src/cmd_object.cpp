@@ -19,16 +19,12 @@
 IPCWorker::IPCWorker(const QString &pipe, QObject *parent) : QObject(parent)
 {
     pipeName  = pipe;
-    idleTimer = new IdleTimer(this);
     ipcSocket = new QLocalSocket(this);
     flags     = 0;
 
     connect(ipcSocket, &QLocalSocket::readyRead, this, &IPCWorker::rdFromIPC);
     connect(ipcSocket, &QLocalSocket::disconnected, this, &IPCWorker::ipcClosed);
     connect(ipcSocket, &QLocalSocket::connected, this, &IPCWorker::ipcOpened);
-    connect(idleTimer, &IdleTimer::timeout, this, &IPCWorker::termProc);
-
-    idleTimer->attach(ipcSocket, 60000); //1min idle timeout
 }
 
 void IPCWorker::rdFromIPC()
@@ -46,7 +42,7 @@ void IPCWorker::rdFromIPC()
     }
     else if (ipcSocket->bytesAvailable() >= (FRAME_HEADER_SIZE - 4))
     {
-        QByteArray header = ipcSocket->read(FRAME_HEADER_SIZE - 4);
+        auto header = ipcSocket->read(FRAME_HEADER_SIZE - 4);
 
         ipcTypeId   = static_cast<quint8>(header[0]);
         ipcDataSize = static_cast<quint32>(rdInt(header.mid(1, 3)));

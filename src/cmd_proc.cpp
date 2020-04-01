@@ -232,8 +232,6 @@ void ModProcess::newIPCLink()
         connect(ipcSocket, &QLocalSocket::readyRead, this, &ModProcess::rdFromIPC);
         connect(ipcSocket, &QLocalSocket::disconnected, this, &ModProcess::ipcDisconnected);
 
-        idleTimer->attach(ipcSocket, 120000); //2min idle timeout
-
         onReady();
     }
 }
@@ -270,6 +268,9 @@ void ModProcess::setSessionParams(QHash<quint16, QString> *uniqueNames,
 void ModProcess::onFailToStart()
 {
     emit dataToClient(toCmdId32(ASYNC_SYS_MSG, 0), toTEXT("\nerr: A module failed to start so some commands may not have loaded. detailed error information was logged for admin review.\n"), ERR);
+    emit modProcFinished();
+
+    deleteLater();
 }
 
 void ModProcess::err(QProcess::ProcessError error)
@@ -277,8 +278,6 @@ void ModProcess::err(QProcess::ProcessError error)
     if (error == QProcess::FailedToStart)
     {
         qDebug() << "err: Module process: " << program() << " failed to start. reason: " << errorString();
-
-        emit finished(1, QProcess::CrashExit);
 
         onFailToStart();
     }
@@ -356,8 +355,11 @@ void ModProcess::cleanupPipe()
 
 void ModProcess::onReady()
 {
-    QStringList hostVer = QCoreApplication::applicationVersion().split('.');
-    QByteArray  verFrame;
+    idleTimer->attach(ipcSocket, 5000); // 5sec idle timeout
+
+    auto hostVer = QCoreApplication::applicationVersion().split('.');
+
+    QByteArray verFrame;
 
     verFrame.append(wrInt(hostVer[0].toULongLong(), 16));
     verFrame.append(wrInt(hostVer[1].toULongLong(), 16));
@@ -370,6 +372,8 @@ void ModProcess::onFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
     Q_UNUSED(exitCode)
     Q_UNUSED(exitStatus)
+
+    emit modProcFinished();
 
     cleanupPipe();
     deleteLater();
@@ -423,17 +427,25 @@ void CmdProcess::killCmd32(quint32 id32)
 
 void CmdProcess::onReady()
 {
-    emit cmdProcReady(cmdId, this);
+    idleTimer->attach(ipcSocket, 120000); // 2min idle timeout
+
+    emit cmdProcReady(cmdId);
 }
 
 void CmdProcess::onFailToStart()
 {
     emit dataToClient(cmdId, toTEXT("err: The command failed to start. error details were logged for admin review.\n"), ERR);
     emit dataToClient(cmdId, wrInt(FAILED_TO_START, 16), IDLE);
+    emit cmdProcFinished(cmdId);
+
+    deleteLater();
 }
 
 void CmdProcess::onFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
+    Q_UNUSED(exitCode)
+    Q_UNUSED(exitStatus)
+
     if (!cmdIdle)
     {
         emit dataToClient(cmdId, toTEXT("err: The command has stopped unexpectedly or it has failed to send an IDLE frame before exiting.\n"), ERR);
@@ -442,7 +454,8 @@ void CmdProcess::onFinished(int exitCode, QProcess::ExitStatus exitStatus)
 
     emit cmdProcFinished(cmdId);
 
-    ModProcess::onFinished(exitCode, exitStatus);
+    cleanupPipe();
+    deleteLater();
 }
 
 void CmdProcess::rdFromStdErr()

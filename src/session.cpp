@@ -35,6 +35,7 @@ Session::Session(const QString &hostKey, QSslSocket *tcp, QObject *parent) : Mem
     tcpPayloadSize = 0;
     tcpFrameType   = 0;
     flags          = 0;
+    activeMods     = 0;
 }
 
 void Session::init()
@@ -135,10 +136,18 @@ void Session::cmdProcFinished(quint32 cmdId)
     }
 }
 
-void Session::cmdProcStarted(quint32 cmdId, CmdProcess *obj)
+void Session::modProcFinished()
 {
-    cmdProcesses.insert(cmdId, obj);
+    activeMods--;
 
+    if (flags & END_SESSION_EMPTY_PROC)
+    {
+        endSession();
+    }
+}
+
+void Session::cmdProcStarted(quint32 cmdId)
+{
     if (frameQueue.contains(cmdId))
     {
         for (auto&& frame : frameQueue[cmdId])
@@ -152,8 +161,6 @@ void Session::cmdProcStarted(quint32 cmdId, CmdProcess *obj)
 
 void Session::endSession()
 {
-    emit killMods();
-
     logout("", false);
 
     if (flags & ACTIVE_PAYLOAD)
@@ -162,7 +169,7 @@ void Session::endSession()
     }
     else
     {   
-        if (cmdProcesses.isEmpty())
+        if (cmdProcesses.isEmpty() && (activeMods == 0))
         {
             addIpAction("Session Ended");
             cleanupDbConnection();
@@ -173,21 +180,17 @@ void Session::endSession()
         {
             flags |= END_SESSION_EMPTY_PROC;
 
-            for (auto id : cmdProcesses.keys())
-            {
-                emit killCmd32(id);
-            }
+            emit killMods();
         }
     }
 }
 
 void Session::startCmdProc(quint32 cmdId)
 {
-    quint16 cmdId16 = toCmdId16(cmdId);
-    QString modApp  = cmdAppById[cmdId16];
-    QString pipe    = rdFromBlock(sessionId, BLKSIZE_USER_ID).toHex() + "-cmd-" + QString::number(cmdId);
-
-    auto *proc = new CmdProcess(cmdId, cmdRealNames[cmdId16], modApp, sesMemKey, hostMemKey, pipe, this);
+    auto  cmdId16 = toCmdId16(cmdId);
+    auto  modApp  = cmdAppById[cmdId16];
+    auto  pipe    = rdFromBlock(sessionId, BLKSIZE_USER_ID).toHex() + "-cmd-" + QString::number(cmdId);
+    auto *proc    = new CmdProcess(cmdId, cmdRealNames[cmdId16], modApp, sesMemKey, hostMemKey, pipe, this);
 
     proc->setWorkingDirectory(currentDir);
     proc->setSessionParams(sharedMem, sessionId, openWritableSubChs, &hookCmdId32);
@@ -202,15 +205,17 @@ void Session::startCmdProc(quint32 cmdId)
 
     connect(this, &Session::killCmd16, proc, &CmdProcess::killCmd16);
     connect(this, &Session::killCmd32, proc, &CmdProcess::killCmd32);
+    connect(this, &Session::killMods, proc, &CmdProcess::killProc);
+
+    cmdProcesses.insert(cmdId, proc);
 
     proc->startCmdProc();
 }
 
 ModProcess *Session::initModProc(const QString &modApp)
 {
-    QString pipe = rdFromBlock(sessionId, BLKSIZE_USER_ID).toHex() + "-mod-" + genSerialNumber();
-    quint32 rnk  = rd32BitFromBlock(hostRank);
-
+    auto  pipe = rdFromBlock(sessionId, BLKSIZE_USER_ID).toHex() + "-mod-" + genSerialNumber();
+    auto  rnk  = rd32BitFromBlock(hostRank);
     auto *proc = new ModProcess(modApp, sesMemKey, hostMemKey, pipe, this);
 
     proc->setWorkingDirectory(currentDir);
@@ -218,8 +223,11 @@ ModProcess *Session::initModProc(const QString &modApp)
 
     connect(proc, &ModProcess::dataToClient, this, &Session::dataToClient);
     connect(proc, &ModProcess::cmdUnloaded, this, &Session::killCmd16);
+    connect(proc, &ModProcess::modProcFinished, this, &Session::modProcFinished);
 
     connect(this, &Session::killMods, proc, &ModProcess::killProc);
+
+    activeMods++;
 
     return proc;
 }
@@ -255,7 +263,7 @@ void Session::loadCmds()
 
 void Session::dataToCmd(quint32 cmdId, const QByteArray &data, quint8 typeId)
 {
-    quint16 cmdId16 = toCmdId16(cmdId);
+    auto cmdId16 = toCmdId16(cmdId);
 
     if (cmdIds.contains(cmdId16))
     {
@@ -521,15 +529,16 @@ void Session::sendLocalInfo()
     dataToClient(ASYNC_SYS_MSG, frame, MY_INFO);
 }
 
-void Session::castPeerStat(const QByteArray &oldSubIds, bool isDisconnecting)
+void Session::castPeerStat(const QByteArray &targets, bool isDisconnecting)
 {
     if (rd8BitFromBlock(activeUpdate))
     {
         // format: [54bytes(chIds)][1byte(typeId)][rest-of-bytes(PEER_STAT)]
 
-        QByteArray typeId   = wrInt(PEER_STAT, 8);
-        QByteArray sesId    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
-        QByteArray openSubs = rdFromBlock(openSubChs, MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL);
+        auto typeId   = wrInt(PEER_STAT, 8);
+        auto sesId    = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
+        auto openSubs = rdFromBlock(openSubChs, MAX_OPEN_SUB_CHANNELS * BLKSIZE_SUB_CHANNEL);
+
         QByteArray dc;
 
         if (isDisconnecting)
@@ -541,7 +550,7 @@ void Session::castPeerStat(const QByteArray &oldSubIds, bool isDisconnecting)
             dc = QByteArray(1, 0x00);
         }
 
-        emit asyncToPeers(ASYNC_LIMITED_CAST, oldSubIds + typeId + sesId + openSubs + dc);
+        emit asyncToPeers(ASYNC_LIMITED_CAST, targets + typeId + sesId + openSubs + dc);
     }
 }
 

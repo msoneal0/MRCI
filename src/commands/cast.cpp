@@ -185,33 +185,33 @@ void LsOpenChannels::procIn(const QByteArray &binIn, quint8 dType)
             {
                 QStringList columnData;
 
-                db.setType(Query::INNER_JOIN_PULL, TABLE_SUB_CHANNELS);
-                db.addTableColumn(TABLE_SUB_CHANNELS, COLUMN_SUB_CH_NAME);
-                db.addTableColumn(TABLE_CHANNELS, COLUMN_CHANNEL_NAME);
-                db.addJoinCondition(COLUMN_CHANNEL_ID, TABLE_CHANNELS);
+                db.setType(Query::PULL, TABLE_CHANNELS);
+                db.addColumn(COLUMN_CHANNEL_NAME);
                 db.addCondition(COLUMN_CHANNEL_ID, chId);
+                db.exec();
+
+                columnData.append(db.getData(COLUMN_CHANNEL_NAME).toString());
+
+                db.setType(Query::PULL, TABLE_SUB_CHANNELS);
+                db.addColumn(COLUMN_SUB_CH_NAME);
                 db.addCondition(COLUMN_SUB_CH_ID, subId);
                 db.exec();
 
-                auto chName  = db.getData(COLUMN_CHANNEL_NAME).toString();
-                auto subName = db.getData(COLUMN_SUB_CH_NAME).toString();
+                columnData.append(db.getData(COLUMN_SUB_CH_NAME).toString());
+                columnData.append(QString::number(chId));
+                columnData.append(QString::number(subId));
 
-                QString rdOnly;
+                if (posOfBlock(openSubChs + i, openWritableSubChs, MAX_OPEN_SUB_CHANNELS, BLKSIZE_SUB_CHANNEL) != -1)
+                {
+                    // the sub-channel id being present in openWritableSubChs mean it is writable and
+                    // therefore is NOT read only.
 
-                if (posOfBlock(openSubChs + i, openWritableSubChs, MAX_OPEN_SUB_CHANNELS, BLKSIZE_SUB_CHANNEL) == -1)
-                {   
-                    rdOnly = "1";
+                    columnData.append("0");
                 }
                 else
                 {
-                    rdOnly = "0";
+                    columnData.append("1");
                 }
-
-                columnData.append(chName);
-                columnData.append(subName);
-                columnData.append(QString::number(chId));
-                columnData.append(QString::number(subId));
-                columnData.append(rdOnly);
 
                 for (int k = 0; k < justLens.size(); ++k)
                 {
@@ -300,9 +300,9 @@ void AddRDOnlyFlag::procIn(const QByteArray &binIn, quint8 dType)
         {
             errTxt("err: Access denied.\n");
         }
-        else if (rdOnlyFlagExists(chName, static_cast<quint8>(subId.toInt()), level.toInt()))
+        else if (rdOnlyFlagExists(chId, static_cast<quint8>(subId.toInt()), level.toUInt()))
         {
-            errTxt("err: A read only flag for sub_id: " + QString::number(subId.toInt()) + " level: " + QString::number(level.toInt()) + " already exists.\n");
+            errTxt("err: A read only flag for sub_id: " + QString::number(subId.toInt()) + " level: " + QString::number(level.toUInt()) + " already exists.\n");
         }
         else
         {
@@ -368,9 +368,9 @@ void RemoveRDOnlyFlag::procIn(const QByteArray &binIn, quint8 dType)
         {
             errTxt("err: Access denied.\n");
         }
-        else if (!rdOnlyFlagExists(chName, static_cast<quint8>(subId.toInt()), level.toInt()))
+        else if (!rdOnlyFlagExists(chId, static_cast<quint8>(subId.toUInt()), level.toUInt()))
         {
-            errTxt("err: A read only flag for sub_id: " + QString::number(subId.toInt()) + " level: " + QString::number(level.toInt()) + " does not exists.\n");
+            errTxt("err: A read only flag for sub_id: " + QString::number(subId.toUInt()) + " level: " + QString::number(level.toUInt()) + " does not exists.\n");
         }
         else
         {

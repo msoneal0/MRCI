@@ -39,6 +39,7 @@ private:
     QHash<quint16, QString>            cmdRealNames;
     QHash<quint16, QString>            cmdAppById;
     QList<quint16>                     cmdIds;
+    quint32                            activeMods;
     quint32                            flags;
     quint32                            hookCmdId32;
     quint32                            tcpPayloadSize;
@@ -55,7 +56,7 @@ private:
     void        startCmdProc(quint32 cmdId);
     void        startModProc(const QString &modApp);
     void        addIpAction(const QString &action);
-    void        castPeerStat(const QByteArray &oldSubIds, bool isDisconnecting);
+    void        castPeerStat(const QByteArray &targets, bool isDisconnecting);
     ModProcess *initModProc(const QString &modApp);
     QByteArray  genSessionId();
 
@@ -90,8 +91,9 @@ private slots:
 
     void dataFromClient();
     void payloadDeleted();
+    void modProcFinished();
     void cmdProcFinished(quint32 cmdId);
-    void cmdProcStarted(quint32 cmdId, CmdProcess *obj);
+    void cmdProcStarted(quint32 cmdId);
     void asyncToClient(quint16 cmdId, const QByteArray &data, quint8 typeId);
     void dataToClient(quint32 cmdId, const QByteArray &data, quint8 typeId);
     void dataToCmd(quint32 cmdId, const QByteArray &data, quint8 typeId);

@@ -29,7 +29,6 @@ private slots:
 
 private:
 
-    IdleTimer    *idleTimer;
     QLocalSocket *ipcSocket;
     quint32       flags;
     quint8        ipcTypeId;

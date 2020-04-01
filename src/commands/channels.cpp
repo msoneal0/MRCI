@@ -275,8 +275,6 @@ void CreateChannel::procIn(const QByteArray &binIn, uchar dType)
         auto args   = parseArgs(binIn, 2);
         auto chName = getParam("-ch_name", args);
 
-        quint64 chId;
-
         retCode = INVALID_PARAMS;
 
         if (chName.isEmpty())
@@ -287,7 +285,7 @@ void CreateChannel::procIn(const QByteArray &binIn, uchar dType)
         {
             errTxt("err: Invalid channel name. it must be between 4-32 chars long and contain no spaces.\n");
         }
-        else if (channelExists(chName, &chId))
+        else if (channelExists(chName))
         {
             errTxt("err: Channel name '" + chName + "' already exists.\n");
         }
@@ -301,6 +299,12 @@ void CreateChannel::procIn(const QByteArray &binIn, uchar dType)
             db.addColumn(COLUMN_CHANNEL_NAME, chName);
             db.exec();
 
+            db.setType(Query::PULL, TABLE_CHANNELS);
+            db.addColumn(COLUMN_CHANNEL_ID);
+            db.addCondition(COLUMN_CHANNEL_NAME, chName);
+            db.exec();
+
+            auto chId  = db.getData(COLUMN_CHANNEL_ID).toUInt();
             auto uId   = rdFromBlock(userId, BLKSIZE_USER_ID);
             auto uName = rdStringFromBlock(userName, BLKSIZE_USER_NAME);
             auto dName = rdStringFromBlock(displayName, BLKSIZE_DISP_NAME);

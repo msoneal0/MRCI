@@ -260,7 +260,7 @@ bool        inviteExists(const QByteArray &uId, quint64 chId);
 bool        channelExists(const QString &chName, quint64 *chId = nullptr);
 bool        channelSubExists(quint64 chId, const QString &sub, quint8 *subId = nullptr);
 bool        recoverPWExists(const QByteArray &uId);
-bool        rdOnlyFlagExists(const QString &chName, uchar subId, int level);
+bool        rdOnlyFlagExists(quint64 chId, quint8 subId, quint32 level);
 bool        isBool(const QString &str);
 bool        isInt(const QString &str);
 bool        isLocked(const QByteArray &uId);

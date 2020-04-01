@@ -421,14 +421,14 @@ bool modExists(const QString &modPath)
     return db.rows();
 }
 
-bool rdOnlyFlagExists(const QString &chName, uchar subId, int level)
+bool rdOnlyFlagExists(quint64 chId, quint8 subId, quint32 level)
 {
     Query db;
 
     db.setType(Query::PULL, TABLE_RDONLY_CAST);
     db.addColumn(COLUMN_ACCESS_LEVEL);
     db.addCondition(COLUMN_SUB_CH_ID, subId);
-    db.addCondition(COLUMN_CHANNEL_NAME, chName);
+    db.addCondition(COLUMN_CHANNEL_ID, chId);
     db.addCondition(COLUMN_ACCESS_LEVEL, level);
     db.exec();
 
