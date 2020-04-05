@@ -30,14 +30,15 @@ class TCPServer: public QTcpServer
 
 private:
 
-    QSharedMemory *hostSharedMem;
-    QLocalServer  *controlPipe;
-    QLocalSocket  *controlSocket;
-    char          *hostLoad;
-    QString        controlPipePath;
-    QString        hostKey;
-    quint32        maxSessions;
-    quint32        flags;
+    QNetworkAccessManager *qNam;
+    QSharedMemory         *hostSharedMem;
+    QLocalServer          *controlPipe;
+    QLocalSocket          *controlSocket;
+    char                  *hostLoad;
+    QString                controlPipePath;
+    QString                hostKey;
+    quint32                maxSessions;
+    quint32                flags;
 
     bool servOverloaded();
     bool createPipe();
@@ -50,6 +51,7 @@ private slots:
     void closedPipeConnection();
     void sessionEnded();
     void setMaxSessions(quint32 value);
+    void replyFromIpify(QNetworkReply *reply);
 
 public slots:
 

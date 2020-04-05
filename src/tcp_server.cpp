@@ -20,6 +20,7 @@ TCPServer::TCPServer(QObject *parent) : QTcpServer(parent)
 {
     controlPipe   = new QLocalServer(this);
     hostSharedMem = new QSharedMemory(this);
+    qNam          = new QNetworkAccessManager(this);
     hostKey       = createHostSharedMem(hostSharedMem);
     hostLoad      = static_cast<char*>(hostSharedMem->data());
     controlSocket = nullptr;
@@ -36,6 +37,7 @@ TCPServer::TCPServer(QObject *parent) : QTcpServer(parent)
 #endif
 
     connect(controlPipe, &QLocalServer::newConnection, this, &TCPServer::newPipeConnection);
+    connect(qNam, &QNetworkAccessManager::finished, this, &TCPServer::replyFromIpify);
 }
 
 void TCPServer::newPipeConnection()
@@ -79,6 +81,13 @@ bool TCPServer::createPipe()
     return ret;
 }
 
+void TCPServer::replyFromIpify(QNetworkReply *reply)
+{
+    genDefaultSSLFiles(reply->readAll());
+
+    reply->deleteLater();
+}
+
 bool TCPServer::start()
 {
     close();
@@ -91,6 +100,8 @@ bool TCPServer::start()
     db.addColumn(COLUMN_IPADDR);
     db.addColumn(COLUMN_MAXSESSIONS);
     db.exec();
+
+    qNam->get(QNetworkRequest(QUrl("https://api.ipify.org")));
 
     maxSessions = db.getData(COLUMN_MAXSESSIONS).toUInt();
 

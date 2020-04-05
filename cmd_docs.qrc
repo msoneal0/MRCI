@@ -2,7 +2,6 @@
     <qresource prefix="/">
         <file>docs/intern_commands/accept_ch.md</file>
         <file>docs/intern_commands/add_acct.md</file>
-        <file>docs/intern_commands/add_cert.md</file>
         <file>docs/intern_commands/add_ch.md</file>
         <file>docs/intern_commands/add_mod.md</file>
         <file>docs/intern_commands/add_ranked_cmd.md</file>
@@ -10,7 +9,6 @@
         <file>docs/intern_commands/add_sub_ch.md</file>
         <file>docs/intern_commands/auth.md</file>
         <file>docs/intern_commands/cast.md</file>
-        <file>docs/intern_commands/cert_info.md</file>
         <file>docs/intern_commands/close_host.md</file>
         <file>docs/intern_commands/close_sub_ch.md</file>
         <file>docs/intern_commands/decline_ch.md</file>
@@ -33,7 +31,6 @@
         <file>docs/intern_commands/lock_acct.md</file>
         <file>docs/intern_commands/ls_act_log.md</file>
         <file>docs/intern_commands/ls_auth_log.md</file>
-        <file>docs/intern_commands/ls_certs.md</file>
         <file>docs/intern_commands/ls_ch_members.md</file>
         <file>docs/intern_commands/ls_chs.md</file>
         <file>docs/intern_commands/ls_dbg.md</file>
@@ -60,7 +57,6 @@
         <file>docs/intern_commands/request_pw_reset.md</file>
         <file>docs/intern_commands/restart_host.md</file>
         <file>docs/intern_commands/rm_acct.md</file>
-        <file>docs/intern_commands/rm_cert.md</file>
         <file>docs/intern_commands/rm_ch.md</file>
         <file>docs/intern_commands/rm_mod.md</file>
         <file>docs/intern_commands/rm_ranked_cmd.md</file>

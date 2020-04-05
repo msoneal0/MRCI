@@ -5,28 +5,37 @@
 ### Usage ###
 
 ```
-Usage: mrci <argument>
-
 <Arguments>
 
- -help                   : display usage information about this application.
- -stop                   : stop the current host instance if one is currently running.
- -about                  : display versioning/warranty information about this application.
- -addr {ip_address:port} : set the listening address and port for TCP clients.
- -status                 : display status information about the host instance if it is currently running.
- -reset_root             : reset the root account password to the default password.
- -host                   : start a new host instance. (this blocks).
- -default_pw             : show the default password.
- -public_cmds            : run the internal module to list it's public commands. for internal use only.
- -exempt_cmds            : run the internal module to list it's rank exempt commands. for internal use only.
- -user_cmds              : run the internal module to list it's user commands. for internal use only.
- -run_cmd {command_name} : run an internal module command. for internal use only.
+ -help        : display usage information about this application.
+ -stop        : stop the current host instance if one is currently running.
+ -about       : display versioning/warranty information about this application.
+ -addr        : set the listening address and port for TCP clients.
+ -status      : display status information about the host instance if it is currently running.
+ -reset_root  : reset the root account password to the default password.
+ -host        : start a new host instance. (this blocks)
+ -default_pw  : show the default password.
+ -public_cmds : run the internal module to list it's public commands. for internal use only.
+ -exempt_cmds : run the internal module to list it's rank exempt commands. for internal use only.
+ -user_cmds   : run the internal module to list it's user commands. for internal use only.
+ -run_cmd     : run an internal module command. for internal use only.
+ -add_cert    : add/update an SSL certificate for a given common name.
+ -rm_cert     : remove an SSL certificate for a given common name.
 
 Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:
 
- -pipe {pipe_name/path} : the named pipe used to establish a data connection with the session.
- -mem_ses {key_name}    : the shared memory key for the session object.
- -mem_host {key_name}   : the shared memory key for the server object.
+ -pipe     : the named pipe used to establish a data connection with the session.
+ -mem_ses  : the shared memory key for the session.
+ -mem_host : the shared memory key for the host main process.
+
+Details:
+
+addr     - this argument takes a {ip_address:port} string. it will return an error if not formatted correctly
+           examples: 10.102.9.2:35516 or 0.0.0.0:35516.
+
+run_cmd  - this argument is used by the host itself, along side the internal module arguments below to run
+           the internal command names passed by it. this is not ment to be run directly by human input.
+           the executable will auto close if it fails to connect to the pipe and/or shared memory segments
 ```
  
 The host can only be managed via a connected client that supports text input/output so the host application is always listening for clients while running entirely in the background. By default the host listen for clients on address 0.0.0.0 and port 35516, effectively making it reachable on any network interface of the host platform via that specific port.

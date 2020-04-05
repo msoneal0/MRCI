@@ -68,18 +68,6 @@ bool setupDb(QString *errMsg)
 
     if (ret)
     {
-        query.setType(Query::CREATE_TABLE, TABLE_CERT_DATA);
-        query.addColumn(COLUMN_COMMON_NAME);
-        query.addColumn(COLUMN_CERT);
-        query.addColumn(COLUMN_PRIV_KEY);
-        query.setPrimary(COLUMN_COMMON_NAME);
-        query.addUnique(COLUMN_COMMON_NAME);
-
-        ret = query.exec();
-    }
-
-    if (ret)
-    {
         query.setType(Query::CREATE_TABLE, TABLE_CHANNELS);
         query.addColumn(COLUMN_CHANNEL_ID);
         query.addColumn(COLUMN_CHANNEL_NAME);

@@ -6,8 +6,6 @@ The host is extendable via 3rd party modules but the host itself is an internal 
 
 * [add_acct](intern_commands/add_acct.md) - create a new host user account.
 
-* [add_cert](intern_commands/add_cert.md) - install a new SSL/TLS cert into the host.
-
 * [add_ch](intern_commands/add_ch.md) - create a new channel.
 
 * [add_mod](intern_commands/add_mod.md) - add a new module to the host.
@@ -21,8 +19,6 @@ The host is extendable via 3rd party modules but the host itself is an internal 
 * [auth](intern_commands/auth.md) - login to the host using a registered user account name or email address.
 
 * [cast](intern_commands/cast.md) - broadcast data to all sessions listening to any matching sub-channels.
-
-* [cert_info](intern_commands/cert_info.md) - display detailed information about an installed SSL/TLS certificate.
 
 * [ch_owner_override](intern_commands/ch_owner_override.md) - set/unset the channel owner override flag for your current session.
 
@@ -69,8 +65,6 @@ The host is extendable via 3rd party modules but the host itself is an internal 
 * [ls_act_log](intern_commands/ls_act_log.md) - display or manage the client activity log.
 
 * [ls_auth_log](intern_commands/ls_auth_log.md) - display the host authorization activity log.
-
-* [ls_certs](intern_commands/ls_certs.md) - display a list of all SSL/TLS certificates installed in the host database.
 
 * [ls_ch_members](intern_commands/ls_ch_members.md) - list all members in a channel.
 
@@ -123,8 +117,6 @@ The host is extendable via 3rd party modules but the host itself is an internal 
 * [restart_host](intern_commands/restart_host.md) - re-start the host instance.
 
 * [rm_acct](intern_commands/rm_acct.md) - delete a user account from the host database.
-
-* [rm_cert](intern_commands/rm_cert.md) - remove the SSL/TLS cert associated with the given common name.
 
 * [rm_ch](intern_commands/rm_ch.md) - permanently remove a channel and all of it's sub-shannels from the host.
 

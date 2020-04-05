@@ -27,8 +27,7 @@ QString columnType(const QString &column)
 
     if ((column == COLUMN_IPADDR)       || (column == COLUMN_LOGENTRY)     || (column == COLUMN_USERNAME)     ||
         (column == COLUMN_CHANNEL_NAME) || (column == COLUMN_EMAIL)        || (column == COLUMN_SUB_CH_NAME)  ||
-        (column == COLUMN_COMMAND)      || (column == COLUMN_CLIENT_VER)   || (column == COLUMN_COMMON_NAME)  ||
-        (column == COLUMN_DISPLAY_NAME))
+        (column == COLUMN_COMMAND)      || (column == COLUMN_CLIENT_VER)   || (column == COLUMN_DISPLAY_NAME))
     {
         ret = "TEXT COLLATE NOCASE";
     }
@@ -58,8 +57,8 @@ QString columnType(const QString &column)
     {
         ret = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL";
     }
-    else if ((column == COLUMN_HASH)     || (column == COLUMN_SALT)    || (column == COLUMN_CERT) ||
-             (column == COLUMN_PRIV_KEY) || (column == COLUMN_USER_ID) || (column == COLUMN_SESSION_ID))
+    else if ((column == COLUMN_HASH) || (column == COLUMN_SALT) || (column == COLUMN_USER_ID) ||
+             (column == COLUMN_SESSION_ID))
     {
         ret = "BLOB";
     }

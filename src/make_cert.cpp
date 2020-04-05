@@ -31,19 +31,6 @@ void Cert::cleanup()
     BN_free(bne);
 }
 
-QByteArray tempFilePath(const QString &baseName)
-{
-    return QDir::tempPath().toUtf8() + "/" + baseName.toUtf8() + "_" + QDateTime::currentDateTime().toString("YYYYMMddHHmmsszzz").toUtf8();
-}
-
-long genSerialViaDateTime()
-{
-    QDateTime dateTime  = QDateTime::currentDateTime();
-    QString   serialStr = dateTime.toString("YYYYMMddHH");
-
-    return serialStr.toLong();
-}
-
 bool genRSAKey(Cert *cert)
 {
     bool ret = false;
@@ -65,13 +52,29 @@ bool genRSAKey(Cert *cert)
     return ret;
 }
 
-bool genX509(Cert *cert, const QString &coName)
+bool genX509(Cert *cert, const QString &outsideAddr)
 {
-    bool ret = false;
+    auto ret        = false;
+    auto interfaces = QNetworkInterface::allAddresses();
 
-    if (cert->x509 && cert->pKey)
+    QList<QByteArray> cnNames;
+
+    if (!outsideAddr.isEmpty())
     {
-        ASN1_INTEGER_set(X509_get_serialNumber(cert->x509), genSerialViaDateTime());
+        cnNames.append(outsideAddr.toUtf8());
+    }
+
+    for (auto&& addr : interfaces)
+    {
+        if (addr.isGlobal())
+        {
+            cnNames.append(addr.toString().toUtf8());
+        }
+    }
+
+    if (cert->x509 && cert->pKey && !cnNames.isEmpty())
+    {
+        ASN1_INTEGER_set(X509_get_serialNumber(cert->x509), QDateTime::currentDateTime().toSecsSinceEpoch());
 
         X509_gmtime_adj(X509_get_notBefore(cert->x509), 0);        // now
         X509_gmtime_adj(X509_get_notAfter(cert->x509), 31536000L); // 365 days
@@ -79,14 +82,30 @@ bool genX509(Cert *cert, const QString &coName)
 
         // copy the subject name to the issuer name.
 
-        X509_NAME *name    = X509_get_subject_name(cert->x509);
-        QByteArray orgName = QCoreApplication::organizationName().toUtf8();
+        auto *name = X509_get_subject_name(cert->x509);
 
-        X509_NAME_add_entry_by_txt(name, "C",  MBSTRING_ASC, (unsigned char *) "USA",                  -1, -1, 0);
-        X509_NAME_add_entry_by_txt(name, "O",  MBSTRING_ASC, (unsigned char *) orgName.data(),         -1, -1, 0);
-        X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (unsigned char *) coName.toUtf8().data(), -1, -1, 0);
+        X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (unsigned char *) cnNames[0].data(), -1, -1, 0);
 
         X509_set_issuer_name(cert->x509, name);
+
+        cnNames.removeAt(0);
+
+        QByteArray sanField;
+
+        for (int i = 0; i < cnNames.size(); ++i)
+        {
+            sanField.append("DNS:" + cnNames[i]);
+
+            if (i != cnNames.size() - 1)
+            {
+                sanField.append(", ");
+            }
+        }
+
+        if (!sanField.isEmpty())
+        {
+            addExt(cert->x509, NID_subject_alt_name, sanField.data());
+        }
 
         if (X509_sign(cert->x509, cert->pKey, EVP_sha1()))
         {
@@ -97,10 +116,21 @@ bool genX509(Cert *cert, const QString &coName)
     return ret;
 }
 
+void addExt(X509 *cert, int nid, char *value)
+{
+    X509_EXTENSION *ext = X509V3_EXT_conf_nid(NULL, NULL, nid, value);
+
+    if (ext != NULL)
+    {
+        X509_add_ext(cert, ext, -1);
+        X509_EXTENSION_free(ext);
+    }
+}
+
 bool writePrivateKey(const char *path, Cert* cert)
 {
-    bool  ret  = false;
-    FILE *file = fopen(path, "wb");
+    auto  ret  = false;
+    auto *file = fopen(path, "wb");
 
     if (file)
     {
@@ -114,8 +144,8 @@ bool writePrivateKey(const char *path, Cert* cert)
 
 bool writeX509(const char *path, Cert *cert)
 {
-    bool  ret  = false;
-    FILE *file = fopen(path, "wb");
+    auto  ret  = false;
+    auto *file = fopen(path, "wb");
 
     if (file)
     {
@@ -127,181 +157,15 @@ bool writeX509(const char *path, Cert *cert)
     return ret;
 }
 
-bool getCertAndKey(const QString &coName, QByteArray &cert, QByteArray &privKey)
+void genDefaultSSLFiles(const QString &outsideAddr)
 {
-    bool ret = true;
+    auto *cert = new Cert();
 
-    Query db;
+    genRSAKey(cert);
+    genX509(cert, outsideAddr);
+    writePrivateKey(DEFAULT_PRIV_KEY_NAME, cert);
+    writeX509(DEFAULT_PUB_KEY_NAME, cert);
 
-    db.setType(Query::PULL, TABLE_CERT_DATA);
-    db.addColumn(COLUMN_CERT);
-    db.addColumn(COLUMN_PRIV_KEY);
-    db.addCondition(COLUMN_COMMON_NAME, coName);
-    db.exec();
-
-    if (db.rows())
-    {
-        cert    = db.getData(COLUMN_CERT).toByteArray();
-        privKey = db.getData(COLUMN_PRIV_KEY).toByteArray();
-
-        QSslCertificate certObj(cert, QSsl::Pem);
-
-        if (certObj.isNull())
-        {
-            genNewSSLData(coName, cert, privKey, true);
-
-            qDebug() << "The cert for CN: " << coName << " was invalid, generated a new self signed cert.";
-        }
-        else if (certObj.expiryDate().isValid() && (certObj.expiryDate() < QDateTime::currentDateTime()))
-        {
-            genNewSSLData(coName, cert, privKey, true);
-
-            qDebug() << "The cert for CN: " << coName << " was expired, generated a new self signed cert.";
-        }
-    }
-    else if (islocalIP(coName) && !coName.isEmpty())
-    {
-        genNewSSLData(coName, cert, privKey, false);
-
-        qDebug() << "Generated a new self signed cert for CN: " << coName;
-    }
-    else
-    {
-        ret = false;
-    }
-
-    return ret;
-}
-
-void genNewSSLData(const QString &coName, QByteArray &cert, QByteArray &privKey, bool exists)
-{
-    auto      *newCert     = new Cert();
-    QByteArray certPath    = tempFilePath(QString(APP_NAME) + "Cert");
-    QByteArray privKeyPath = tempFilePath(QString(APP_NAME) + "PrivKey");
-
-    if (genRSAKey(newCert))
-    {
-        if (genX509(newCert, coName))
-        {
-            if (writePrivateKey(privKeyPath.data(), newCert) &&
-                writeX509(certPath.data(), newCert))
-            {
-                QFile certFile(certPath);
-                QFile privFile(privKeyPath);
-
-                if (certFile.open(QFile::ReadOnly) && privFile.open(QFile::ReadOnly))
-                {
-                    Query db;
-
-                    cert    = certFile.readAll();
-                    privKey = privFile.readAll();
-
-                    if (exists) db.setType(Query::UPDATE, TABLE_CERT_DATA);
-                    else        db.setType(Query::PUSH, TABLE_CERT_DATA);
-
-                    db.addColumn(COLUMN_COMMON_NAME, coName);
-                    db.addColumn(COLUMN_CERT, cert);
-                    db.addColumn(COLUMN_PRIV_KEY, privKey);
-                    db.exec();
-                }
-
-                certFile.close();
-                privFile.close();
-                certFile.remove();
-                privFile.remove();
-            }
-        }
-    }
-
-    newCert->cleanup();
-    newCert->deleteLater();
-}
-
-void genNewSSLData(const QString &coName)
-{
-    QByteArray cert;
-    QByteArray priv;
-
-    genNewSSLData(coName, cert, priv, false);
-}
-
-bool islocalIP(const QString &coName)
-{
-    bool ret = false;
-
-    QList<QHostAddress> interfaces = QNetworkInterface::allAddresses();
-
-    for (auto&& addr : interfaces)
-    {
-        if ((addr.toString() == coName) && addr.isGlobal())
-        {
-            qDebug() << "Detected local address: " << addr.toString();
-
-            ret = true;
-        }
-    }
-
-    return ret;
-}
-
-bool certExists(const QString &coName)
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_CERT_DATA);
-    db.addColumn(COLUMN_COMMON_NAME);
-    db.addCondition(COLUMN_COMMON_NAME, coName);
-    db.exec();
-
-    return db.rows();
-}
-
-QSslKey toSSLKey(const QByteArray &data)
-{
-    QSslKey ret(data, QSsl::Rsa, QSsl::Pem);
-
-    if (ret.isNull()) ret = QSslKey(data, QSsl::Dsa, QSsl::Pem);
-    if (ret.isNull()) ret = QSslKey(data, QSsl::Ec, QSsl::Pem);
-    if (ret.isNull()) ret = QSslKey(data, QSsl::Opaque, QSsl::Pem);
-
-    if (ret.isNull()) ret = QSslKey(data, QSsl::Rsa, QSsl::Der);
-    if (ret.isNull()) ret = QSslKey(data, QSsl::Dsa, QSsl::Der);
-    if (ret.isNull()) ret = QSslKey(data, QSsl::Ec, QSsl::Der);
-    if (ret.isNull()) ret = QSslKey(data, QSsl::Opaque, QSsl::Der);
-
-    return ret;
-}
-
-QSslKey toSSLKey(QIODevice *dev)
-{
-    QSslKey ret(dev, QSsl::Rsa, QSsl::Pem);
-
-    if (ret.isNull()) ret = QSslKey(dev, QSsl::Dsa, QSsl::Pem);
-    if (ret.isNull()) ret = QSslKey(dev, QSsl::Ec, QSsl::Pem);
-    if (ret.isNull()) ret = QSslKey(dev, QSsl::Opaque, QSsl::Pem);
-
-    if (ret.isNull()) ret = QSslKey(dev, QSsl::Rsa, QSsl::Der);
-    if (ret.isNull()) ret = QSslKey(dev, QSsl::Dsa, QSsl::Der);
-    if (ret.isNull()) ret = QSslKey(dev, QSsl::Ec, QSsl::Der);
-    if (ret.isNull()) ret = QSslKey(dev, QSsl::Opaque, QSsl::Der);
-
-    return ret;
-}
-
-QSslCertificate toSSLCert(const QByteArray &data)
-{
-    QSslCertificate ret(data, QSsl::Pem);
-
-    if (ret.isNull()) ret = QSslCertificate(data, QSsl::Der);
-
-    return ret;
-}
-
-QSslCertificate toSSLCert(QIODevice *dev)
-{
-    QSslCertificate ret(dev, QSsl::Pem);
-
-    if (ret.isNull()) ret = QSslCertificate(dev, QSsl::Der);
-
-    return ret;
+    cert->cleanup();
+    cert->deleteLater();
 }

@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
+#include <openssl/x509v3.h>
 
 #include <QDateTime>
 #include <QCoreApplication>
@@ -32,6 +33,9 @@
 #include <QSslKey>
 
 #include "db.h"
+
+#define DEFAULT_PUB_KEY_NAME  "cert.pem"
+#define DEFAULT_PRIV_KEY_NAME "priv.pem"
 
 class Cert : public QObject
 {
@@ -49,20 +53,11 @@ public:
     explicit Cert(QObject *parent = nullptr);
 };
 
-QByteArray      tempFilePath(const QString &baseName);
-QSslKey         toSSLKey(const QByteArray &data);
-QSslKey         toSSLKey(QIODevice *dev);
-QSslCertificate toSSLCert(const QByteArray &data);
-QSslCertificate toSSLCert(QIODevice *dev);
-long            genSerialViaDateTime();
-bool            genRSAKey(Cert *cert);
-bool            genX509(Cert *cert, const QString &coName);
-bool            writePrivateKey(const char *path, Cert *cert);
-bool            writeX509(const char *path, Cert *cert);
-bool            islocalIP(const QString &coName);
-bool            certExists(const QString &coName);
-bool            getCertAndKey(const QString &coName, QByteArray &cert, QByteArray &privKey);
-void            genNewSSLData(const QString &coName, QByteArray &cert, QByteArray &privKey, bool exists);
-void            genNewSSLData(const QString &coName);
+bool genRSAKey(Cert *cert);
+bool genX509(Cert *cert, const QString &outsideAddr);
+bool writePrivateKey(const char *path, Cert *cert);
+bool writeX509(const char *path, Cert *cert);
+void genDefaultSSLFiles(const QString &outsideAddr);
+void addExt(X509 *cert, int nid, char *value);
 
 #endif // MAKE_CERT_H

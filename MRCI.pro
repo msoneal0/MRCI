@@ -64,8 +64,7 @@ SOURCES += src/main.cpp \
            src/commands/auth.cpp \
            src/commands/acct_recovery.cpp \
            src/commands/table_viewer.cpp \
-           src/commands/fs.cpp \
-           src/commands/certs.cpp
+           src/commands/fs.cpp
 
 HEADERS += \
            src/cmd_object.h \
@@ -91,8 +90,7 @@ HEADERS += \
            src/commands/auth.h \
            src/commands/acct_recovery.h \
            src/commands/table_viewer.h \
-           src/commands/fs.h \
-           src/commands/certs.h
+           src/commands/fs.h
 
 RESOURCES += \
              cmd_docs.qrc

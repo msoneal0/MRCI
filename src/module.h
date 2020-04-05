@@ -28,7 +28,6 @@
 #include "commands/cmd_ranks.h"
 #include "commands/acct_recovery.h"
 #include "commands/fs.h"
-#include "commands/certs.h"
 #include "commands/p2p.h"
 #include "commands/channels.h"
 

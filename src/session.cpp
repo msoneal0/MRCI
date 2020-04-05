@@ -336,8 +336,7 @@ void Session::dataFromClient()
             {
                 wrStringToBlock(fromTEXT(tcpSocket->read(BLKSIZE_APP_NAME)).trimmed(), appName, BLKSIZE_APP_NAME);
 
-                auto coName = fromTEXT(tcpSocket->read(272)).trimmed();
-                auto ver    = QCoreApplication::applicationVersion().split('.');
+                auto ver = QCoreApplication::applicationVersion().split('.');
 
                 QByteArray servHeader;
 
@@ -352,15 +351,15 @@ void Session::dataFromClient()
 
                 if (tcpSocket->peerAddress().isLoopback())
                 {
-                    // SSL encryption is optional for locally connected clients
-                    // so sesOk() can be called right away instead of starting
-                    // an SSL handshake.
+                    servHeader[0] = 1;
 
                     // reply value 1 means the client needs to take no further
                     // action, just await a message from the ASYNC_RDY async
                     // command id.
 
-                    servHeader[0] = 1;
+                    // SSL encryption is optional for locally connected clients
+                    // so sesOk() can be called right away instead of starting
+                    // an SSL handshake.
 
                     tcpSocket->write(servHeader);
 
@@ -368,42 +367,20 @@ void Session::dataFromClient()
                 }
                 else
                 {
-                    QByteArray certBa;
-                    QByteArray privBa;
+                    servHeader[0] = 2;
 
-                    if (getCertAndKey(coName, certBa, privBa))
-                    {
-                        servHeader[0] = 2;
+                    // reply value 2 means the host will now send a STARTTLS
+                    // signal to begin the SSL handshake. the client will
+                    // likely have to do the same. a ASYNC_RDY async will not
+                    // get sent until the handshake is successful.
 
-                        // reply value 2 means the client version is acceptable
-                        // but the host will now send it's Pem formatted SSL cert
-                        // data in a HOST_CERT mrci frame just after sending it's
-                        // header.
+                    auto pubKey  = expandEnvVariables(qEnvironmentVariable(ENV_PUB_KEY, DEFAULT_PUB_KEY_NAME));
+                    auto privKey = expandEnvVariables(qEnvironmentVariable(ENV_PRIV_KEY, DEFAULT_PRIV_KEY_NAME));
 
-                        // the client must use this cert and send a STARTTLS
-                        // signal when ready.
-
-                        tcpSocket->setLocalCertificate(toSSLCert(certBa));
-                        tcpSocket->setPrivateKey(toSSLKey(privBa));
-                        tcpSocket->write(servHeader);
-
-                        dataToClient(ASYNC_SYS_MSG, certBa, HOST_CERT);
-
-                        tcpSocket->startServerEncryption();
-                    }
-                    else
-                    {
-                        servHeader[0] = 4;
-
-                        // reply value 4 means the host was unable to load the
-                        // SSL cert associated with the common name sent by the
-                        // client. the session will lock out and auto close at
-                        // this point.
-
-                        tcpSocket->write(servHeader);
-
-                        endSession();
-                    }
+                    tcpSocket->setLocalCertificate(pubKey);
+                    tcpSocket->setPrivateKey(privKey);
+                    tcpSocket->write(servHeader);
+                    tcpSocket->startServerEncryption();
                 }
             }
             else

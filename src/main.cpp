@@ -47,22 +47,30 @@ void showHelp()
     txtOut << "" << endl << APP_NAME << " v" << QCoreApplication::applicationVersion() << endl << endl;
     txtOut << "Usage: " << APP_TARGET << " <argument>" << endl << endl;
     txtOut << "<Arguments>" << endl << endl;
-    txtOut << " -help                   : display usage information about this application." << endl;
-    txtOut << " -stop                   : stop the current host instance if one is currently running." << endl;
-    txtOut << " -about                  : display versioning/warranty information about this application." << endl;
-    txtOut << " -addr {ip_address:port} : set the listening address and port for TCP clients." << endl;
-    txtOut << " -status                 : display status information about the host instance if it is currently running." << endl;
-    txtOut << " -reset_root             : reset the root account password to the default password." << endl;
-    txtOut << " -host                   : start a new host instance. (this blocks)" << endl;
-    txtOut << " -default_pw             : show the default password." << endl;
-    txtOut << " -public_cmds            : run the internal module to list it's public commands. for internal use only." << endl;
-    txtOut << " -exempt_cmds            : run the internal module to list it's rank exempt commands. for internal use only." << endl;
-    txtOut << " -user_cmds              : run the internal module to list it's user commands. for internal use only." << endl;
-    txtOut << " -run_cmd {command_name} : run an internal module command. for internal use only." << endl << endl;
+    txtOut << " -help        : display usage information about this application." << endl;
+    txtOut << " -stop        : stop the current host instance if one is currently running." << endl;
+    txtOut << " -about       : display versioning/warranty information about this application." << endl;
+    txtOut << " -addr        : set the listening address and port for TCP clients." << endl;
+    txtOut << " -status      : display status information about the host instance if it is currently running." << endl;
+    txtOut << " -reset_root  : reset the root account password to the default password." << endl;
+    txtOut << " -host        : start a new host instance. (this blocks)" << endl;
+    txtOut << " -default_pw  : show the default password." << endl;
+    txtOut << " -public_cmds : run the internal module to list it's public commands. for internal use only." << endl;
+    txtOut << " -exempt_cmds : run the internal module to list it's rank exempt commands. for internal use only." << endl;
+    txtOut << " -user_cmds   : run the internal module to list it's user commands. for internal use only." << endl;
+    txtOut << " -run_cmd     : run an internal module command. for internal use only." << endl;
+    txtOut << " -add_cert    : add/update an SSL certificate for a given common name." << endl;
+    txtOut << " -rm_cert     : remove an SSL certificate for a given common name." << endl << endl;
     txtOut << "Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:" << endl << endl;
-    txtOut << " -pipe {pipe_name/path} : the named pipe used to establish a data connection with the session." << endl;
-    txtOut << " -mem_ses {key_name}    : the shared memory key for the session." << endl;
-    txtOut << " -mem_host {key_name}   : the shared memory key for the host main process." << endl << endl;
+    txtOut << " -pipe     : the named pipe used to establish a data connection with the session." << endl;
+    txtOut << " -mem_ses  : the shared memory key for the session." << endl;
+    txtOut << " -mem_host : the shared memory key for the host main process." << endl << endl;
+    txtOut << "Details:" << endl << endl;
+    txtOut << "addr     - this argument takes a {ip_address:port} string. it will return an error if not formatted correctly" << endl;
+    txtOut << "           examples: 10.102.9.2:35516 or 0.0.0.0:35516." << endl << endl;
+    txtOut << "run_cmd  - this argument is used by the host itself, along side the internal module arguments below to run" << endl;
+    txtOut << "           the internal command names passed by it. this is not ment to be run directly by human input." << endl;
+    txtOut << "           the executable will auto close if it fails to connect to the pipe and/or shared memory segments" << endl << endl;
 }
 
 void soeDueToDbErr(int *retCode, const QString *errMsg)
@@ -110,9 +118,9 @@ int main(int argc, char *argv[])
 
     qInstallMessageHandler(msgHandler);
 
-    //args.append("-host"); // debug
+    //args.append("-add_cert -name test"); // debug
 
-    if (args.contains("-help", Qt::CaseInsensitive))
+    if (args.contains("-help", Qt::CaseInsensitive) || args.size() == 1)
     {
         showHelp();
     }
@@ -122,68 +130,58 @@ int main(int argc, char *argv[])
         QTextStream(stdout) << "Based on QT " << QT_VERSION_STR << " " << 8 * QT_POINTER_SIZE << "bit" << endl << endl;
         QTextStream(stdout) << "The program is provided AS IS with NO WARRANTY OF ANY KIND, INCLUDING THE" << endl;
         QTextStream(stdout) << "WARRANTY OF DESIGN, MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE." << endl << endl;
-
     }
-    else if (args.contains("-default_pw", Qt::CaseInsensitive))
+    else if (args.contains("-stop", Qt::CaseInsensitive) || args.contains("-status", Qt::CaseInsensitive))
     {
-        QTextStream(stdout) << "" << endl << " Root User       : " << getUserName(rootUserId()) << endl;
-        QTextStream(stdout) << " Default Password: " << defaultPw() << endl << endl;
+        ret = shellToHost(args, app);
     }
-    else if (args.contains("-addr", Qt::CaseInsensitive))
+    else if (setupDb(&err))
     {
-        auto params = getParam("-addr", args);
-        auto addr   = params.split(':');
-
-        ret = 128;
-
-        if (!setupDb(&err))
+        if (args.contains("-addr", Qt::CaseInsensitive))
         {
-            soeDueToDbErr(&ret, &err);
-        }
-        else if (addr.size() != 2)
-        {
-            QTextStream(stderr) << "" << endl << "err: Address string parsing error, number of params found: " << addr.size() << endl;
-        }
-        else
-        {
-            bool   pOk;
-            ushort port = addr[1].toUShort(&pOk);
+            auto params = getParam("-addr", args);
+            auto addr   = params.split(':');
 
-            if (!pOk)
+            ret = 128;
+
+            if (addr.size() != 2)
             {
-                QTextStream(stderr) << "" << endl << "err: Invalid port." << endl;
-            }
-            else if (port == 0)
-            {
-                QTextStream(stderr) << "" << endl << "err: The port cannot be 0." << endl;
-            }
-            else if (QHostAddress(addr[0]).isNull())
-            {
-                QTextStream(stderr) << "" << endl << "err: Invalid ip address." << endl;
+                QTextStream(stderr) << "" << endl << "err: Address string parsing error, number of params found: " << addr.size() << endl;
             }
             else
             {
-                ret = 0;
+                bool pOk;
+                auto port = addr[1].toUShort(&pOk);
 
-                Query db(&app);
+                if (!pOk)
+                {
+                    QTextStream(stderr) << "" << endl << "err: Invalid port." << endl;
+                }
+                else if (port == 0)
+                {
+                    QTextStream(stderr) << "" << endl << "err: The port cannot be 0." << endl;
+                }
+                else if (QHostAddress(addr[0]).isNull())
+                {
+                    QTextStream(stderr) << "" << endl << "err: Invalid ip address." << endl;
+                }
+                else
+                {
+                    ret = 0;
 
-                db.setType(Query::UPDATE, TABLE_SERV_SETTINGS);
-                db.addColumn(COLUMN_IPADDR, addr[0]);
-                db.addColumn(COLUMN_PORT, port);
-                db.exec();
+                    Query db(&app);
+
+                    db.setType(Query::UPDATE, TABLE_SERV_SETTINGS);
+                    db.addColumn(COLUMN_IPADDR, addr[0]);
+                    db.addColumn(COLUMN_PORT, port);
+                    db.exec();
+                }
             }
         }
-    }
-    else if (args.contains("-run_cmd", Qt::CaseInsensitive)     ||
-             args.contains("-public_cmds", Qt::CaseInsensitive) ||
-             args.contains("-exempt_cmds", Qt::CaseInsensitive) ||
-             args.contains("-user_cmds", Qt::CaseInsensitive))
-    {
-        if (!setupDb(&err))
-        {
-            soeDueToDbErr(&ret, &err);
-        }
-        else
+        else if (args.contains("-run_cmd", Qt::CaseInsensitive)     ||
+                 args.contains("-public_cmds", Qt::CaseInsensitive) ||
+                 args.contains("-exempt_cmds", Qt::CaseInsensitive) ||
+                 args.contains("-user_cmds", Qt::CaseInsensitive))
         {
             auto *mod = new Module(&app);
 
@@ -192,14 +190,7 @@ int main(int argc, char *argv[])
                 ret = QCoreApplication::exec();
             }
         }
-    }
-    else if (args.contains("-host", Qt::CaseInsensitive))
-    {
-        if (!setupDb(&err))
-        {
-            soeDueToDbErr(&ret, &err);
-        }
-        else
+        else if (args.contains("-host", Qt::CaseInsensitive))
         {
             auto *serv = new TCPServer(&app);
 
@@ -208,18 +199,7 @@ int main(int argc, char *argv[])
                 ret = QCoreApplication::exec();
             }
         }
-    }
-    else if (args.contains("-stop", Qt::CaseInsensitive) || args.contains("-status", Qt::CaseInsensitive))
-    {
-        ret = shellToHost(args, app);
-    }
-    else if (args.contains("-reset_root", Qt::CaseInsensitive))
-    {
-        if (!setupDb(&err))
-        {
-            soeDueToDbErr(&ret, &err);
-        }
-        else
+        else if (args.contains("-reset_root", Qt::CaseInsensitive))
         {
             auto uId = rootUserId();
 
@@ -232,10 +212,15 @@ int main(int argc, char *argv[])
 
             updatePassword(uId, defaultPw(), TABLE_USERS, true);
         }
+        else if (args.contains("-default_pw", Qt::CaseInsensitive))
+        {
+            QTextStream(stdout) << "" << endl << " Root User       : " << getUserName(rootUserId()) << endl;
+            QTextStream(stdout) << " Default Password: " << defaultPw() << endl << endl;
+        }
     }
     else
     {
-        showHelp();
+        soeDueToDbErr(&ret, &err);
     }
 
     cleanupDbConnection();

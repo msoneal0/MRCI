@@ -82,10 +82,6 @@ QStringList Module::userCmdList()
     ret << MakePath::cmdName();
     ret << ChangeDir::cmdName();
     ret << ListDBG::cmdName();
-    ret << ListCerts::cmdName();
-    ret << CertInfo::cmdName();
-    ret << AddCert::cmdName();
-    ret << RemoveCert::cmdName();
     ret << ToPeer::cmdName();
     ret << LsP2P::cmdName();
     ret << P2POpen::cmdName();
@@ -211,10 +207,6 @@ bool Module::runCmd(const QString &name)
         else if (noCaseMatch(name, MakePath::cmdName()))              new MakePath(this);
         else if (noCaseMatch(name, ChangeDir::cmdName()))             new ChangeDir(this);
         else if (noCaseMatch(name, ListDBG::cmdName()))               new ListDBG(this);
-        else if (noCaseMatch(name, ListCerts::cmdName()))             new ListCerts(this);
-        else if (noCaseMatch(name, CertInfo::cmdName()))              new CertInfo(this);
-        else if (noCaseMatch(name, AddCert::cmdName()))               new AddCert(this);
-        else if (noCaseMatch(name, RemoveCert::cmdName()))            new RemoveCert(this);
         else if (noCaseMatch(name, ToPeer::cmdName()))                new ToPeer(this);
         else if (noCaseMatch(name, LsP2P::cmdName()))                 new LsP2P(this);
         else if (noCaseMatch(name, P2POpen::cmdName()))               new P2POpen(this);

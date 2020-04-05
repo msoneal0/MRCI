@@ -10,7 +10,6 @@ enum TypeID : quint8
     ERR            = 3,
     PRIV_TEXT      = 4,
     IDLE           = 5,
-    HOST_CERT      = 6,
     FILE_INFO      = 7,
     PEER_INFO      = 8,
     MY_INFO        = 9,
@@ -113,10 +112,7 @@ This works similarly to TERM_CMD except it will also terminate the module proces
 This type id doesn't carry any actual data, instead can be used to tell the host to pause/yield the command id and branch id that was used to send it. All modules are not obligated to support this feature but it is highly recommended to do so.
 
 ```RESUME_CMD```
-This is the other half of YIELD_CMD that tells the host to resume the command that was running. 
-
-```HOST_CERT```
-Just as the name implies, this data type is used by the host to send the host SSL certificate while setting up an SSL connection.
+This is the other half of YIELD_CMD that tells the host to resume the command that was running.
 
 ```HOST_VER```
 This data structure carries 4 numeric values that represent the host version as described in section [1.3](protocol.md).
