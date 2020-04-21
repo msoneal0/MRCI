@@ -35,14 +35,20 @@ private:
     QLocalServer          *controlPipe;
     QLocalSocket          *controlSocket;
     char                  *hostLoad;
+    QList<QSslCertificate> sslChain;
+    QSslKey                sslKey;
     QString                controlPipePath;
     QString                hostKey;
+    QString                wanIP;
     quint32                maxSessions;
     quint32                flags;
 
-    bool servOverloaded();
-    bool createPipe();
-    void incomingConnection(qintptr socketDescriptor);
+    QString loadSSLData(bool onReload);
+    bool    servOverloaded();
+    bool    createPipe();
+    void    applyPrivKey(const QString &path, QTextStream &msg);
+    void    applyCerts(const QStringList &list, QTextStream &msg);
+    void    incomingConnection(qintptr socketDescriptor);
 
 private slots:
 

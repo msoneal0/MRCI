@@ -83,7 +83,9 @@ bool TCPServer::createPipe()
 
 void TCPServer::replyFromIpify(QNetworkReply *reply)
 {
-    genDefaultSSLFiles(reply->readAll());
+    wanIP = reply->readAll();
+
+    loadSSLData(false);
 
     reply->deleteLater();
 }
@@ -100,8 +102,6 @@ bool TCPServer::start()
     db.addColumn(COLUMN_IPADDR);
     db.addColumn(COLUMN_MAXSESSIONS);
     db.exec();
-
-    qNam->get(QNetworkRequest(QUrl("https://api.ipify.org")));
 
     maxSessions = db.getData(COLUMN_MAXSESSIONS).toUInt();
 
@@ -126,6 +126,8 @@ bool TCPServer::start()
     }
     else
     {
+        qNam->get(QNetworkRequest(QUrl("https://api.ipify.org")));
+
         ret    = true;
         flags |= ACCEPTING;
     }
@@ -217,6 +219,10 @@ void TCPServer::procPipeIn()
 
         controlSocket->write(toTEXT("\n"));
     }
+    else if (args.contains("-load_ssl", Qt::CaseInsensitive))
+    {
+        controlSocket->write(toTEXT(loadSSLData(true)));
+    }
     else if (args.contains("-status", Qt::CaseInsensitive))
     {
         QString     text;
@@ -237,7 +243,10 @@ void TCPServer::procPipeIn()
         txtOut << "Active Port:    " << serverPort() << endl;
         txtOut << "Set Address:    " << db.getData(COLUMN_IPADDR).toString() << endl;
         txtOut << "Set Port:       " << db.getData(COLUMN_PORT).toUInt() << endl;
-        txtOut << "Database Path:  " << sqlDataPath() << endl << endl;
+        txtOut << "Working Path:   " << QDir::currentPath() << endl;
+        txtOut << "Database:       " << sqlDataPath() << endl;
+        txtOut << "SSL Chain:      " << sslCertChain() << endl;
+        txtOut << "SSL Private:    " << sslPrivKey() << endl << endl;
 
         hostSharedMem->unlock();
         controlSocket->write(toTEXT(text));
@@ -277,7 +286,7 @@ void TCPServer::incomingConnection(qintptr socketDescriptor)
         soc->setSocketOption(QAbstractSocket::ReceiveBufferSizeSocketOption, buffSize);
         soc->setSocketOption(QAbstractSocket::SendBufferSizeSocketOption, buffSize);
 
-        auto *ses = new Session(hostKey, soc, nullptr);
+        auto *ses = new Session(hostKey, soc, &sslKey, &sslChain, nullptr);
         auto *thr = new QThread(nullptr);
 
         connect(thr, &QThread::finished, soc, &QSslSocket::deleteLater);
@@ -307,4 +316,138 @@ void TCPServer::incomingConnection(qintptr socketDescriptor)
 
         hostSharedMem->unlock();
     }
+}
+
+void TCPServer::applyPrivKey(const QString &path, QTextStream &msg)
+{
+    auto bytes = rdFileContents(path, msg);
+
+    if (!bytes.isEmpty())
+    {
+        msg << "Attempting to load the private key with RSA. ";
+
+        QSslKey key(bytes, QSsl::Rsa);
+
+        if (key.isNull())
+        {
+            msg << "[fail]" << endl;
+            msg << "Attempting to load the private key with DSA. ";
+
+            key = QSslKey(bytes, QSsl::Dsa);
+        }
+
+        if (key.isNull())
+        {
+            msg << "[fail]" << endl;
+            msg << "Attempting to load the private key with Elliptic Curve. ";
+
+            key = QSslKey(bytes, QSsl::Ec);
+        }
+
+        if (key.isNull())
+        {
+            msg << "[fail]" << endl;
+            msg << "Attempting to load the private key with Diffie-Hellman. ";
+
+            key = QSslKey(bytes, QSsl::Dh);
+        }
+
+        if (key.isNull())
+        {
+            msg << "[fail]" << endl;
+            msg << "Attempting to load the private key as a black box. ";
+
+            key = QSslKey(bytes, QSsl::Opaque);
+        }
+
+        if (key.isNull())
+        {
+            msg << "[fail]" << endl << endl;
+        }
+        else
+        {
+            msg << "[pass]" << endl << endl;
+
+            sslKey = key;
+        }
+    }
+}
+
+void TCPServer::applyCerts(const QStringList &list, QTextStream &msg)
+{
+    sslChain.clear();
+
+    for (auto file : list)
+    {
+        sslChain.append(QSslCertificate(rdFileContents(file, msg)));
+    }
+}
+
+QString TCPServer::loadSSLData(bool onReload)
+{
+    QString     txtMsg;
+    QTextStream stream(&txtMsg);
+
+    auto chain          = sslCertChain().split(":");
+    auto priv           = sslPrivKey();
+    auto allCertsExists = true;
+    auto privKeyExists  = QFile::exists(priv);
+
+    stream << "Private key: " << priv << endl;
+
+    if (!privKeyExists)
+    {
+        stream << "    ^(the private key does not exists)" << endl;
+    }
+
+    for (auto cert : chain)
+    {
+        stream << "Cert:        " << cert << endl;
+
+        if (!QFile::exists(cert))
+        {
+            stream << "    ^(this cert does not exists)" << endl;
+
+            allCertsExists = false;
+        }
+    }
+
+    if (chain.isEmpty())
+    {
+        stream << "No cert files are defined in the env." << endl;
+
+        allCertsExists = false;
+    }
+
+    stream << endl;
+
+    if (allCertsExists && privKeyExists)
+    {
+        if (onReload && (priv == DEFAULT_PRIV_KEY_NAME) && (sslCertChain() == DEFAULT_PUB_KEY_NAME))
+        {
+            stream << "Re-generating self-signed cert." << endl;
+
+            if (genDefaultSSLFiles(wanIP, stream))
+            {
+                stream << endl << "complete." << endl << endl;
+            }
+        }
+
+        applyPrivKey(priv, stream);
+        applyCerts(chain, stream);
+    }
+    else if ((priv == DEFAULT_PRIV_KEY_NAME) && (sslCertChain() == DEFAULT_PUB_KEY_NAME))
+    {
+        stream << "Generating self-signed cert." << endl;
+
+        if (genDefaultSSLFiles(wanIP, stream))
+        {
+            stream << endl << "The default self-signed cert files are generated successfully." << endl << endl;
+
+            applyPrivKey(priv, stream);
+            applyCerts(chain, stream);
+        }
+    }
+
+    return txtMsg;
 }

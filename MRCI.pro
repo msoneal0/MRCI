@@ -27,7 +27,10 @@ QT += sql
 CONFIG += console
 CONFIG -= app_bundle
 
-TARGET = mrci
+TARGET      = build/mrci
+OBJECTS_DIR = build
+MOC_DIR     = build
+RCC_DIR     = build
 
 win32 {
 

@@ -78,16 +78,7 @@ QByteArray genUniqueHash()
 
 QString sqlDataPath()
 {
-    QString ret = qEnvironmentVariable(ENV_DB_PATH, DEFAULT_DB_PATH);
-
-    ret = expandEnvVariables(ret);
-
-    QFileInfo info(ret);
-    QDir      dir(info.path());
-
-    if (!dir.exists()) dir.mkpath(info.path());
-
-    return ret;
+    return expandEnvVariables(qEnvironmentVariable(ENV_DB_PATH, DEFAULT_DB_FILE));
 }
 
 QList<int> genSequence(int min, int max, int len)
@@ -395,9 +386,9 @@ QString Query::errDetail()
 
     txtOut << "     driver error: " << errTxt << endl;
     txtOut << "     query:        " << qStr << jStr << wStr << limit << endl;
-    txtOut << "     db path:      " << sqlDataPath() << endl;
+    txtOut << "     database:     " << sqlDataPath() << endl;
 
-    QFileInfo info = QFileInfo(QFileInfo(sqlDataPath()).path());
+    auto info = QFileInfo(QFileInfo(sqlDataPath()).path());
 
     if (!info.isReadable())
     {

@@ -126,7 +126,8 @@ void ServSettings::printSettings()
     txtOut << "Maximum Sub-Channels:           " << db.getData(COLUMN_MAX_SUB_CH).toUInt()  << endl;
     txtOut << "Initial Host Rank:              " << db.getData(COLUMN_INITRANK).toUInt()    << endl;
     txtOut << "Root User:                      " << getUserName(rootUserId())               << endl;
-    txtOut << "Database Path:                  " << sqlDataPath()                           << endl;
+    txtOut << "Working Path:                   " << QDir::currentPath()                     << endl;
+    txtOut << "Database:                       " << sqlDataPath()                           << endl;
     txtOut << "Mailer Executable:              " << db.getData(COLUMN_MAILERBIN).toString() << endl;
     txtOut << "Mailer Command:                 " << db.getData(COLUMN_MAIL_SEND).toString() << endl << endl;
 

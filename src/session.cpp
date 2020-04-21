@@ -25,11 +25,13 @@ QByteArray wrFrame(quint32 cmdId, const QByteArray &data, uchar dType)
     return typeBa + cmdBa + sizeBa + data;
 }
 
-Session::Session(const QString &hostKey, QSslSocket *tcp, QObject *parent) : MemShare(parent)
+Session::Session(const QString &hostKey, QSslSocket *tcp, QSslKey *privKey, QList<QSslCertificate> *chain, QObject *parent) : MemShare(parent)
 {
     currentDir     = QDir::currentPath();
     hostMemKey     = hostKey;
     tcpSocket      = tcp;
+    sslKey         = privKey;
+    sslChain       = chain;
     hookCmdId32    = 0;
     tcpFrameCmdId  = 0;
     tcpPayloadSize = 0;
@@ -374,11 +376,8 @@ void Session::dataFromClient()
                     // likely have to do the same. a ASYNC_RDY async will not
                     // get sent until the handshake is successful.
 
-                    auto pubKey  = expandEnvVariables(qEnvironmentVariable(ENV_PUB_KEY, DEFAULT_PUB_KEY_NAME));
-                    auto privKey = expandEnvVariables(qEnvironmentVariable(ENV_PRIV_KEY, DEFAULT_PRIV_KEY_NAME));
-
-                    tcpSocket->setLocalCertificate(pubKey);
-                    tcpSocket->setPrivateKey(privKey);
+                    tcpSocket->setLocalCertificateChain(*sslChain);
+                    tcpSocket->setPrivateKey(*sslKey);
                     tcpSocket->write(servHeader);
                     tcpSocket->startServerEncryption();
                 }

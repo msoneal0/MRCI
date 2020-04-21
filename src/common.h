@@ -234,6 +234,7 @@ class Session;
 QByteArray  toTEXT(const QString &txt);
 QByteArray  fixedToTEXT(const QString &txt, int len);
 QByteArray  nullTermTEXT(const QString &txt);
+QByteArray  rdFileContents(const QString &path, QTextStream &msg);
 quint32     toCmdId32(quint16 cmdId, quint16 branchId);
 quint16     toCmdId16(quint32 id);
 void        serializeThread(QThread *thr);
@@ -286,6 +287,8 @@ QString     getParam(const QString &key, const QStringList &args);
 QString     escapeChars(const QString &str, const QChar &escapeChr, const QChar &chr);
 QString     genSerialNumber();
 QString     defaultPw();
+QString     sslCertChain();
+QString     sslPrivKey();
 QStringList parseArgs(const QByteArray &data, int maxArgs, int *pos = nullptr);
 
 //---------------------------

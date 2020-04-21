@@ -31,7 +31,7 @@ void Cert::cleanup()
     BN_free(bne);
 }
 
-bool genRSAKey(Cert *cert)
+bool genRSAKey(Cert *cert, QTextStream &msg)
 {
     bool ret = false;
 
@@ -45,14 +45,30 @@ bool genRSAKey(Cert *cert)
                 {
                     ret = true;
                 }
+                else
+                {
+                    msg << "Failed to assign the generated RSA key to a PKEY object." << endl;
+                }
+            }
+            else
+            {
+                msg << "Failed to generate the RSA private key." << endl;
             }
         }
+        else
+        {
+            msg << "Failed to initialize a BIGNUM object needed to generate the RSA key." << endl;
+        }
+    }
+    else
+    {
+        msg << "The x509 object did not initialize correctly." << endl;
     }
 
     return ret;
 }
 
-bool genX509(Cert *cert, const QString &outsideAddr)
+bool genX509(Cert *cert, const QString &outsideAddr, QTextStream &msg)
 {
     auto ret        = false;
     auto interfaces = QNetworkInterface::allAddresses();
@@ -61,6 +77,8 @@ bool genX509(Cert *cert, const QString &outsideAddr)
 
     if (!outsideAddr.isEmpty())
     {
+        msg << "x509 gen_wan_ip: " << outsideAddr << endl;
+
         cnNames.append(outsideAddr.toUtf8());
     }
 
@@ -68,6 +86,8 @@ bool genX509(Cert *cert, const QString &outsideAddr)
     {
         if (addr.isGlobal())
         {
+            msg << "x509 gen_lan_ip: " << addr.toString() << endl;
+
             cnNames.append(addr.toString().toUtf8());
         }
     }
@@ -111,6 +131,14 @@ bool genX509(Cert *cert, const QString &outsideAddr)
         {
             ret = true;
         }
+        else
+        {
+            msg << "Failed to self-sign the generated x509 cert." << endl;
+        }
+    }
+    else
+    {
+        msg << "No usable IP addresses could be found to be used as common names in the self-signed cert." << endl;
     }
 
     return ret;
@@ -127,14 +155,38 @@ void addExt(X509 *cert, int nid, char *value)
     }
 }
 
-bool writePrivateKey(const char *path, Cert* cert)
+FILE *openFileForWrite(const char *path, QTextStream &msg)
+{
+    auto file = fopen(path, "wb");
+
+    if (!file)
+    {
+        msg << "Cannot open file: '" << path << "' for writing. "  << strerror(errno);
+    }
+
+    return file;
+}
+
+void encodeErr(const char *path, QTextStream &msg)
+{
+    msg << "Failed to encode file '" << path << "' to PEM format." << endl;
+}
+
+bool writePrivateKey(const char *path, Cert* cert, QTextStream &msg)
 {
     auto  ret  = false;
-    auto *file = fopen(path, "wb");
+    FILE *file = openFileForWrite(path, msg);
 
     if (file)
     {
-        ret = PEM_write_PrivateKey(file, cert->pKey, NULL, NULL, 0, NULL, NULL);
+        if (PEM_write_PrivateKey(file, cert->pKey, NULL, NULL, 0, NULL, NULL))
+        {
+            ret = true;
+        }
+        else
+        {
+            encodeErr(path, msg);
+        }
     }
 
     fclose(file);
@@ -142,14 +194,21 @@ bool writePrivateKey(const char *path, Cert* cert)
     return ret;
 }
 
-bool writeX509(const char *path, Cert *cert)
+bool writeX509(const char *path, Cert *cert, QTextStream &msg)
 {
     auto  ret  = false;
-    auto *file = fopen(path, "wb");
+    FILE *file = openFileForWrite(path, msg);
 
     if (file)
     {
-        ret = PEM_write_X509(file, cert->x509);
+        if (PEM_write_X509(file, cert->x509))
+        {
+            ret = true;
+        }
+        else
+        {
+            encodeErr(path, msg);
+        }
     }
 
     fclose(file);
@@ -157,15 +216,17 @@ bool writeX509(const char *path, Cert *cert)
     return ret;
 }
 
-void genDefaultSSLFiles(const QString &outsideAddr)
+bool genDefaultSSLFiles(const QString &outsideAddr, QTextStream &msg)
 {
     auto *cert = new Cert();
+    auto  ret  = genRSAKey(cert, msg);
 
-    genRSAKey(cert);
-    genX509(cert, outsideAddr);
-    writePrivateKey(DEFAULT_PRIV_KEY_NAME, cert);
-    writeX509(DEFAULT_PUB_KEY_NAME, cert);
+    if (ret) ret = genX509(cert, outsideAddr, msg);
+    if (ret) ret = writePrivateKey(DEFAULT_PRIV_KEY_NAME, cert, msg);
+    if (ret) ret = writeX509(DEFAULT_PUB_KEY_NAME, cert, msg);
 
     cert->cleanup();
     cert->deleteLater();
+
+    return ret;
 }

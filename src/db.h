@@ -37,21 +37,19 @@
 #include "shell.h"
 
 #define APP_NAME   "MRCI"
-#define APP_VER    "3.2.1.0"
+#define APP_VER    "3.3.1.0"
 #define APP_TARGET "mrci"
 
 #ifdef Q_OS_WIN
 
 #define DEFAULT_MAILBIN   "%COMSPEC%"
 #define DEFAULT_MAIL_SEND "echo %message_body% | mutt -s %subject% %target_email%"
-#define DEFAULT_DB_PATH   "%PROGRAMDATA%\\mrci\\data.db"
 #define DEFAULT_WORK_DIR  "%PROGRAMDATA%\\mrci"
 
 #else
 
 #define DEFAULT_MAILBIN   "/bin/sh"
 #define DEFAULT_MAIL_SEND "-c \"echo %message_body% | mutt -s %subject% %target_email%\""
-#define DEFAULT_DB_PATH   "/var/opt/mrci/data.db"
 #define DEFAULT_WORK_DIR  "/var/opt/mrci"
 
 #endif
@@ -67,6 +65,9 @@
 #define TEMP_PW_SUB             "%temp_pw%"
 #define USERNAME_SUB            "%user_name%"
 #define DATE_SUB                "%date%"
+#define DEFAULT_PUB_KEY_NAME    "cert.pem"
+#define DEFAULT_PRIV_KEY_NAME   "priv.pem"
+#define DEFAULT_DB_FILE         "data.db"
 #define DEFAULT_ROOT_USER       "root"
 #define DEFAULT_CONFIRM_SUBJECT "Email Verification"
 #define DEFAULT_TEMP_PW_SUBJECT "Password Reset"

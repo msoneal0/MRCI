@@ -31,6 +31,8 @@ class Session : public MemShare
 private:
 
     QSslSocket                        *tcpSocket;
+    QList<QSslCertificate>            *sslChain;
+    QSslKey                           *sslKey;
     QString                            currentDir;
     QHash<QString, QStringList>        modCmdNames;
     QHash<quint32, QList<QByteArray> > frameQueue;
@@ -100,7 +102,7 @@ private slots:
 
 public:
 
-    explicit Session(const QString &hostKey, QSslSocket *tcp, QObject *parent = nullptr);
+    explicit Session(const QString &hostKey, QSslSocket *tcp, QSslKey *privKey, QList<QSslCertificate> *chain, QObject *parent = nullptr);
 
 public slots:
 

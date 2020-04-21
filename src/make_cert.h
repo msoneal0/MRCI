@@ -34,9 +34,6 @@
 
 #include "db.h"
 
-#define DEFAULT_PUB_KEY_NAME  "cert.pem"
-#define DEFAULT_PRIV_KEY_NAME "priv.pem"
-
 class Cert : public QObject
 {
     Q_OBJECT
@@ -53,11 +50,13 @@ public:
     explicit Cert(QObject *parent = nullptr);
 };
 
-bool genRSAKey(Cert *cert);
-bool genX509(Cert *cert, const QString &outsideAddr);
-bool writePrivateKey(const char *path, Cert *cert);
-bool writeX509(const char *path, Cert *cert);
-void genDefaultSSLFiles(const QString &outsideAddr);
-void addExt(X509 *cert, int nid, char *value);
+FILE *openFileForWrite(const char *path, QTextStream &msg);
+bool  genRSAKey(Cert *cert, QTextStream &msg);
+bool  genX509(Cert *cert, const QString &outsideAddr, QTextStream &msg);
+bool  writePrivateKey(const char *path, Cert *cert, QTextStream &msg);
+bool  writeX509(const char *path, Cert *cert, QTextStream &msg);
+bool  genDefaultSSLFiles(const QString &outsideAddr, QTextStream &msg);
+void  addExt(X509 *cert, int nid, char *value);
+void  encodeErr(const char *path, QTextStream &msg);
 
 #endif // MAKE_CERT_H

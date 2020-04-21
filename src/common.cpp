@@ -16,6 +16,47 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
+QString sslCertChain()
+{
+    return expandEnvVariables(qEnvironmentVariable(ENV_PUB_KEY, DEFAULT_PUB_KEY_NAME));
+}
+
+QString sslPrivKey()
+{
+    return expandEnvVariables(qEnvironmentVariable(ENV_PRIV_KEY, DEFAULT_PRIV_KEY_NAME));
+}
+
+QByteArray rdFileContents(const QString &path, QTextStream &msg)
+{
+    QByteArray ret;
+
+    msg << "Reading file contents: '" << path << "' ";
+
+    QFile file(path);
+
+    if (file.open(QFile::ReadOnly))
+    {
+        ret = file.readAll();
+
+        if (!ret.isEmpty())
+        {
+            msg << "[pass]" << endl;
+        }
+        else
+        {
+            msg << "[fail] (0 bytes of data was read from the file, is it empty?)" << endl;
+        }
+    }
+    else
+    {
+        msg << "[fail] (" << file.errorString() << ")" << endl;
+    }
+
+    file.close();
+
+    return ret;
+}
+
 QString boolStr(bool state)
 {
     QString ret;

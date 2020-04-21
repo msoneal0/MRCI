@@ -59,8 +59,7 @@ void showHelp()
     txtOut << " -exempt_cmds : run the internal module to list it's rank exempt commands. for internal use only." << endl;
     txtOut << " -user_cmds   : run the internal module to list it's user commands. for internal use only." << endl;
     txtOut << " -run_cmd     : run an internal module command. for internal use only." << endl;
-    txtOut << " -add_cert    : add/update an SSL certificate for a given common name." << endl;
-    txtOut << " -rm_cert     : remove an SSL certificate for a given common name." << endl << endl;
+    txtOut << " -load_ssl    : re-load the host SSL certificate without stopping the host instance." << endl << endl;
     txtOut << "Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:" << endl << endl;
     txtOut << " -pipe     : the named pipe used to establish a data connection with the session." << endl;
     txtOut << " -mem_ses  : the shared memory key for the session." << endl;
@@ -110,6 +109,10 @@ int main(int argc, char *argv[])
     auto args    = QCoreApplication::arguments();
     auto ret     = 0;
 
+    QDir dir(workDir);
+
+    if (!dir.exists()) dir.mkpath(workDir);
+
     QDir::setCurrent(workDir);
     QCoreApplication::setApplicationName(APP_NAME);
     QCoreApplication::setApplicationVersion(APP_VER);
@@ -118,7 +121,7 @@ int main(int argc, char *argv[])
 
     qInstallMessageHandler(msgHandler);
 
-    //args.append("-add_cert -name test"); // debug
+    //args.append("-host"); // debug
 
     if (args.contains("-help", Qt::CaseInsensitive) || args.size() == 1)
     {
@@ -131,7 +134,9 @@ int main(int argc, char *argv[])
         QTextStream(stdout) << "The program is provided AS IS with NO WARRANTY OF ANY KIND, INCLUDING THE" << endl;
         QTextStream(stdout) << "WARRANTY OF DESIGN, MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE." << endl << endl;
     }
-    else if (args.contains("-stop", Qt::CaseInsensitive) || args.contains("-status", Qt::CaseInsensitive))
+    else if (args.contains("-stop", Qt::CaseInsensitive)   ||
+             args.contains("-status", Qt::CaseInsensitive) ||
+             args.contains("-load_ssl", Qt::CaseInsensitive))
     {
         ret = shellToHost(args, app);
     }

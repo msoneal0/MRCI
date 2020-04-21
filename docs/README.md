@@ -5,6 +5,8 @@
 ### Usage ###
 
 ```
+Usage: mrci <argument>
+
 <Arguments>
 
  -help        : display usage information about this application.
@@ -19,8 +21,7 @@
  -exempt_cmds : run the internal module to list it's rank exempt commands. for internal use only.
  -user_cmds   : run the internal module to list it's user commands. for internal use only.
  -run_cmd     : run an internal module command. for internal use only.
- -add_cert    : add/update an SSL certificate for a given common name.
- -rm_cert     : remove an SSL certificate for a given common name.
+ -load_ssl    : re-load the host SSL certificate without stopping the host instance.
 
 Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:
 
@@ -44,7 +45,7 @@ Any one user account registered with the host can be given root privileges which
 
 ### More Than Just a Command Interpreter ###
 
-Typical use for a MRCI host is to run commands that clients ask it to run, very similar to what you see in terminal emulators. It however does have a few feasures typically not seen in local terminals:
+Typical use for a MRCI host is to run commands on a remote host that clients ask it to run, very similar to what you see in remote terminal emulators. It however does have a few feasures typically not seen in terminals:
 
 * Broadcast any type of data to all peers connected to the host.
 * Run remote commands on connected peers.
@@ -72,38 +73,41 @@ Because the host is modular, the things you can customize it to do is almost lim
 * [6.1 Shared Memory](shared_data.md)
 * [7.1 Internal Commands](intern_commands.md)
 
-### Development Setup ###
+### Build Setup ###
 
-Linux Required Packages:
+For Linux you need the following packages to successfully build/install:
 ```
 qtbase5-dev
 libssl-dev
 gcc
 make
-makeself
+python3
 ```
 
-### Build From Source (Linux) ###
-
-Linux_build.sh is a custom script designed to build this project from the source code using qmake, make and makeself. You can pass 2 optional arguments:
-
-1. The path to the QT bin folder in case you want to compile with a QT install not defined in PATH.
-2. Path of the output makeself file (usually has a .run extension). If not given, the outfile will be named mrci-x.x.x.run in the source code folder.
-
-Build:
+Windows support is still work in progress but the following applications will must likely need to be installed:
 ```
-cd /path/to/source/code
-sh ./linux_build.sh
-```
-Install:
-```
-chmod +x ./mrci-x.x.x.run
-./mrci-x.x.x.run
+OpenSSL
+Qt5.12 or newer
+Python3
 ```
 
-The makeself installer not only installs the application but also installs it as a service if the target linux system supports systemd.
+### Build ###
 
-Start/Stop the service:
+To build this project from source you just need to run the build.py and then the install.py python scripts. While running the build the script, it will try to find the Qt API installed in your machine according to the PATH env variable. If not found, it will ask you to input where it can find the Qt bin folder where the qmake executable exists or you can bypass all of this by passing the -qt_dir option on it's command line.
+
+while running the install script, it will ask you to input 1 of 3 options:
+
+***local machine*** - This option will install the built application onto the local machine without creating an installer.
+
+***create installer*** - This option creates an installer that can be distributed to other machines to installation. The resulting installer is just a regular .py script file that the target machine can run if it has Python3 insalled. Only Python3 needs to be installed and an internet connection is not required.
+
+***exit*** - Cancel the installation.
+
+-local or -installer can be passed as command line options for install.py to explicitly select one of the above options without pausing for user input.
+
+### Services ###
+
+If a target linux system supports systemd, the application will be installed as a background daemon that can start/stop with the following commands:
 ```
 sudo systemctl start mrci
 sudo systemctl stop mrci
