@@ -334,9 +334,17 @@ void Session::dataFromClient()
     {
         if (tcpSocket->bytesAvailable() >= CLIENT_HEADER_LEN)
         {
-            if (tcpSocket->read(4) == QByteArray(SERVER_HEADER_TAG))
+            auto clientHeader = tcpSocket->read(CLIENT_HEADER_LEN);
+
+            // client header format: [4bytes(tag)][134bytes(appName)][272bytes(padding)]
+
+            // tag     = 0x4D, 0x52, 0x43, 0x49 (MRCI)
+            // appName = UTF16LE string (padded with 0x00)
+            // padding = just a string of 0x00 (reserved for future expansion)
+
+            if (clientHeader.startsWith(SERVER_HEADER_TAG))
             {
-                wrStringToBlock(fromTEXT(tcpSocket->read(BLKSIZE_APP_NAME)).trimmed(), appName, BLKSIZE_APP_NAME);
+                wrToBlock(clientHeader.mid(4, BLKSIZE_APP_NAME), appName, BLKSIZE_APP_NAME);
 
                 auto ver = QCoreApplication::applicationVersion().split('.');
 
