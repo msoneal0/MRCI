@@ -25,6 +25,19 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
+#ifdef Q_OS_WINDOWS
+extern "C"
+{
+// applink.c was copied from the openssl lib and slightly modified so
+// it can be compiled in mingw64.
+// per https://www.openssl.org/docs/man1.1.0/man3/OPENSSL_Applink.html
+// this file provides a glue between OpenSSL BIO layer and Win32
+// compiler run-time environment. without this the app will crash with
+// a "no OPENSSL_Applink" error.
+#include <src/applink.c>
+}
+#endif
+
 void msgHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {
     Q_UNUSED(type)
@@ -44,40 +57,41 @@ void showHelp()
 {
     QTextStream txtOut(stdout);
 
-    txtOut << "" << endl << APP_NAME << " v" << QCoreApplication::applicationVersion() << endl << endl;
-    txtOut << "Usage: " << APP_TARGET << " <argument>" << endl << endl;
-    txtOut << "<Arguments>" << endl << endl;
-    txtOut << " -help        : display usage information about this application." << endl;
-    txtOut << " -stop        : stop the current host instance if one is currently running." << endl;
-    txtOut << " -about       : display versioning/warranty information about this application." << endl;
-    txtOut << " -addr        : set the listening address and port for TCP clients." << endl;
-    txtOut << " -status      : display status information about the host instance if it is currently running." << endl;
-    txtOut << " -reset_root  : reset the root account password to the default password." << endl;
-    txtOut << " -host        : start a new host instance. (this blocks)" << endl;
-    txtOut << " -default_pw  : show the default password." << endl;
-    txtOut << " -public_cmds : run the internal module to list it's public commands. for internal use only." << endl;
-    txtOut << " -exempt_cmds : run the internal module to list it's rank exempt commands. for internal use only." << endl;
-    txtOut << " -user_cmds   : run the internal module to list it's user commands. for internal use only." << endl;
-    txtOut << " -run_cmd     : run an internal module command. for internal use only." << endl;
-    txtOut << " -load_ssl    : re-load the host SSL certificate without stopping the host instance." << endl << endl;
-    txtOut << "Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:" << endl << endl;
-    txtOut << " -pipe     : the named pipe used to establish a data connection with the session." << endl;
-    txtOut << " -mem_ses  : the shared memory key for the session." << endl;
-    txtOut << " -mem_host : the shared memory key for the host main process." << endl << endl;
-    txtOut << "Details:" << endl << endl;
-    txtOut << "addr     - this argument takes a {ip_address:port} string. it will return an error if not formatted correctly" << endl;
-    txtOut << "           examples: 10.102.9.2:35516 or 0.0.0.0:35516." << endl << endl;
-    txtOut << "run_cmd  - this argument is used by the host itself, along side the internal module arguments below to run" << endl;
-    txtOut << "           the internal command names passed by it. this is not ment to be run directly by human input." << endl;
-    txtOut << "           the executable will auto close if it fails to connect to the pipe and/or shared memory segments" << endl << endl;
+    txtOut << "" << Qt::endl << APP_NAME << " v" << QCoreApplication::applicationVersion() << Qt::endl << Qt::endl;
+    txtOut << "Usage: " << APP_TARGET << " <argument>" << Qt::endl << Qt::endl;
+    txtOut << "<Arguments>" << Qt::endl << Qt::endl;
+    txtOut << " -help        : display usage information about this application." << Qt::endl;
+    txtOut << " -stop        : stop the current host instance if one is currently running." << Qt::endl;
+    txtOut << " -about       : display versioning/warranty information about this application." << Qt::endl;
+    txtOut << " -addr        : set the listening address and port for TCP clients." << Qt::endl;
+    txtOut << " -status      : display status information about the host instance if it is currently running." << Qt::endl;
+    txtOut << " -reset_root  : reset the root account password to the default password." << Qt::endl;
+    txtOut << " -host        : start a new host instance. (this blocks)" << Qt::endl;
+    txtOut << " -host_trig   : start a new host instance. (this does not block)" << Qt::endl;
+    txtOut << " -default_pw  : show the default password." << Qt::endl;
+    txtOut << " -public_cmds : run the internal module to list it's public commands. for internal use only." << Qt::endl;
+    txtOut << " -exempt_cmds : run the internal module to list it's rank exempt commands. for internal use only." << Qt::endl;
+    txtOut << " -user_cmds   : run the internal module to list it's user commands. for internal use only." << Qt::endl;
+    txtOut << " -run_cmd     : run an internal module command. for internal use only." << Qt::endl;
+    txtOut << " -load_ssl    : re-load the host SSL certificate without stopping the host instance." << Qt::endl << Qt::endl;
+    txtOut << "Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:" << Qt::endl << Qt::endl;
+    txtOut << " -pipe     : the named pipe used to establish a data connection with the session." << Qt::endl;
+    txtOut << " -mem_ses  : the shared memory key for the session." << Qt::endl;
+    txtOut << " -mem_host : the shared memory key for the host main process." << Qt::endl << Qt::endl;
+    txtOut << "Details:" << Qt::endl << Qt::endl;
+    txtOut << "addr     - this argument takes a {ip_address:port} string. it will return an error if not formatted correctly" << Qt::endl;
+    txtOut << "           examples: 10.102.9.2:35516 or 0.0.0.0:35516." << Qt::endl << Qt::endl;
+    txtOut << "run_cmd  - this argument is used by the host itself, along side the internal module arguments below to run" << Qt::endl;
+    txtOut << "           the internal command names passed by it. this is not ment to be run directly by human input." << Qt::endl;
+    txtOut << "           the executable will auto close if it fails to connect to the pipe and/or shared memory segments" << Qt::endl << Qt::endl;
 }
 
 void soeDueToDbErr(int *retCode, const QString *errMsg)
 {
     *retCode = 1;
 
-    QTextStream(stderr) << "" << endl << "err: Stop error." << endl;
-    QTextStream(stderr) << "     what happened: " << endl << *errMsg << endl << endl;
+    QTextStream(stderr) << "" << Qt::endl << "err: Stop error." << Qt::endl;
+    QTextStream(stderr) << "     what happened: " << Qt::endl << *errMsg << Qt::endl << Qt::endl;
 }
 
 int shellToHost(const QStringList &args, QCoreApplication &app)
@@ -129,10 +143,10 @@ int main(int argc, char *argv[])
     }
     else if (args.contains("-about", Qt::CaseInsensitive))
     {
-        QTextStream(stdout) << "" << endl << APP_NAME << " v" << QCoreApplication::applicationVersion() << endl << endl;
-        QTextStream(stdout) << "Based on QT " << QT_VERSION_STR << " " << 8 * QT_POINTER_SIZE << "bit" << endl << endl;
-        QTextStream(stdout) << "The program is provided AS IS with NO WARRANTY OF ANY KIND, INCLUDING THE" << endl;
-        QTextStream(stdout) << "WARRANTY OF DESIGN, MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE." << endl << endl;
+        QTextStream(stdout) << "" << Qt::endl << APP_NAME << " v" << QCoreApplication::applicationVersion() << Qt::endl << Qt::endl;
+        QTextStream(stdout) << "Based on QT " << QT_VERSION_STR << " " << 8 * QT_POINTER_SIZE << "bit" << Qt::endl << Qt::endl;
+        QTextStream(stdout) << "The program is provided AS IS with NO WARRANTY OF ANY KIND, INCLUDING THE" << Qt::endl;
+        QTextStream(stdout) << "WARRANTY OF DESIGN, MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE." << Qt::endl << Qt::endl;
     }
     else if (args.contains("-stop", Qt::CaseInsensitive)   ||
              args.contains("-status", Qt::CaseInsensitive) ||
@@ -151,7 +165,7 @@ int main(int argc, char *argv[])
 
             if (addr.size() != 2)
             {
-                QTextStream(stderr) << "" << endl << "err: Address string parsing error, number of params found: " << addr.size() << endl;
+                QTextStream(stderr) << "" << Qt::endl << "err: Address string parsing error, number of params found: " << addr.size() << Qt::endl;
             }
             else
             {
@@ -160,15 +174,15 @@ int main(int argc, char *argv[])
 
                 if (!pOk)
                 {
-                    QTextStream(stderr) << "" << endl << "err: Invalid port." << endl;
+                    QTextStream(stderr) << "" << Qt::endl << "err: Invalid port." << Qt::endl;
                 }
                 else if (port == 0)
                 {
-                    QTextStream(stderr) << "" << endl << "err: The port cannot be 0." << endl;
+                    QTextStream(stderr) << "" << Qt::endl << "err: The port cannot be 0." << Qt::endl;
                 }
                 else if (QHostAddress(addr[0]).isNull())
                 {
-                    QTextStream(stderr) << "" << endl << "err: Invalid ip address." << endl;
+                    QTextStream(stderr) << "" << Qt::endl << "err: Invalid ip address." << Qt::endl;
                 }
                 else
                 {
@@ -204,6 +218,10 @@ int main(int argc, char *argv[])
                 ret = QCoreApplication::exec();
             }
         }
+        else if (args.contains("-host_trig"))
+        {
+            QProcess::startDetached(QCoreApplication::applicationFilePath(), QStringList() << "-host");
+        }
         else if (args.contains("-reset_root", Qt::CaseInsensitive))
         {
             auto uId = rootUserId();
@@ -219,8 +237,8 @@ int main(int argc, char *argv[])
         }
         else if (args.contains("-default_pw", Qt::CaseInsensitive))
         {
-            QTextStream(stdout) << "" << endl << " Root User       : " << getUserName(rootUserId()) << endl;
-            QTextStream(stdout) << " Default Password: " << defaultPw() << endl << endl;
+            QTextStream(stdout) << "" << Qt::endl << " Root User       : " << getUserName(rootUserId()) << Qt::endl;
+            QTextStream(stdout) << " Default Password: " << defaultPw() << Qt::endl << Qt::endl;
         }
     }
     else

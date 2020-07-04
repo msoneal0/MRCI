@@ -64,6 +64,7 @@ ListMembers::ListMembers(QObject *parent) : TableViewer(parent)
     addTableColumn(TABLE_CH_MEMBERS, COLUMN_CHANNEL_ID);
     addTableColumn(TABLE_USERS, COLUMN_USERNAME);
     addTableColumn(TABLE_USERS, COLUMN_DISPLAY_NAME);
+    addTableColumn(TABLE_USERS, COLUMN_USER_ID);
     addTableColumn(TABLE_CH_MEMBERS, COLUMN_PENDING_INVITE);
     addTableColumn(TABLE_CH_MEMBERS, COLUMN_ACCESS_LEVEL);
     addJointColumn(TABLE_USERS, COLUMN_USER_ID);

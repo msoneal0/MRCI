@@ -111,18 +111,18 @@ bool TCPServer::start()
 
     if (!createPipe())
     {
-        QTextStream(stderr) << "" << endl << "err: Unable to open a control pipe." << endl;
-        QTextStream(stderr) << "err: Reason - " << controlPipe->errorString() << endl;
+        QTextStream(stderr) << "" << Qt::endl << "err: Unable to open a control pipe." << Qt::endl;
+        QTextStream(stderr) << "err: Reason - " << controlPipe->errorString() << Qt::endl;
     }
     else if (!listen(QHostAddress(addr), port))
     {
-        QTextStream(stderr) << "" << endl << "err: TCP listen failure on address: " << addr << " port: " << port << endl;
-        QTextStream(stderr) << "err: Reason - " << errorString() << endl;
+        QTextStream(stderr) << "" << Qt::endl << "err: TCP listen failure on address: " << addr << " port: " << port << Qt::endl;
+        QTextStream(stderr) << "err: Reason - " << errorString() << Qt::endl;
     }
     else if (hostKey.isEmpty())
     {
-        QTextStream(stderr) << "" << endl << "err: Failed to create the host shared memory block." << endl;
-        QTextStream(stderr) << "err: Reason - " << hostSharedMem->errorString() << endl;
+        QTextStream(stderr) << "" << Qt::endl << "err: Failed to create the host shared memory block." << Qt::endl;
+        QTextStream(stderr) << "err: Reason - " << hostSharedMem->errorString() << Qt::endl;
     }
     else
     {
@@ -237,16 +237,16 @@ void TCPServer::procPipeIn()
 
         hostSharedMem->lock();
 
-        txtOut << "" << endl;
-        txtOut << "Host Load:      " << rd32BitFromBlock(hostLoad) << "/" << maxSessions << endl;
-        txtOut << "Active Address: " << serverAddress().toString() << endl;
-        txtOut << "Active Port:    " << serverPort() << endl;
-        txtOut << "Set Address:    " << db.getData(COLUMN_IPADDR).toString() << endl;
-        txtOut << "Set Port:       " << db.getData(COLUMN_PORT).toUInt() << endl;
-        txtOut << "Working Path:   " << QDir::currentPath() << endl;
-        txtOut << "Database:       " << sqlDataPath() << endl;
-        txtOut << "SSL Chain:      " << sslCertChain() << endl;
-        txtOut << "SSL Private:    " << sslPrivKey() << endl << endl;
+        txtOut << "" << Qt::endl;
+        txtOut << "Host Load:      " << rd32BitFromBlock(hostLoad) << "/" << maxSessions << Qt::endl;
+        txtOut << "Active Address: " << serverAddress().toString() << Qt::endl;
+        txtOut << "Active Port:    " << serverPort() << Qt::endl;
+        txtOut << "Set Address:    " << db.getData(COLUMN_IPADDR).toString() << Qt::endl;
+        txtOut << "Set Port:       " << db.getData(COLUMN_PORT).toUInt() << Qt::endl;
+        txtOut << "Working Path:   " << QDir::currentPath() << Qt::endl;
+        txtOut << "Database:       " << sqlDataPath() << Qt::endl;
+        txtOut << "SSL Chain:      " << sslCertChain() << Qt::endl;
+        txtOut << "SSL Private:    " << sslPrivKey() << Qt::endl << Qt::endl;
 
         hostSharedMem->unlock();
         controlSocket->write(toTEXT(text));
@@ -330,7 +330,7 @@ void TCPServer::applyPrivKey(const QString &path, QTextStream &msg)
 
         if (key.isNull())
         {
-            msg << "[fail]" << endl;
+            msg << "[fail]" << Qt::endl;
             msg << "Attempting to load the private key with DSA. ";
 
             key = QSslKey(bytes, QSsl::Dsa);
@@ -338,7 +338,7 @@ void TCPServer::applyPrivKey(const QString &path, QTextStream &msg)
 
         if (key.isNull())
         {
-            msg << "[fail]" << endl;
+            msg << "[fail]" << Qt::endl;
             msg << "Attempting to load the private key with Elliptic Curve. ";
 
             key = QSslKey(bytes, QSsl::Ec);
@@ -346,7 +346,7 @@ void TCPServer::applyPrivKey(const QString &path, QTextStream &msg)
 
         if (key.isNull())
         {
-            msg << "[fail]" << endl;
+            msg << "[fail]" << Qt::endl;
             msg << "Attempting to load the private key with Diffie-Hellman. ";
 
             key = QSslKey(bytes, QSsl::Dh);
@@ -354,7 +354,7 @@ void TCPServer::applyPrivKey(const QString &path, QTextStream &msg)
 
         if (key.isNull())
         {
-            msg << "[fail]" << endl;
+            msg << "[fail]" << Qt::endl;
             msg << "Attempting to load the private key as a black box. ";
 
             key = QSslKey(bytes, QSsl::Opaque);
@@ -362,11 +362,11 @@ void TCPServer::applyPrivKey(const QString &path, QTextStream &msg)
 
         if (key.isNull())
         {
-            msg << "[fail]" << endl << endl;
+            msg << "[fail]" << Qt::endl << Qt::endl;
         }
         else
         {
-            msg << "[pass]" << endl << endl;
+            msg << "[pass]" << Qt::endl << Qt::endl;
 
             sslKey = key;
         }
@@ -393,20 +393,20 @@ QString TCPServer::loadSSLData(bool onReload)
     auto allCertsExists = true;
     auto privKeyExists  = QFile::exists(priv);
 
-    stream << "Private key: " << priv << endl;
+    stream << "Private key: " << priv << Qt::endl;
 
     if (!privKeyExists)
     {
-        stream << "    ^(the private key does not exists)" << endl;
+        stream << "    ^(the private key does not exists)" << Qt::endl;
     }
 
     for (auto cert : chain)
     {
-        stream << "Cert:        " << cert << endl;
+        stream << "Cert:        " << cert << Qt::endl;
 
         if (!QFile::exists(cert))
         {
-            stream << "    ^(this cert does not exists)" << endl;
+            stream << "    ^(this cert does not exists)" << Qt::endl;
 
             allCertsExists = false;
         }
@@ -414,22 +414,22 @@ QString TCPServer::loadSSLData(bool onReload)
 
     if (chain.isEmpty())
     {
-        stream << "No cert files are defined in the env." << endl;
+        stream << "No cert files are defined in the env." << Qt::endl;
 
         allCertsExists = false;
     }
 
-    stream << endl;
+    stream << Qt::endl;
 
     if (allCertsExists && privKeyExists)
     {
         if (onReload && (priv == DEFAULT_PRIV_KEY_NAME) && (sslCertChain() == DEFAULT_PUB_KEY_NAME))
         {
-            stream << "Re-generating self-signed cert." << endl;
+            stream << "Re-generating self-signed cert." << Qt::endl;
 
             if (genDefaultSSLFiles(wanIP, stream))
             {
-                stream << endl << "complete." << endl << endl;
+                stream << Qt::endl << "complete." << Qt::endl << Qt::endl;
             }
         }
 
@@ -438,11 +438,11 @@ QString TCPServer::loadSSLData(bool onReload)
     }
     else if ((priv == DEFAULT_PRIV_KEY_NAME) && (sslCertChain() == DEFAULT_PUB_KEY_NAME))
     {
-        stream << "Generating self-signed cert." << endl;
+        stream << "Generating self-signed cert." << Qt::endl;
 
         if (genDefaultSSLFiles(wanIP, stream))
         {
-            stream << endl << "The default self-signed cert files are generated successfully." << endl << endl;
+            stream << Qt::endl << "The default self-signed cert files are generated successfully." << Qt::endl << Qt::endl;
 
             applyPrivKey(priv, stream);
             applyCerts(chain, stream);

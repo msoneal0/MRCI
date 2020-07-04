@@ -608,9 +608,9 @@ void PreviewEmail::procIn(const QByteArray &binIn, quint8 dType)
             QString     txt;
             QTextStream txtOut(&txt);
 
-            txtOut << "-----Subject-------" << endl << endl;
-            txtOut << subject << endl << endl;
-            txtOut << "-----Body----------" << endl << endl;
+            txtOut << "-----Subject-------" << Qt::endl << Qt::endl;
+            txtOut << subject << Qt::endl << Qt::endl;
+            txtOut << "-----Body----------" << Qt::endl << Qt::endl;
 
             mainTxt(txt);
             bigTxt(body);

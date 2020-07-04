@@ -47,22 +47,22 @@ bool genRSAKey(Cert *cert, QTextStream &msg)
                 }
                 else
                 {
-                    msg << "Failed to assign the generated RSA key to a PKEY object." << endl;
+                    msg << "Failed to assign the generated RSA key to a PKEY object." << Qt::endl;
                 }
             }
             else
             {
-                msg << "Failed to generate the RSA private key." << endl;
+                msg << "Failed to generate the RSA private key." << Qt::endl;
             }
         }
         else
         {
-            msg << "Failed to initialize a BIGNUM object needed to generate the RSA key." << endl;
+            msg << "Failed to initialize a BIGNUM object needed to generate the RSA key." << Qt::endl;
         }
     }
     else
     {
-        msg << "The x509 object did not initialize correctly." << endl;
+        msg << "The x509 object did not initialize correctly." << Qt::endl;
     }
 
     return ret;
@@ -77,7 +77,7 @@ bool genX509(Cert *cert, const QString &outsideAddr, QTextStream &msg)
 
     if (!outsideAddr.isEmpty())
     {
-        msg << "x509 gen_wan_ip: " << outsideAddr << endl;
+        msg << "x509 gen_wan_ip: " << outsideAddr << Qt::endl;
 
         cnNames.append(outsideAddr.toUtf8());
     }
@@ -86,7 +86,7 @@ bool genX509(Cert *cert, const QString &outsideAddr, QTextStream &msg)
     {
         if (addr.isGlobal())
         {
-            msg << "x509 gen_lan_ip: " << addr.toString() << endl;
+            msg << "x509 gen_lan_ip: " << addr.toString() << Qt::endl;
 
             cnNames.append(addr.toString().toUtf8());
         }
@@ -133,12 +133,12 @@ bool genX509(Cert *cert, const QString &outsideAddr, QTextStream &msg)
         }
         else
         {
-            msg << "Failed to self-sign the generated x509 cert." << endl;
+            msg << "Failed to self-sign the generated x509 cert." << Qt::endl;
         }
     }
     else
     {
-        msg << "No usable IP addresses could be found to be used as common names in the self-signed cert." << endl;
+        msg << "No usable IP addresses could be found to be used as common names in the self-signed cert." << Qt::endl;
     }
 
     return ret;
@@ -169,7 +169,7 @@ FILE *openFileForWrite(const char *path, QTextStream &msg)
 
 void encodeErr(const char *path, QTextStream &msg)
 {
-    msg << "Failed to encode file '" << path << "' to PEM format." << endl;
+    msg << "Failed to encode file '" << path << "' to PEM format." << Qt::endl;
 }
 
 bool writePrivateKey(const char *path, Cert* cert, QTextStream &msg)

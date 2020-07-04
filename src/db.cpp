@@ -384,20 +384,20 @@ QString Query::errDetail()
 
     QTextStream txtOut(&ret);
 
-    txtOut << "     driver error: " << errTxt << endl;
-    txtOut << "     query:        " << qStr << jStr << wStr << limit << endl;
-    txtOut << "     database:     " << sqlDataPath() << endl;
+    txtOut << "     driver error: " << errTxt << Qt::endl;
+    txtOut << "     query:        " << qStr << jStr << wStr << limit << Qt::endl;
+    txtOut << "     database:     " << sqlDataPath() << Qt::endl;
 
     auto info = QFileInfo(QFileInfo(sqlDataPath()).path());
 
     if (!info.isReadable())
     {
-        txtOut << "     readable:     database path doesn't have read permissions." << endl;
+        txtOut << "     readable:     database path doesn't have read permissions." << Qt::endl;
     }
 
     if (!info.isWritable())
     {
-        txtOut << "     writable:     database path doesn't have write permissions." << endl;
+        txtOut << "     writable:     database path doesn't have write permissions." << Qt::endl;
     }
 
     return ret;

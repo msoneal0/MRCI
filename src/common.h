@@ -17,9 +17,6 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-#include <openssl/ssl.h>
-#include <openssl/x509.h>
-
 #include <QList>
 #include <QObject>
 #include <QtEndian>
@@ -67,6 +64,9 @@
 #include <QMessageLogContext>
 #include <QtGlobal>
 #include <QLibrary>
+
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
 
 #include "db.h"
 #include "shell.h"

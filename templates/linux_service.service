@@ -1,0 +1,15 @@
+[Unit]
+Description=$app_name Host Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=$app_target
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=infinity
+ExecStart=/usr/bin/env $app_target -host
+ExecStop=/usr/bin/env $app_target -stop
+
+[Install]
+WantedBy=multi-user.target

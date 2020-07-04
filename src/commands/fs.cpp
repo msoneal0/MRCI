@@ -200,7 +200,7 @@ void UploadFile::onTerminate()
     ssMode  = false;
     flags   = 0;
     offs    = 0;
-    mode    = nullptr;
+    mode    = QFile::OpenModeFlag();
 }
 
 void UploadFile::wrToFile(const QByteArray &data)
@@ -309,7 +309,7 @@ void UploadFile::procIn(const QByteArray &binIn, quint8 dType)
         {
             if (argExists("-truncate", args))
             {
-                mode = QFile::ReadWrite | QFile::Truncate;
+                mode = QFile::WriteOnly;
             }
             else
             {
@@ -892,21 +892,21 @@ void FileInfo::procIn(const QByteArray &binIn, quint8 dType)
                 QTextStream  txtOut(&txt);
                 QStorageInfo storInfo(path);
 
-                txtOut << "is_file:   " << boolStr(info.isFile())    << endl;
-                txtOut << "is_dir:    " << boolStr(info.isDir())     << endl;
-                txtOut << "is_symlnk: " << boolStr(info.isSymLink()) << endl << endl;
+                txtOut << "is_file:   " << boolStr(info.isFile())    << Qt::endl;
+                txtOut << "is_dir:    " << boolStr(info.isDir())     << Qt::endl;
+                txtOut << "is_symlnk: " << boolStr(info.isSymLink()) << Qt::endl << Qt::endl;
 
-                txtOut << "can_read:    " << boolStr(info.isReadable())   << endl;
-                txtOut << "can_write:   " << boolStr(info.isWritable())   << endl;
-                txtOut << "can_execute: " << boolStr(info.isExecutable()) << endl << endl;
+                txtOut << "can_read:    " << boolStr(info.isReadable())   << Qt::endl;
+                txtOut << "can_write:   " << boolStr(info.isWritable())   << Qt::endl;
+                txtOut << "can_execute: " << boolStr(info.isExecutable()) << Qt::endl << Qt::endl;
 
-                txtOut << "bytes: " << QString::number(info.size()) << endl << endl;
+                txtOut << "bytes: " << QString::number(info.size()) << Qt::endl << Qt::endl;
 
-                txtOut << "device: " << storInfo.device() << endl << endl;
+                txtOut << "device: " << storInfo.device() << Qt::endl << Qt::endl;
 
-                txtOut << "time_created:  " << info.birthTime().toString("MM/dd/yyyy hh:mm:ss AP t")    << endl;
-                txtOut << "last_modified: " << info.lastModified().toString("MM/dd/yyyy hh:mm:ss AP t") << endl;
-                txtOut << "last_accessed: " << info.lastRead().toString("MM/dd/yyyy hh:mm:ss AP t")     << endl;
+                txtOut << "time_created:  " << info.birthTime().toString("MM/dd/yyyy hh:mm:ss AP t")    << Qt::endl;
+                txtOut << "last_modified: " << info.lastModified().toString("MM/dd/yyyy hh:mm:ss AP t") << Qt::endl;
+                txtOut << "last_accessed: " << info.lastRead().toString("MM/dd/yyyy hh:mm:ss AP t")     << Qt::endl;
 
                 mainTxt(txt);
             }

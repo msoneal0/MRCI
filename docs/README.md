@@ -16,6 +16,7 @@ Usage: mrci <argument>
  -status      : display status information about the host instance if it is currently running.
  -reset_root  : reset the root account password to the default password.
  -host        : start a new host instance. (this blocks)
+ -host_trig   : start a new host instance. (this does not block)
  -default_pw  : show the default password.
  -public_cmds : run the internal module to list it's public commands. for internal use only.
  -exempt_cmds : run the internal module to list it's rank exempt commands. for internal use only.
@@ -84,7 +85,7 @@ make
 python3
 ```
 
-Windows support is still work in progress but the following applications will must likely need to be installed:
+For Windows support you need to have the following applications installed:
 ```
 OpenSSL
 Qt5.12 or newer
@@ -112,3 +113,5 @@ If a target linux system supports systemd, the application will be installed as 
 sudo systemctl start mrci
 sudo systemctl stop mrci
 ```
+
+In a Windows system, a scheduled task will be created to auto start the application in the background when the system starts. 

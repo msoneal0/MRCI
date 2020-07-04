@@ -118,13 +118,13 @@ void HostInfo::procIn(const QByteArray &binIn, quint8 dType)
 
         hostSharedMem->unlock();
 
-        txtOut << "Application:    " << libName() << endl;
-        txtOut << "Qt Base:        " << QT_VERSION_STR << endl;
-        txtOut << "Host Name:      " << QSysInfo::machineHostName() << endl;
-        txtOut << "Host OS:        " << QSysInfo::prettyProductName() << endl;
-        txtOut << "Load:           " << sesCount << "/" << maxSes << endl;
-        txtOut << "Listening Addr: " << db.getData(COLUMN_IPADDR).toString() << endl;
-        txtOut << "Listening Port: " << db.getData(COLUMN_PORT).toUInt() << endl;
+        txtOut << "Application:    " << libName() << Qt::endl;
+        txtOut << "Qt Base:        " << QT_VERSION_STR << Qt::endl;
+        txtOut << "Host Name:      " << QSysInfo::machineHostName() << Qt::endl;
+        txtOut << "Host OS:        " << QSysInfo::prettyProductName() << Qt::endl;
+        txtOut << "Load:           " << sesCount << "/" << maxSes << Qt::endl;
+        txtOut << "Listening Addr: " << db.getData(COLUMN_IPADDR).toString() << Qt::endl;
+        txtOut << "Listening Port: " << db.getData(COLUMN_PORT).toUInt() << Qt::endl;
 
         mainTxt(txt);
     }
@@ -143,9 +143,9 @@ void MyInfo::procIn(const QByteArray &binIn, quint8 dType)
         QString ip    = rdStringFromBlock(clientIp, BLKSIZE_CLIENT_IP);
         QString app   = rdStringFromBlock(appName, BLKSIZE_APP_NAME);
 
-        txtOut << "Session id:     " << sesId << endl;
-        txtOut << "IP Address:     " << ip    << endl;
-        txtOut << "App Name:       " << app   << endl;
+        txtOut << "Session id:     " << sesId << Qt::endl;
+        txtOut << "IP Address:     " << ip    << Qt::endl;
+        txtOut << "App Name:       " << app   << Qt::endl;
 
         if (!isEmptyBlock(userId, BLKSIZE_USER_ID))
         {
@@ -160,14 +160,14 @@ void MyInfo::procIn(const QByteArray &binIn, quint8 dType)
             db.addCondition(COLUMN_USER_ID, uId);
             db.exec();
 
-            txtOut << "User Name:      " << rdStringFromBlock(userName, BLKSIZE_USER_NAME)      << endl;
-            txtOut << "Display Name:   " << rdStringFromBlock(displayName, BLKSIZE_DISP_NAME)   << endl;
-            txtOut << "User id:        " << uId.toHex()                                         << endl;
-            txtOut << "Email:          " << db.getData(COLUMN_EMAIL).toString()                 << endl;
-            txtOut << "Register Date:  " << db.getData(COLUMN_TIME).toString()                  << endl;
-            txtOut << "Email Verified: " << boolStr(db.getData(COLUMN_EMAIL_VERIFIED).toBool()) << endl;
-            txtOut << "Owner Override: " << boolStr(rd8BitFromBlock(chOwnerOverride))           << endl;
-            txtOut << "Host Rank:      " << rd32BitFromBlock(hostRank)                          << endl;
+            txtOut << "User Name:      " << rdStringFromBlock(userName, BLKSIZE_USER_NAME)      << Qt::endl;
+            txtOut << "Display Name:   " << rdStringFromBlock(displayName, BLKSIZE_DISP_NAME)   << Qt::endl;
+            txtOut << "User id:        " << uId.toHex()                                         << Qt::endl;
+            txtOut << "Email:          " << db.getData(COLUMN_EMAIL).toString()                 << Qt::endl;
+            txtOut << "Register Date:  " << db.getData(COLUMN_TIME).toString()                  << Qt::endl;
+            txtOut << "Email Verified: " << boolStr(db.getData(COLUMN_EMAIL_VERIFIED).toBool()) << Qt::endl;
+            txtOut << "Owner Override: " << boolStr(rd8BitFromBlock(chOwnerOverride))           << Qt::endl;
+            txtOut << "Host Rank:      " << rd32BitFromBlock(hostRank)                          << Qt::endl;
         }
 
         mainTxt(txt);

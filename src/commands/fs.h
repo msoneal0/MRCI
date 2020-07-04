@@ -54,12 +54,12 @@ class UploadFile : public CmdObject
 
 private:
 
-    QFile::OpenMode mode;
-    QFile          *file;
-    qint64          offs;
-    bool            ssMode;
-    bool            confirm;
-    bool            force;
+    QFile::OpenModeFlag mode;
+    QFile              *file;
+    qint64              offs;
+    bool                ssMode;
+    bool                confirm;
+    bool                force;
 
     void wrToFile(const QByteArray &data);
     void onTerminate();

@@ -220,7 +220,7 @@ to_client: [type_id(25)][cmd_id(28)][branch_id(0)][size_of_payload][payload(CH_M
 ```
 
 ```ASYNC_RM_CH_MEMBER (29)```
-This async command carries a combination of the channel id and the 32byte user id of the channel member that has left or kicked from the channel member list. All sessions that are logged in as a member of the channel forwards the data to the clients as a [BYTES](type_ids.md) frame.
+This async command carries a combination of the channel id and the 32byte user id of the channel member that has left or kicked from the channel member list. All sessions that are logged in as a member of the channel forwards the data to the clients as a [BYTES](type_ids.md) frame. This async aommand also sent when a user declines an invite to a channel.
 ```
 from_module: [8bytes(chId)][32bytes(userId)]
 to_client:   [type_id(14)][cmd_id(29)][branch_id(0)][size_of_payload][payload(64bit_ch_id + 256bit_user_id)]

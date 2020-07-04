@@ -73,9 +73,13 @@ def make_install_dir(path):
     try:
         if not os.path.exists(path):
             os.makedirs(path)
+
+        return True
             
     except:
         print("Failed to create the install directory, please make sure you are runnning this script with admin rights.")
+
+        return False
         
 def replace_text(text, old_text, new_text, offs):
     while(True):
@@ -89,7 +93,7 @@ def replace_text(text, old_text, new_text, offs):
     return text
         
 def sub_copy_file(src, dst, old_text, new_text, offs):
-    print("cpy: " + src + " --> " + dst)
+    print("set: " + dst + " keyword: " + old_text + " to: " + new_text) 
     
     text = ""
     
@@ -99,6 +103,11 @@ def sub_copy_file(src, dst, old_text, new_text, offs):
         
     with open(dst, "w") as wr_file:
         wr_file.write(text)
+
+def template_to_deploy(src, dst, install_dir, app_name, app_target):
+    sub_copy_file(src, dst, "$install_dir", install_dir, 0)
+    sub_copy_file(dst, dst, "$app_name", app_name, 0)
+    sub_copy_file(dst, dst, "$app_target", app_target, 0)
 
 def verbose_copy(src, dst):
     print("cpy: " + src + " --> " + dst)
@@ -119,6 +128,17 @@ def verbose_create_symmlink(src, dst):
         os.remove(dst)
     
     os.symlink(src, dst)
+    
+def conv_utf8_to_utf16(src, dst):
+    print("cvt: " + dst + " UTF-8 --> UTF-16")
+
+    data = bytearray()
+    
+    with open(src, 'rb') as source_file:
+        data = source_file.read()
+
+    with open(dst, 'w+b') as dest_file:
+        dest_file.write(data.decode('utf-8').encode('utf-16'))
 
 def local_install(app_target, app_name):
     if platform.system() == "Linux":
@@ -131,40 +151,71 @@ def local_install(app_target, app_name):
             if os.path.exists(install_dir + "/uninstall.sh"):
                 subprocess.run([install_dir + "/uninstall.sh"])
             
-            make_install_dir(install_dir)
+            if make_install_dir(install_dir):
+                if not os.path.exists("/var/opt/" + app_target):
+                    os.makedirs("/var/opt/" + app_target)
             
-            if not os.path.exists("/var/opt/" + app_target):
-                os.makedirs("/var/opt/" + app_target)
+                template_to_deploy("app_dir/linux/" + app_target + ".sh", install_dir + "/" + app_target + ".sh", install_dir, app_name, app_target)
+                template_to_deploy("app_dir/linux/uninstall.sh", install_dir + "/uninstall.sh", install_dir, app_name, app_target)
+                template_to_deploy("app_dir/linux/" + app_target + ".service", "/etc/systemd/system/" + app_target + ".service", install_dir, app_name, app_target)
             
-            sub_copy_file("app_dir/linux/" + app_target + ".sh", install_dir + "/" + app_target + ".sh", "$install_dir", install_dir, 0)
-            sub_copy_file("app_dir/linux/uninstall.sh", install_dir + "/uninstall.sh", "$install_dir", install_dir, 0)
+                verbose_copy("app_dir/linux/" + app_target, install_dir + "/" + app_target)
+                verbose_copy("app_dir/linux/lib", install_dir + "/lib")
+                verbose_copy("app_dir/linux/sqldrivers", install_dir + "/sqldrivers")
             
-            verbose_copy("app_dir/linux/" + app_target, install_dir + "/" + app_target)
-            verbose_copy("app_dir/linux/lib", install_dir + "/lib")
-            verbose_copy("app_dir/linux/sqldrivers", install_dir + "/sqldrivers")
-            verbose_copy("app_dir/linux/" + app_target + ".service", "/etc/systemd/system/" + app_target + ".service")
+                verbose_create_symmlink(install_dir + "/" + app_target + ".sh", "/usr/bin/" + app_target)
             
-            verbose_create_symmlink(install_dir + "/" + app_target + ".sh", "/usr/bin/" + app_target)
+                subprocess.run(["useradd", "-r", app_target])
+                subprocess.run(["chmod", "-R", "755", install_dir])    
+                subprocess.run(["chmod", "755", "/etc/systemd/system/" + app_target + ".service"])    
+                subprocess.run(["chown", "-R", app_target + ":" + app_target, "/var/opt/" + app_target])    
+                subprocess.run(["systemctl", "start", app_target])    
+                subprocess.run(["systemctl", "enable", app_target])
             
-            subprocess.run(["useradd", "-r", app_target])
-            subprocess.run(["chmod", "-R", "755", install_dir])    
-            subprocess.run(["chmod", "755", "/etc/systemd/system/" + app_target + ".service"])    
-            subprocess.run(["chown", "-R", app_target + ":" + app_target, "/var/opt/" + app_target])    
-            subprocess.run(["systemctl", "start", app_target])    
-            subprocess.run(["systemctl", "enable", app_target])
-            
-            print("Installation finished. If you ever need to uninstall this application, run this command with root rights:")
-            print("    sh " + install_dir + "/uninstall.sh\n")
+                print("Installation finished. If you ever need to uninstall this application, run this command with root rights:")
+                print("    sh " + install_dir + "/uninstall.sh\n")
             
     elif platform.system() == "Windows":
-        print("Windows support is work progress. Check for an update at a later time.")
-        # to do: fill ot code for windows support here.
+        if not os.path.exists("app_dir\\windows"):
+            print("An app_dir for the Windows platform could not be found.")
+            
+        else:
+            install_dir = get_install_dir(app_target, app_name)
+
+            if os.path.exists(install_dir + "\\uninstall.bat"):
+                subprocess.run([install_dir + "\\uninstall.bat"])
+
+            if os.path.exists(install_dir):
+                # this block is here make sure the install_dir is deleted if/when
+                # the uninstall.bat fails to do so. in my test machine, the .bat
+                # script will delete install_dir if run directly but not when
+                # called through subprocess.run() for some reason.
+                shutil.rmtree(install_dir)    
+
+            if make_install_dir(install_dir):
+                verbose_copy("app_dir\\windows", install_dir)
+
+                template_to_deploy("app_dir\\windows\\uninstall.bat", install_dir + "\\uninstall.bat", install_dir, app_name, app_target)
+                template_to_deploy("app_dir\\windows\\shtask.xml", install_dir + "\\shtask.xml", install_dir, app_name, app_target)
+                
+                sub_copy_file(install_dir + "\\shtask.xml", install_dir + "\\shtask.xml", "UTF-8", "UTF-16", 0)
+                
+                conv_utf8_to_utf16(install_dir + "\\shtask.xml", install_dir + "\\shtask.xml")
+
+                verbose_create_symmlink(install_dir + "\\" + app_target + ".exe", os.environ['WINDIR'] + "\\" + app_target + ".exe")
+
+                subprocess.run(["schtasks", "/create", "/xml", install_dir + "\\shtask.xml", "/tn", app_name])
+                subprocess.run(["schtasks", "/run", "/tn", app_name])
+
+                print("Installation finished. If you ever need to uninstall this application, run this batch file with admin rights:")
+                print("    " + install_dir + "\\uninstall.bat\n")
         
     else:
         print("The platform you are running in is not compatible.")
         print("  output from platform.system() = " + platform.system())
     
 def dir_tree(path):
+    
     ret = []
     
     if os.path.isdir(path):

@@ -24,25 +24,33 @@ QT -= gui
 QT += network
 QT += sql
 
-CONFIG += console
 CONFIG -= app_bundle
-
-TARGET      = build/mrci
-OBJECTS_DIR = build
-MOC_DIR     = build
-RCC_DIR     = build
+CONFIG += console
 
 win32 {
 
-  LIBS += -llibeay32 -lssleay32
+  LIBS += -llibcrypto -llibssl
+
+  TARGET         = mrci
+  DESTDIR_TARGET = build\\windows\\mrci.exe
+  OBJECTS_DIR    = build\\windows
+  MOC_DIR        = build\\windows
+  RCC_DIR        = build\\windows
+  DESTDIR        = build\\windows
 
 } else {
 
   LIBS += -lcrypto -lssl
 
+  TARGET      = build/linux/mrci
+  OBJECTS_DIR = build/linux
+  MOC_DIR     = build/linux
+  RCC_DIR     = build/linux
+
 }
 
 SOURCES += src/main.cpp \
+           src/applink.c \
            src/async_funcs.cpp \
            src/cmd_object.cpp \
            src/cmd_proc.cpp \

@@ -117,19 +117,19 @@ void ServSettings::printSettings()
     QString     txt;
     QTextStream txtOut(&txt);
 
-    txtOut << "All Sub-Channels Active Update: " << actBool                                 << endl;
-    txtOut << "Public Registration:            " << pubBool                                 << endl;
-    txtOut << "Automated Password Resets:      " << resBool                                 << endl;
-    txtOut << "Automated Email Verify:         " << conBool                                 << endl;
-    txtOut << "Maximum Sessions:               " << db.getData(COLUMN_MAXSESSIONS).toUInt() << endl;
-    txtOut << "Autolock Threshold:             " << db.getData(COLUMN_LOCK_LIMIT).toUInt()  << endl;
-    txtOut << "Maximum Sub-Channels:           " << db.getData(COLUMN_MAX_SUB_CH).toUInt()  << endl;
-    txtOut << "Initial Host Rank:              " << db.getData(COLUMN_INITRANK).toUInt()    << endl;
-    txtOut << "Root User:                      " << getUserName(rootUserId())               << endl;
-    txtOut << "Working Path:                   " << QDir::currentPath()                     << endl;
-    txtOut << "Database:                       " << sqlDataPath()                           << endl;
-    txtOut << "Mailer Executable:              " << db.getData(COLUMN_MAILERBIN).toString() << endl;
-    txtOut << "Mailer Command:                 " << db.getData(COLUMN_MAIL_SEND).toString() << endl << endl;
+    txtOut << "All Sub-Channels Active Update: " << actBool                                 << Qt::endl;
+    txtOut << "Public Registration:            " << pubBool                                 << Qt::endl;
+    txtOut << "Automated Password Resets:      " << resBool                                 << Qt::endl;
+    txtOut << "Automated Email Verify:         " << conBool                                 << Qt::endl;
+    txtOut << "Maximum Sessions:               " << db.getData(COLUMN_MAXSESSIONS).toUInt() << Qt::endl;
+    txtOut << "Autolock Threshold:             " << db.getData(COLUMN_LOCK_LIMIT).toUInt()  << Qt::endl;
+    txtOut << "Maximum Sub-Channels:           " << db.getData(COLUMN_MAX_SUB_CH).toUInt()  << Qt::endl;
+    txtOut << "Initial Host Rank:              " << db.getData(COLUMN_INITRANK).toUInt()    << Qt::endl;
+    txtOut << "Root User:                      " << getUserName(rootUserId())               << Qt::endl;
+    txtOut << "Working Path:                   " << QDir::currentPath()                     << Qt::endl;
+    txtOut << "Database:                       " << sqlDataPath()                           << Qt::endl;
+    txtOut << "Mailer Executable:              " << db.getData(COLUMN_MAILERBIN).toString() << Qt::endl;
+    txtOut << "Mailer Command:                 " << db.getData(COLUMN_MAIL_SEND).toString() << Qt::endl << Qt::endl;
 
     mainTxt(txt);
 }
@@ -141,12 +141,12 @@ void ServSettings::printOptions()
         QString     txt;
         QTextStream txtOut(&txt);
 
-        txtOut << "[01] Autolock Threshold  [02] Max Sessions"     << endl;
-        txtOut << "[03] Public Registration [04] Initial Rank"     << endl;
-        txtOut << "[05] Mailer Exe          [06] Mailer Command"   << endl;
-        txtOut << "[07] Password Resets     [08] Email Verify"     << endl;
-        txtOut << "[09] Active Update       [10] Max Sub-Channels" << endl;
-        txtOut << "[11] Set Root User       [00] Exit"             << endl << endl;
+        txtOut << "[01] Autolock Threshold  [02] Max Sessions"     << Qt::endl;
+        txtOut << "[03] Public Registration [04] Initial Rank"     << Qt::endl;
+        txtOut << "[05] Mailer Exe          [06] Mailer Command"   << Qt::endl;
+        txtOut << "[07] Password Resets     [08] Email Verify"     << Qt::endl;
+        txtOut << "[09] Active Update       [10] Max Sub-Channels" << Qt::endl;
+        txtOut << "[11] Set Root User       [00] Exit"             << Qt::endl << Qt::endl;
         txtOut << "Select an option: ";
 
         level = 1;
@@ -182,125 +182,125 @@ void ServSettings::procIn(const QByteArray &binIn, quint8 dType)
 
                 if ((select == 1) && ok)
                 {
-                    txtOut << ""                                                                    << endl;
-                    txtOut << "The autolock threshold is an integer value that determines how many" << endl;
-                    txtOut << "failed login attempts can be made before the user account is locked" << endl;
-                    txtOut << "by the host."                                                        << endl << endl;
+                    txtOut << ""                                                                    << Qt::endl;
+                    txtOut << "The autolock threshold is an integer value that determines how many" << Qt::endl;
+                    txtOut << "failed login attempts can be made before the user account is locked" << Qt::endl;
+                    txtOut << "by the host."                                                        << Qt::endl << Qt::endl;
                     txtOut << "Enter a new value (leave blank to cancel): ";
 
                     level = 2;
                 }
                 else if ((select == 2) && ok)
                 {
-                    txtOut << ""                                                                       << endl;
-                    txtOut << "Max sessions is an integar value that determines how many simultaneous" << endl;
-                    txtOut << "clients the host will be allowed to run at once."                       << endl << endl;
+                    txtOut << ""                                                                       << Qt::endl;
+                    txtOut << "Max sessions is an integar value that determines how many simultaneous" << Qt::endl;
+                    txtOut << "clients the host will be allowed to run at once."                       << Qt::endl << Qt::endl;
                     txtOut << "Enter a new value (leave blank to cancel): ";
 
                     level = 2;
                 }
                 else if ((select == 3) && ok)
                 {
-                    txtOut << ""                                                                     << endl;
-                    txtOut << "Public registration basically allows un-logged in clients to run the" << endl;
-                    txtOut << "add_acct command. doing this allows un-registered users to become"    << endl;
-                    txtOut << "registered users without the need to contact an admin."               << endl << endl;
-                    txtOut << "[0] Disable"                                                          << endl;
-                    txtOut << "[1] Enable"                                                           << endl << endl;
+                    txtOut << ""                                                                     << Qt::endl;
+                    txtOut << "Public registration basically allows un-logged in clients to run the" << Qt::endl;
+                    txtOut << "add_acct command. doing this allows un-registered users to become"    << Qt::endl;
+                    txtOut << "registered users without the need to contact an admin."               << Qt::endl << Qt::endl;
+                    txtOut << "[0] Disable"                                                          << Qt::endl;
+                    txtOut << "[1] Enable"                                                           << Qt::endl << Qt::endl;
                     txtOut << "Select an option (leave blank to cancel): ";
 
                     level = 2;
                 }
                 else if ((select == 4) && ok)
                 {
-                    txtOut << ""                                                                       << endl;
-                    txtOut << "The initial host rank is the rank all new user accounts are registered" << endl;
-                    txtOut << "with when created. the host rank itself is an integer value that"       << endl;
-                    txtOut << "determine what commands each user can or cannot run."                   << endl << endl;
+                    txtOut << ""                                                                       << Qt::endl;
+                    txtOut << "The initial host rank is the rank all new user accounts are registered" << Qt::endl;
+                    txtOut << "with when created. the host rank itself is an integer value that"       << Qt::endl;
+                    txtOut << "determine what commands each user can or cannot run."                   << Qt::endl << Qt::endl;
                     txtOut << "Enter a new value (leave blank to cancel): ";
 
                     level = 2;
                 }
                 else if ((select == 5) && ok)
                 {
-                    txtOut << ""                                                              << endl;
-                    txtOut << "This is the path to the command line email client executable"  << endl;
-                    txtOut << "that the host can utilize to send emails to registered users." << endl << endl;
-                    txtOut << "note: the host assumes the email application already has a"    << endl;
-                    txtOut << "      configured sender email address/server."                 << endl << endl;
+                    txtOut << ""                                                              << Qt::endl;
+                    txtOut << "This is the path to the command line email client executable"  << Qt::endl;
+                    txtOut << "that the host can utilize to send emails to registered users." << Qt::endl << Qt::endl;
+                    txtOut << "note: the host assumes the email application already has a"    << Qt::endl;
+                    txtOut << "      configured sender email address/server."                 << Qt::endl << Qt::endl;
                     txtOut << "Enter a new path (leave blank to cancel): ";
 
                     level = 2;
                 }
                 else if ((select == 6) && ok)
                 {
-                    txtOut << ""                                                                                       << endl;
-                    txtOut << "This is the command line that will be used with the email client"                       << endl;
-                    txtOut << "executable to send emails to registered users. it must contain the"                     << endl;
-                    txtOut << "keywords " << SUBJECT_SUB << ", " << TARGET_EMAIL_SUB << " and " << MSG_SUB << " to be" << endl;
-                    txtOut << "acceptable. the host will substitute these keywords for actual"                         << endl;
-                    txtOut << "parameters when calling the email client."                                              << endl << endl;
+                    txtOut << ""                                                                                       << Qt::endl;
+                    txtOut << "This is the command line that will be used with the email client"                       << Qt::endl;
+                    txtOut << "executable to send emails to registered users. it must contain the"                     << Qt::endl;
+                    txtOut << "keywords " << SUBJECT_SUB << ", " << TARGET_EMAIL_SUB << " and " << MSG_SUB << " to be" << Qt::endl;
+                    txtOut << "acceptable. the host will substitute these keywords for actual"                         << Qt::endl;
+                    txtOut << "parameters when calling the email client."                                              << Qt::endl << Qt::endl;
                     txtOut << "Enter a new command line (leave blank to cancel): ";
 
                     level = 2;
                 }
                 else if ((select == 7) && ok)
                 {
-                    txtOut << ""                                                              << endl;
-                    txtOut << "This enables automated password resets via email so users can" << endl;
-                    txtOut << "reset their account passwords without the need to contact an"  << endl;
-                    txtOut << "admin. this basically tells the host if it is allowed to load" << endl;
-                    txtOut << "the request_pw_reset and recover_acct commands or not."        << endl << endl;
-                    txtOut << "[0] Disable"                                                   << endl;
-                    txtOut << "[1] Enable"                                                    << endl << endl;
+                    txtOut << ""                                                              << Qt::endl;
+                    txtOut << "This enables automated password resets via email so users can" << Qt::endl;
+                    txtOut << "reset their account passwords without the need to contact an"  << Qt::endl;
+                    txtOut << "admin. this basically tells the host if it is allowed to load" << Qt::endl;
+                    txtOut << "the request_pw_reset and recover_acct commands or not."        << Qt::endl << Qt::endl;
+                    txtOut << "[0] Disable"                                                   << Qt::endl;
+                    txtOut << "[1] Enable"                                                    << Qt::endl << Qt::endl;
                     txtOut << "Select an option (leave blank to cancel): ";
 
                     level = 2;
                 }
                 else if ((select == 8) && ok)
                 {
-                    txtOut << ""                                                          << endl;
-                    txtOut << "This enables/disables automated email confirmations. this" << endl;
-                    txtOut << "tells the host if it is allowed to load the verify_email " << endl;
-                    txtOut << "command for any user, regardless of rank."                 << endl << endl;
-                    txtOut << "[0] Disable"                                               << endl;
-                    txtOut << "[1] Enable"                                                << endl << endl;
+                    txtOut << ""                                                          << Qt::endl;
+                    txtOut << "This enables/disables automated email confirmations. this" << Qt::endl;
+                    txtOut << "tells the host if it is allowed to load the verify_email " << Qt::endl;
+                    txtOut << "command for any user, regardless of rank."                 << Qt::endl << Qt::endl;
+                    txtOut << "[0] Disable"                                               << Qt::endl;
+                    txtOut << "[1] Enable"                                                << Qt::endl << Qt::endl;
                     txtOut << "Select an option (leave blank to cancel): ";
 
                     level = 2;
                 }
                 else if ((select == 9) && ok)
                 {
-                    txtOut << ""                                                                       << endl;
-                    txtOut << "This option tells the host if all sub-channels should be considered"    << endl;
-                    txtOut << "active or not. otherwise, the active flag can be toggled on/off at the" << endl;
-                    txtOut << "sub-channel level. active sub-channels send/receive PEER_INFO or"       << endl;
-                    txtOut << "PEER_STAT frames with each other so all peers connected to the"         << endl;
-                    txtOut << "sub-channel can be made aware of each other's public information."      << endl;
-                    txtOut << "without the active flag, no such frames are transffered."               << endl << endl;
-                    txtOut << "[0] Disable"                                                            << endl;
-                    txtOut << "[1] Enable"                                                             << endl << endl;
+                    txtOut << ""                                                                       << Qt::endl;
+                    txtOut << "This option tells the host if all sub-channels should be considered"    << Qt::endl;
+                    txtOut << "active or not. otherwise, the active flag can be toggled on/off at the" << Qt::endl;
+                    txtOut << "sub-channel level. active sub-channels send/receive PEER_INFO or"       << Qt::endl;
+                    txtOut << "PEER_STAT frames with each other so all peers connected to the"         << Qt::endl;
+                    txtOut << "sub-channel can be made aware of each other's public information."      << Qt::endl;
+                    txtOut << "without the active flag, no such frames are transffered."               << Qt::endl << Qt::endl;
+                    txtOut << "[0] Disable"                                                            << Qt::endl;
+                    txtOut << "[1] Enable"                                                             << Qt::endl << Qt::endl;
                     txtOut << "Select an option (leave blank to cancel): ";
 
                     level = 2;
                 }
                 else if ((select == 10) && ok)
                 {
-                    txtOut << ""                                                                     << endl;
-                    txtOut << "This option sets the maximum amount of sub-channels each channel can" << endl;
-                    txtOut << "have. the hard maximum is 256 and the minimum is 1."                  << endl << endl;
+                    txtOut << ""                                                                     << Qt::endl;
+                    txtOut << "This option sets the maximum amount of sub-channels each channel can" << Qt::endl;
+                    txtOut << "have. the hard maximum is 256 and the minimum is 1."                  << Qt::endl << Qt::endl;
                     txtOut << "Enter a new value (leave blank to cancel): ";
 
                     level = 2;
                 }
                 else if ((select == 11) && ok)
                 {
-                    txtOut << ""                                                                    << endl;
-                    txtOut << "Set the root user of the host by the given user name. the root user" << endl;
-                    txtOut << "is an unrestricted user that can do anything on the host. this user" << endl;
-                    txtOut << "however is unable to change rank (1) and cannot get deleted. only"   << endl;
-                    txtOut << "the current root user can use this option to appoint an existing"    << endl;
-                    txtOut << "user as the new root."                                               << endl << endl;
+                    txtOut << ""                                                                    << Qt::endl;
+                    txtOut << "Set the root user of the host by the given user name. the root user" << Qt::endl;
+                    txtOut << "is an unrestricted user that can do anything on the host. this user" << Qt::endl;
+                    txtOut << "however is unable to change rank (1) and cannot get deleted. only"   << Qt::endl;
+                    txtOut << "the current root user can use this option to appoint an existing"    << Qt::endl;
+                    txtOut << "user as the new root."                                               << Qt::endl << Qt::endl;
 
                     if (rdFromBlock(userId, BLKSIZE_USER_ID) != rootUserId())
                     {
@@ -308,7 +308,7 @@ void ServSettings::procIn(const QByteArray &binIn, quint8 dType)
                     }
                     else
                     {
-                        txtOut << "You are not the current root user so this option is blocked." << endl;
+                        txtOut << "You are not the current root user so this option is blocked." << Qt::endl;
                         txtOut << "Press enter to return to the main menu.";
                     }
 
@@ -320,7 +320,7 @@ void ServSettings::procIn(const QByteArray &binIn, quint8 dType)
                 }
                 else
                 {
-                    txtOut << "" << endl << "Select an option: ";
+                    txtOut << "" << Qt::endl << "Select an option: ";
                 }
 
                 promptTxt(txt);

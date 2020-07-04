@@ -40,16 +40,16 @@ QByteArray rdFileContents(const QString &path, QTextStream &msg)
 
         if (!ret.isEmpty())
         {
-            msg << "[pass]" << endl;
+            msg << "[pass]" << Qt::endl;
         }
         else
         {
-            msg << "[fail] (0 bytes of data was read from the file, is it empty?)" << endl;
+            msg << "[fail] (0 bytes of data was read from the file, is it empty?)" << Qt::endl;
         }
     }
     else
     {
-        msg << "[fail] (" << file.errorString() << ")" << endl;
+        msg << "[fail] (" << file.errorString() << ")" << Qt::endl;
     }
 
     file.close();
@@ -1007,11 +1007,11 @@ bool ShellIPC::connectToHost()
     {
         if (QFileInfo(QDir::tempPath() + "/" + HOST_CONTROL_PIPE).exists())
         {
-            QTextStream(stdout) << "" << endl << "Permission denied." << endl << endl;
+            QTextStream(stdout) << "" << Qt::endl << "Permission denied." << Qt::endl << Qt::endl;
         }
         else
         {
-            QTextStream(stdout) << "" << endl << "Host instance not running." << endl << endl;
+            QTextStream(stdout) << "" << Qt::endl << "Host instance not running." << Qt::endl << Qt::endl;
         }
     }
 

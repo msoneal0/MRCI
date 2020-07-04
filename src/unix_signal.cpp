@@ -16,6 +16,8 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
+#ifdef Q_OS_LINUX
+
 void setupUnixSignalHandlers()
 {
     struct sigaction hup;
@@ -89,3 +91,5 @@ void UnixSignalHandler::handleSigHup()
 
     snHup->setEnabled(true);
 }
+
+#endif // Q_OS_LINUX

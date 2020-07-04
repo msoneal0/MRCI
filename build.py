@@ -20,10 +20,10 @@ def get_qt_path():
     try:
         return str(subprocess.check_output(["qtpaths", "--binaries-dir"]), 'utf-8').strip()
         
-    except CalledProcessError:
-        print("A call to 'qtpaths' to get the QT installation bin folder failed.")
+    except:
+        print("A direct call to 'qtpaths' has failed so automatic retrieval of the QT bin folder is not possible.")
         
-        return raw_input("Please enter the QT bin path (leave blank to cancel the build): ")
+        return input("Please enter the QT bin path (leave blank to cancel the build): ")
 
 def get_qt_from_cli():
     for arg in sys.argv:
@@ -45,6 +45,59 @@ def get_db_header():
         return "src" + os.sep + "db.h"
     else:
         return current_dir + os.sep + "src" + os.sep + "db.h"
+
+def get_nearest_subdir(path, sub_name):
+    dir_list = os.listdir(path)
+    ret = ""
+
+    for entry in dir_list:
+        if sub_name in entry:
+            ret = entry
+
+            break
+
+    return ret
+
+def get_maker(qt_path):
+    ret = ""
+
+    if platform.system() == "Linux":
+        ret = "make"
+                                    
+    elif platform.system() == "Windows":
+        path = os.path.abspath(qt_path + "\\..")
+        name = os.path.basename(path)
+
+        if "mingw" in name:
+            tools_path = os.path.abspath(qt_path + "\\..\\..\\..\\Tools")
+            mingw_ver = name[5:7]
+            mingw_tool_subdir = get_nearest_subdir(tools_path, "mingw" + mingw_ver)
+            mingw_tool_path = tools_path + "\\" + mingw_tool_subdir + "\\bin"
+
+            if not os.environ['PATH'].endswith(";"):
+                os.environ['PATH'] = os.environ['PATH'] + ";"
+            
+            os.environ['PATH'] = os.environ['PATH'] + mingw_tool_path
+            
+            ret = "mingw32-make"
+
+        elif "msvc" in name:
+            print("Warning: this script will assume you already ran the VsDevCmd.bat or vsvars32.bat script files")
+            print("         for Microsoft Visual Studio. Either way, a call to 'nmake' should be recognizable as ")
+            print("         a shell command otherwise this script will fail.\n")
+
+            ans = input("If that is the case enter 'y' to continue or any other key to cancel the build: ")
+
+            if ans == 'y' or ans == 'Y':
+                ret = "nmake"
+            
+            else:
+                exit()
+            
+    else:
+        print("The system platform is unknown. Output from platform.system() = " + platform.system())
+
+    return ret 
     
 def cd():
     current_dir = os.path.dirname(__file__)
@@ -72,9 +125,9 @@ def linux_build_app_dir(app_ver, app_name, app_target, qt_bin):
         os.makedirs("app_dir/linux/lib")
         
     verbose_copy(qt_bin + "/../plugins/sqldrivers/libqsqlite.so", "app_dir/linux/sqldrivers/libqsqlite.so")
-    verbose_copy("build/" + app_target, "app_dir/linux/" + app_target)
+    verbose_copy("build/linux/" + app_target, "app_dir/linux/" + app_target)
     
-    shutil.copyfile("build/" + app_target, "/tmp/" + app_target)
+    shutil.copyfile("build/linux/" + app_target, "/tmp/" + app_target)
     # copying the executable file from the build folder to
     # temp bypasses any -noexe retrictions a linux file
     # system may have. there is a chance temp is also
@@ -96,45 +149,51 @@ def linux_build_app_dir(app_ver, app_name, app_target, qt_bin):
                     file_name = os.path.basename(src_file)
                     
                     verbose_copy(src_file, "app_dir/linux/lib/" + file_name)
-                    
-    with open("app_dir/linux/" + app_target + ".sh", "w") as file:
-        file.write("#!/bin/sh\n")
-        file.write("export QTDIR=$install_dir\n")
-        file.write("export QT_PLUGIN_PATH=$install_dir\n")
-        file.write("export LD_LIBRARY_PATH=\"$install_dir/lib:\$LD_LIBRARY_PATH\"\n")
-        file.write("$install_dir/" + app_target + " $1 $2 $3\n")
-        
-    with open("app_dir/linux/" + app_target + ".service", "w") as file:
-        file.write("[Unit]\n")
-        file.write("Description=" + app_name + " Host Daemon\n")
-        file.write("After=network.target\n\n")
-        file.write("[Service]\n")
-        file.write("Type=simple\n")
-        file.write("User=" + app_target + "\n")
-        file.write("Restart=on-failure\n")
-        file.write("RestartSec=5\n")
-        file.write("TimeoutStopSec=infinity\n")
-        file.write("ExecStart=/usr/bin/env " + app_target + " -host\n")
-        file.write("ExecStop=/usr/bin/env " + app_target + " -stop\n\n")
-        file.write("[Install]\n")
-        file.write("WantedBy=multi-user.target\n")
-        
-    with open("app_dir/linux/uninstall.sh", "w") as file:
-        file.write("#!/bin/sh\n")
-        file.write("systemctl -q stop " + app_target + "\n")
-        file.write("systemctl -q disable " + app_target + "\n")
-        file.write("rm -v /etc/systemd/system/" + app_target + ".service\n")
-        file.write("rm -v /usr/bin/" + app_target + "\n")
-        file.write("rm -rv $install_dir\n")
-        file.write("deluser " + app_target + "\n")
-        
-    complete(app_ver)
 
-def windows_build_app_dir():
-    print("Windows support is work in progress. Check for an update at a later time.")
-    # to do: fill out code for windows support here.
+    verbose_copy("templates/linux_run_script.sh", "app_dir/linux/" + app_target + ".sh")
+    verbose_copy("templates/linux_service.service", "app_dir/linux/" + app_target + ".service")
+    verbose_copy("templates/linux_uninstall.sh", "app_dir/linux/uninstall.sh")
+        
+    complete(app_ver, app_target)
+
+def windows_build_app_dir(app_ver, app_name, app_target, qt_bin):
+    if os.path.exists("release"):
+        os.removedirs("release")
+
+    if os.path.exists("debug"):
+        os.removedirs("debug")
+
+    if not os.path.exists("app_dir\\windows"):
+        os.makedirs("app_dir\\windows")
+
+    verbose_copy("build\\windows\\" + app_target + ".exe", "app_dir\\windows\\" + app_target + ".exe")
+    verbose_copy("templates\\windows_uninstall.bat", "app_dir\\windows\\uninstall.bat")
+    verbose_copy("templates\\windows_shtask.xml", "app_dir\\windows\\shtask.xml")
+    os.chdir("app_dir\\windows\\")
+
+    result = subprocess.run([qt_bin + "\\" + "windeployqt", app_target + ".exe"])
+
+    cd()
+
+    if result.returncode == 0:
+        complete(app_ver, app_target)
     
-def complete(app_ver):
+def complete(app_ver, app_target):
+    if os.path.exists("Makefile"):
+        os.remove("Makefile")
+
+    if os.path.exists("Makefile.Debug"):
+        os.remove("Makefile.Debug")
+
+    if os.path.exists("Makefile.Release"):
+        os.remove("Makefile.Release")
+
+    if os.path.exists("object_script." + app_target + ".Debug"):
+        os.remove("object_script." + app_target + ".Debug")
+
+    if os.path.exists("object_script." + app_target + ".Release"):
+        os.remove("object_script." + app_target + ".Release")
+
     print("Build complete for version: " + app_ver)
     print("You can now run the install.py script to install onto this machine or create an installer.")
     
@@ -147,40 +206,47 @@ def main():
         app_name = get_app_name(text)
         qt_bin = get_qt_from_cli()
         
-        if qt_bin is "":
+        if qt_bin == "":
             qt_bin = get_qt_path()
+
+        maker = get_maker(qt_bin)
             
         if qt_bin != "":
             print("app_target  = " + app_target)
             print("app_version = " + app_ver)
             print("app_name    = " + app_name)
             print("qt_bin      = " + qt_bin)
-            
-            cd()
-            
-            result = subprocess.run([qt_bin + os.sep + "qmake", "-config", "release"])
-            
-            if result.returncode == 0:
-                result = subprocess.run(["make"])
+            print("maker       = " + maker + "\n")
+
+            if maker == "":
+                print("Could not find a valid maker/compiler on this platform, unable to continue.")
+
+            else:
+                cd()
                 
-            if result.returncode == 0:
-                if not os.path.exists("app_dir"):
-                    os.makedirs("app_dir")
+                result = subprocess.run([qt_bin + os.sep + "qmake", "-config", "release"])
+            
+                if result.returncode == 0:
+                    result = subprocess.run([maker])
+                
+                if result.returncode == 0:
+                    if not os.path.exists("app_dir"):
+                        os.makedirs("app_dir")
+                        
+                    with open("app_dir" + os.sep + "info.txt", "w") as info_file:
+                        info_file.write(app_target + "\n")
+                        info_file.write(app_ver + "\n")
+                        info_file.write(app_name + "\n")
+                
+                    if platform.system() == "Linux":
+                        linux_build_app_dir(app_ver, app_name, app_target, qt_bin)
+                                    
+                    elif platform.system() == "Windows":
+                        windows_build_app_dir(app_ver, app_name, app_target, qt_bin)
                     
-                with open("app_dir" + os.sep + "info.txt", "w") as info_file:
-                    info_file.write(app_target + "\n")
-                    info_file.write(app_ver + "\n")
-                    info_file.write(app_name + "\n")
-                
-                if platform.system() == "Linux":
-                    linux_build_app_dir(app_ver, app_name, app_target, qt_bin)
-                                    
-                elif platform.system() == "Windows":
-                    windows_build_app_dir()
-                                    
-                else:
-                    print("The platform you are running in is not compatible with the app_dir build out procedure.")
-                    print("  output from platform.system() = " + platform.system())    
-  
+                    else:
+                        print("The platform you are running in is not compatible with the app_dir build out procedure.")
+                        print("  output from platform.system() = " + platform.system())
+
 if __name__ == "__main__":
     main()
