@@ -123,7 +123,7 @@ void ListChannels::procIn(const QByteArray &binIn, quint8 dType)
     }
     else
     {
-        TableViewer::procIn(toTEXT("-" + QString(COLUMN_USERNAME) + " " + rdStringFromBlock(userName, BLKSIZE_USER_NAME)), dType);
+        TableViewer::procIn(QString("-" + QString(COLUMN_USERNAME) + " " + rdStringFromBlock(userName, BLKSIZE_USER_NAME)).toUtf8(), dType);
     }
 }
 
@@ -156,11 +156,11 @@ void ListSubCh::procIn(const QByteArray &binIn, quint8 dType)
 
             if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) > REGULAR)
             {
-                TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName + " -" + QString(COLUMN_LOWEST_LEVEL) + " " + QString::number(PUBLIC)), dType);
+                TableViewer::procIn(QString("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName + " -" + QString(COLUMN_LOWEST_LEVEL) + " " + QString::number(PUBLIC)).toUtf8(), dType);
             }
             else
             {
-                TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName), dType);
+                TableViewer::procIn(QString("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName).toUtf8(), dType);
             }
         }
     }
@@ -194,13 +194,13 @@ void SearchChannels::procIn(const QByteArray &binIn, quint8 dType)
             {
                 retCode = NO_ERRORS;
 
-                TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + name), dType);
+                TableViewer::procIn(QString("-" + QString(COLUMN_CHANNEL_NAME) + " " + name).toUtf8(), dType);
             }
             else if (!chId.isEmpty())
             {
                 retCode = NO_ERRORS;
 
-                TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_ID) + " " + chId), dType);
+                TableViewer::procIn(QString("-" + QString(COLUMN_CHANNEL_ID) + " " + chId).toUtf8(), dType);
             }
             else
             {
@@ -251,16 +251,16 @@ void ListMembers::procIn(const QByteArray &binIn, quint8 dType)
             {
                 retCode = NO_ERRORS;
 
-                auto argsBa = toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName);
+                auto argsBa = QString("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName).toUtf8();
 
                 if (!userFind.isEmpty())
                 {
-                    argsBa.append(toTEXT(" -" + QString(COLUMN_USERNAME) + " " + userFind));
+                    argsBa.append(QString(" -" + QString(COLUMN_USERNAME) + " " + userFind).toUtf8());
                 }
 
                 if (!dispFind.isEmpty())
                 {
-                    argsBa.append(toTEXT(" -" + QString(COLUMN_DISPLAY_NAME) + " " + dispFind));
+                    argsBa.append(QString(" -" + QString(COLUMN_DISPLAY_NAME) + " " + dispFind).toUtf8());
                 }
 
                 TableViewer::procIn(argsBa, dType);

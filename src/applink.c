@@ -7,6 +7,10 @@
  * https://www.openssl.org/source/license.html
  */
 
+#include <QtCore>
+
+#ifdef Q_OS_WINDOWS
+
 #define APPLINK_STDIN   1
 #define APPLINK_STDOUT  2
 #define APPLINK_STDERR  3
@@ -134,5 +138,6 @@ OPENSSL_Applink(void)
 
 #ifdef __cplusplus
 }
+#endif
 #endif
 #endif

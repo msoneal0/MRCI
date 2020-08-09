@@ -24,7 +24,7 @@ QByteArray toFILE_INFO(const QFileInfo &info)
     // format: [1byte(flags)][8bytes(createTime)][8bytes(modTime)][8bytes(fileSize)]
     //         [TEXT(fileName)][TEXT(symLinkTarget)]
 
-    //         note: the TEXT strings are 16bit NULL terminated meaning 2 bytes of 0x00
+    //         note: the TEXT strings are NULL terminated which means 1 byte of 0x00
     //               indicate the end of the string.
 
     //         note: the integer data found in flags, modTime, createTime and fileSize
@@ -41,14 +41,13 @@ QByteArray toFILE_INFO(const QFileInfo &info)
     if (info.exists())       flags |= EXISTS;
 
     QByteArray ret;
-    QByteArray strTerm(2, 0);
 
     ret.append(flags);
     ret.append(wrInt(info.birthTime().toMSecsSinceEpoch(), 64));
     ret.append(wrInt(info.lastModified().toMSecsSinceEpoch(), 64));
     ret.append(wrInt(info.size(), 64));
-    ret.append(toTEXT(info.fileName()) + strTerm);
-    ret.append(toTEXT(info.symLinkTarget()) + strTerm);
+    ret.append(nullTermTEXT(info.fileName()));
+    ret.append(nullTermTEXT(info.symLinkTarget()));
 
     return ret;
 }
@@ -184,7 +183,7 @@ void DownloadFile::procIn(const QByteArray &binIn, quint8 dType)
 
             emit mainTxt("dl_file: " + path + "\n");
             emit mainTxt("bytes:   " + QString::number(progMax) + "\n");
-            emit procOut(toTEXT("-len " + QString::number(progMax)), GEN_FILE);
+            emit procOut(QString("-len " + QString::number(progMax)).toUtf8(), GEN_FILE);
 
             startProgPulse();
         }
@@ -257,7 +256,7 @@ void UploadFile::procIn(const QByteArray &binIn, quint8 dType)
 {
     if (((dType == GEN_FILE) || (dType == TEXT)) && confirm)
     {
-        auto ans = fromTEXT(binIn);
+        auto ans = QString::fromUtf8(binIn);
 
         if (noCaseMatch("y", ans))
         {
@@ -386,7 +385,7 @@ void Delete::procIn(const QByteArray &binIn, uchar dType)
 {
     if ((flags & MORE_INPUT) && (dType == TEXT))
     {
-        auto ans = fromTEXT(binIn);
+        auto ans = QString::fromUtf8(binIn);
 
         if (noCaseMatch("y", ans))
         {
@@ -609,7 +608,7 @@ void Copy::procIn(const QByteArray &binIn, uchar dType)
     }
     else if ((dType == TEXT) && (flags & MORE_INPUT))
     {
-        auto ans = fromTEXT(binIn);
+        auto ans = QString::fromUtf8(binIn);
 
         if (noCaseMatch("y", ans))
         {
@@ -942,7 +941,7 @@ void ChangeDir::procIn(const QByteArray &binIn, quint8 dType)
             QDir::setCurrent(path);
 
             mainTxt(QDir::currentPath() + "\n");
-            async(ASYNC_SET_DIR, toTEXT(path));
+            async(ASYNC_SET_DIR, path.toUtf8());
         }
     }
 }

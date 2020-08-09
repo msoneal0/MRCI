@@ -133,7 +133,7 @@ void CreateUser::procIn(const QByteArray &binIn, quint8 dType)
     {
         if (flags & MORE_INPUT)
         {
-            auto password = fromTEXT(binIn);
+            auto password = QString::fromUtf8(binIn);
 
             QString errMsg;
 
@@ -242,7 +242,7 @@ void RemoveUser::procIn(const QByteArray &binIn, quint8 dType)
     {
         if (flags & MORE_INPUT)
         {
-            auto ans = fromTEXT(binIn);
+            auto ans = QString::fromUtf8(binIn);
 
             if (noCaseMatch("y", ans))
             {
@@ -376,7 +376,7 @@ void ChangePassword::procIn(const QByteArray &binIn, quint8 dType)
     {
         if (flags & MORE_INPUT)
         {
-            auto password = fromTEXT(binIn);
+            auto password = QString::fromUtf8(binIn);
 
             QString errMsg;
 
@@ -440,7 +440,7 @@ void ChangeUsername::procIn(const QByteArray &binIn, quint8 dType)
             retCode = NO_ERRORS;
 
             auto uId       = rdFromBlock(userId, BLKSIZE_USER_ID);
-            auto newNameBa = fixedToTEXT(newName, BLKSIZE_USER_NAME);
+            auto newNameBa = toFixedTEXT(newName, BLKSIZE_USER_NAME);
 
             Query db(this);
 
@@ -478,7 +478,7 @@ void ChangeDispName::procIn(const QByteArray &binIn, quint8 dType)
             Query db(this);
 
             auto uId       = rdFromBlock(userId, BLKSIZE_USER_ID);
-            auto newNameBa = fixedToTEXT(name, BLKSIZE_DISP_NAME);
+            auto newNameBa = toFixedTEXT(name, BLKSIZE_DISP_NAME);
 
             db.setType(Query::UPDATE, TABLE_USERS);
             db.addColumn(COLUMN_DISPLAY_NAME, name);

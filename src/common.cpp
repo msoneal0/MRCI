@@ -99,30 +99,14 @@ quint16 toCmdId16(quint32 id)
     return ret;
 }
 
-QByteArray toTEXT(const QString &txt)
+QByteArray toFixedTEXT(const QString &txt, int len)
 {
-    QByteArray ret = QTextCodec::codecForName(TXT_CODEC)->fromUnicode(txt);
-
-    return ret.mid(2); // removes BOM.
-}
-
-QByteArray fixedToTEXT(const QString &txt, int len)
-{
-    return toTEXT(txt).leftJustified(len, 0, true);
+    return txt.toUtf8().leftJustified(len, 0, true);
 }
 
 QByteArray nullTermTEXT(const QString &txt)
 {
-    return toTEXT(txt) + QByteArray(2, 0x00);
-}
-
-QString fromTEXT(const QByteArray &txt)
-{
-    QByteArray ba = txt;
-
-    ba.replace(QByteArray(2, 0x00), QByteArray());
-
-    return QTextCodec::codecForName(TXT_CODEC)->toUnicode(ba);
+    return txt.toUtf8() + QByteArray(1, 0x00);
 }
 
 bool noCaseMatch(const QString &strA, const QString &strB)
@@ -132,7 +116,7 @@ bool noCaseMatch(const QString &strA, const QString &strB)
 
 bool containsNewLine(const QString &str)
 {
-    bool ret = false;
+    auto ret = false;
 
     for (auto&& chr : str)
     {
@@ -147,7 +131,7 @@ bool containsNewLine(const QString &str)
 
 bool validSubId(const QString &num)
 {
-    bool ret = false;
+    auto ret = false;
 
     if (isInt(num))
     {
@@ -159,9 +143,9 @@ bool validSubId(const QString &num)
 
 bool validUserName(const QString &uName)
 {
-    bool ret = false;
+    auto ret = false;
 
-    if ((uName.size() >= 2) && ((uName.size() * 2) <= BLKSIZE_USER_NAME))
+    if ((uName.size() >= 2) && (uName.size() <= BLKSIZE_USER_NAME))
     {
         ret = !uName.contains(' ') && !containsNewLine(uName);
     }
@@ -169,25 +153,12 @@ bool validUserName(const QString &uName)
     return ret;
 }
 
-bool validCommonName(const QString &name)
-{
-    bool ret = false;
-
-    if ((name.size() >= 1) && (name.size() <= 136))
-    {
-        ret = !name.contains(' ') && !containsNewLine(name);
-    }
-
-    return ret;
-}
-
 bool validEmailAddr(const QString &email)
 {
-    bool ret = false;
+    auto ret     = false;
+    auto spEmail = email.split('@');
 
-    QStringList spEmail = email.split('@');
-
-    if ((spEmail.size() == 2) && (email.size() >= 4) && (email.size() <= 64))
+    if ((spEmail.size() == 2) && (email.size() >= 4) && (email.size() <= BLKSIZE_EMAIL_ADDR))
     {
         if (!email.contains(' ') && !containsNewLine(email))
         {
@@ -212,7 +183,7 @@ bool validCommandName(const QString &name)
 
 bool validDispName(const QString &name)
 {
-    return ((name.size() * 2) <= BLKSIZE_DISP_NAME) && !containsNewLine(name);
+    return (name.size() <= BLKSIZE_DISP_NAME) && !containsNewLine(name);
 }
 
 bool validChName(const QString &name)
@@ -248,11 +219,12 @@ bool validLevel(const QString &num, bool includePub)
 
 bool validModPath(const QString &modPath)
 {
-    bool    ret       = true;
-    QString forbidden = "|*:\"?<>";
+    auto ret = !modPath.isEmpty();
 
-    if ((modPath.size() > 512) || modPath.isEmpty())
+    if (ret)
     {
+        static const QString forbidden = "|*:\"?<>";
+
         for (auto&& chr : forbidden)
         {
             if (modPath.contains(chr))
@@ -584,6 +556,27 @@ void containsActiveCh(const char *subChs, char *actBlock)
     }
 }
 
+void printDatabaseInfo(QTextStream &txt)
+{
+    auto json   = getDbSettings();
+    auto driver = json["driver"].toString();
+
+    txt << "Database Parameters --" << Qt::endl << Qt::endl;
+    txt << "Driver: " << driver << Qt::endl;
+
+    if (driver == "QSQLITE")
+    {
+        txt << "File:   " << sqlDataPath() << Qt::endl;
+    }
+    else
+    {
+        txt << "Host:   " << json["host_name"].toString() << Qt::endl;
+        txt << "User:   " << json["user_name"].toString() << Qt::endl;
+    }
+
+    txt << Qt::endl;
+}
+
 QString defaultPw()
 {
     Query db;
@@ -854,16 +847,17 @@ QStringList parseArgs(const QByteArray &data, int maxArgs, int *pos)
 {
     QStringList ret;
     QString     arg;
-    QString     line      = fromTEXT(data);
-    bool        inDQuotes = false;
-    bool        inSQuotes = false;
-    bool        escaped   = false;
+
+    auto line      = QString::fromUtf8(data);
+    auto inDQuotes = false;
+    auto inSQuotes = false;
+    auto escaped   = false;
 
     if (pos != nullptr) *pos = 0;
 
     for (int i = 0; i < line.size(); ++i)
     {
-        if (pos != nullptr) *pos += (TXT_CODEC_BITS / 8);
+        if (pos != nullptr) *pos += 1;
 
         if ((line[i] == '\'') && !inDQuotes && !escaped)
         {
@@ -990,9 +984,10 @@ void IdleTimer::attach(QIODevice *dev, int msec)
     connect(dev, SIGNAL(bytesWritten(qint64)), this, SLOT(detectWrite(qint64)));
 }
 
-ShellIPC::ShellIPC(const QStringList &args, QObject *parent) : QLocalSocket(parent)
+ShellIPC::ShellIPC(const QStringList &args, bool supressErr, QObject *parent) : QLocalSocket(parent)
 {
     arguments = args;
+    holdErrs  = supressErr;
 
     connect(this, SIGNAL(connected()), this, SLOT(hostConnected()));
     connect(this, SIGNAL(disconnected()), this, SIGNAL(closeInstance()));
@@ -1001,17 +996,23 @@ ShellIPC::ShellIPC(const QStringList &args, QObject *parent) : QLocalSocket(pare
 
 bool ShellIPC::connectToHost()
 {
-    connectToServer(HOST_CONTROL_PIPE);
+    auto pipeInfo = QFileInfo(QDir::tempPath() + "/" + HOST_CONTROL_PIPE);
 
-    if (!waitForConnected())
+    if (!pipeInfo.exists())
     {
-        if (QFileInfo(QDir::tempPath() + "/" + HOST_CONTROL_PIPE).exists())
+        if (!holdErrs)
         {
-            QTextStream(stdout) << "" << Qt::endl << "Permission denied." << Qt::endl << Qt::endl;
+            QTextStream(stdout) << "" << Qt::endl << "A host instance is not running." << Qt::endl << Qt::endl;
         }
-        else
+    }
+    else
+    {
+        connectToServer(HOST_CONTROL_PIPE);
+
+        if (!waitForConnected() && !holdErrs)
         {
-            QTextStream(stdout) << "" << Qt::endl << "Host instance not running." << Qt::endl << Qt::endl;
+            QTextStream(stdout) << "" << Qt::endl << "err: Failed to connect to the host instance control pipe." << Qt::endl;
+            QTextStream(stdout) << "err: Reason - " << errorString() << Qt::endl;
         }
     }
 
@@ -1020,12 +1021,12 @@ bool ShellIPC::connectToHost()
 
 void ShellIPC::hostConnected()
 {
-    write(toTEXT(arguments.join(' ')));
+    write(arguments.join(' ').toUtf8());
 }
 
 void ShellIPC::dataIn()
 {
-    QTextStream(stdout) << fromTEXT(readAll());
+    QTextStream(stdout) << QString::fromUtf8(readAll());
 
     emit closeInstance();
 }

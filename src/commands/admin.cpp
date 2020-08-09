@@ -30,7 +30,7 @@ void CloseHost::procIn(const QByteArray &binIn, quint8 dType)
     {
         if (flags & MORE_INPUT)
         {
-            auto input = fromTEXT(binIn);
+            auto input = QString::fromUtf8(binIn);
 
             if (input == "CLOSE")
             {
@@ -64,7 +64,7 @@ void RestartHost::procIn(const QByteArray &binIn, quint8 dType)
     {
         if (flags & MORE_INPUT)
         {
-            auto input = fromTEXT(binIn);
+            auto input = QString::fromUtf8(binIn);
 
             if (input == "RESTART")
             {
@@ -127,10 +127,10 @@ void ServSettings::printSettings()
     txtOut << "Initial Host Rank:              " << db.getData(COLUMN_INITRANK).toUInt()    << Qt::endl;
     txtOut << "Root User:                      " << getUserName(rootUserId())               << Qt::endl;
     txtOut << "Working Path:                   " << QDir::currentPath()                     << Qt::endl;
-    txtOut << "Database:                       " << sqlDataPath()                           << Qt::endl;
     txtOut << "Mailer Executable:              " << db.getData(COLUMN_MAILERBIN).toString() << Qt::endl;
     txtOut << "Mailer Command:                 " << db.getData(COLUMN_MAIL_SEND).toString() << Qt::endl << Qt::endl;
 
+    printDatabaseInfo(txtOut);
     mainTxt(txt);
 }
 
@@ -178,7 +178,7 @@ void ServSettings::procIn(const QByteArray &binIn, quint8 dType)
 
                 auto ok = false;
 
-                select = fromTEXT(binIn).toInt(&ok);
+                select = QString::fromUtf8(binIn).toInt(&ok);
 
                 if ((select == 1) && ok)
                 {
@@ -327,7 +327,7 @@ void ServSettings::procIn(const QByteArray &binIn, quint8 dType)
             }
             else if (level == 2)
             {
-                auto value = fromTEXT(binIn);
+                auto value = QString::fromUtf8(binIn);
 
                 if (value.isEmpty())
                 {

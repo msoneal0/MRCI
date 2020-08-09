@@ -125,6 +125,8 @@ def linux_build_app_dir(app_ver, app_name, app_target, qt_bin):
         os.makedirs("app_dir/linux/lib")
         
     verbose_copy(qt_bin + "/../plugins/sqldrivers/libqsqlite.so", "app_dir/linux/sqldrivers/libqsqlite.so")
+    verbose_copy(qt_bin + "/../plugins/sqldrivers/libqsqlodbc.so", "app_dir/linux/sqldrivers/libqsqlodbc.so")
+    verbose_copy(qt_bin + "/../plugins/sqldrivers/libqsqlpsql.so", "app_dir/linux/sqldrivers/libqsqlpsql.so")
     verbose_copy("build/linux/" + app_target, "app_dir/linux/" + app_target)
     
     shutil.copyfile("build/linux/" + app_target, "/tmp/" + app_target)

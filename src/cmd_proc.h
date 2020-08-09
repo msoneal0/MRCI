@@ -46,6 +46,7 @@ protected:
     quint32       ipcDataSize;
     quint32       hostRank;
     quint32       flags;
+    QStringList   additionalArgs;
     IdleTimer    *idleTimer;
     QLocalServer *ipcServ;
     QLocalSocket *ipcSocket;
@@ -75,6 +76,7 @@ public:
 
     explicit ModProcess(const QString &app, const QString &memSes, const QString &memHos, const QString &pipe, QObject *parent = nullptr);
 
+    void addArgs(const QString &cmdLine);
     void setSessionParams(QHash<quint16, QString> *uniqueNames,
                           QHash<quint16, QString> *realNames,
                           QHash<quint16, QString> *appById,

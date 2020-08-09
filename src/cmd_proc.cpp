@@ -49,12 +49,12 @@ ModProcess::ModProcess(const QString &app, const QString &memSes, const QString 
 
 void ModProcess::rdFromStdErr()
 {
-    emit dataToClient(toCmdId32(ASYNC_SYS_MSG, 0), toTEXT(readAllStandardError()), ERR);
+    emit dataToClient(toCmdId32(ASYNC_SYS_MSG, 0), readAllStandardError(), ERR);
 }
 
 void ModProcess::rdFromStdOut()
 {
-    emit dataToClient(toCmdId32(ASYNC_SYS_MSG, 0), toTEXT(readAllStandardOutput()), TEXT);
+    emit dataToClient(toCmdId32(ASYNC_SYS_MSG, 0), readAllStandardOutput(), TEXT);
 }
 
 quint16 ModProcess::genCmdId()
@@ -124,11 +124,11 @@ void ModProcess::onDataFromProc(quint8 typeId, const QByteArray &data)
 {
     if ((typeId == NEW_CMD) && (flags & SESSION_PARAMS_SET))
     {
-        if (data.size() >= 259)
+        if (data.size() >= 131)
         {
-            // a valid NEW_CMD must have a minimum of 259 bytes.
+            // a valid NEW_CMD must have a minimum of 131 bytes.
 
-            auto cmdName = fromTEXT(data.mid(3, 128)).trimmed().toLower();
+            auto cmdName = QString::fromUtf8(data.mid(3, 64)).trimmed().toLower();
 
              if (isCmdLoaded(cmdName))
              {
@@ -172,7 +172,7 @@ void ModProcess::onDataFromProc(quint8 typeId, const QByteArray &data)
                      modCmdNames->insert(program(), list);
                  }
 
-                 auto frame = cmdIdBa + data.mid(2, 1) + fixedToTEXT(unique, 128) + data.mid(131);
+                 auto frame = cmdIdBa + data.mid(2, 1) + toFixedTEXT(unique, 64) + data.mid(67);
 
                  emit dataToClient(toCmdId32(ASYNC_ADD_CMD, 0), frame, NEW_CMD);
              }
@@ -180,7 +180,7 @@ void ModProcess::onDataFromProc(quint8 typeId, const QByteArray &data)
     }
     else if (typeId == ERR)
     {
-        qDebug() << fromTEXT(data);
+        qDebug() << QString::fromUtf8(data);
     }
 }
 
@@ -267,7 +267,7 @@ void ModProcess::setSessionParams(QHash<quint16, QString> *uniqueNames,
 
 void ModProcess::onFailToStart()
 {
-    emit dataToClient(toCmdId32(ASYNC_SYS_MSG, 0), toTEXT("\nerr: A module failed to start so some commands may not have loaded. detailed error information was logged for admin review.\n"), ERR);
+    emit dataToClient(toCmdId32(ASYNC_SYS_MSG, 0), "\nerr: A module failed to start so some commands may not have loaded. detailed error information was logged for admin review.\n", ERR);
     emit modProcFinished();
 
     deleteLater();
@@ -307,7 +307,7 @@ bool ModProcess::startProc(const QStringList &args)
     {
         fullPipe = ipcServ->fullServerName();
 
-        setArguments(QStringList() << "-pipe_name" << fullPipe << "-mem_ses" << sesMemKey << "-mem_host" << hostMemKey << args);
+        setArguments(QStringList() << "-pipe_name" << fullPipe << "-mem_ses" << sesMemKey << "-mem_host" << hostMemKey << args << additionalArgs);
         start();
     }
     else
@@ -318,6 +318,11 @@ bool ModProcess::startProc(const QStringList &args)
     }
 
     return ret;
+}
+
+void ModProcess::addArgs(const QString &cmdLine)
+{
+    additionalArgs = parseArgs(cmdLine.toUtf8(), -1);
 }
 
 bool ModProcess::loadPublicCmds()
@@ -434,7 +439,7 @@ void CmdProcess::onReady()
 
 void CmdProcess::onFailToStart()
 {
-    emit dataToClient(cmdId, toTEXT("err: The command failed to start. error details were logged for admin review.\n"), ERR);
+    emit dataToClient(cmdId, "err: The command failed to start. error details were logged for admin review.\n", ERR);
     emit dataToClient(cmdId, wrInt(FAILED_TO_START, 16), IDLE);
     emit cmdProcFinished(cmdId);
 
@@ -448,7 +453,7 @@ void CmdProcess::onFinished(int exitCode, QProcess::ExitStatus exitStatus)
 
     if (!cmdIdle)
     {
-        emit dataToClient(cmdId, toTEXT("err: The command has stopped unexpectedly or it has failed to send an IDLE frame before exiting.\n"), ERR);
+        emit dataToClient(cmdId, "err: The command has stopped unexpectedly or it has failed to send an IDLE frame before exiting.\n", ERR);
         emit dataToClient(cmdId, wrInt(CRASH, 16), IDLE);
     }
 
@@ -460,12 +465,12 @@ void CmdProcess::onFinished(int exitCode, QProcess::ExitStatus exitStatus)
 
 void CmdProcess::rdFromStdErr()
 {
-    emit dataToClient(cmdId, toTEXT(readAllStandardError()), ERR);
+    emit dataToClient(cmdId, readAllStandardError(), ERR);
 }
 
 void CmdProcess::rdFromStdOut()
 {
-    emit dataToClient(cmdId, toTEXT(readAllStandardOutput()), TEXT);
+    emit dataToClient(cmdId, readAllStandardOutput(), TEXT);
 }
 
 void CmdProcess::dataFromSession(quint32 id, const QByteArray &data, quint8 dType)

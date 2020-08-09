@@ -115,7 +115,7 @@ void RecoverAcct::procIn(const QByteArray &binIn, quint8 dType)
 {
     if ((flags & MORE_INPUT) && (dType == TEXT))
     {
-        auto pw = fromTEXT(binIn);
+        auto pw = QString::fromUtf8(binIn);
 
         if (inputOk)
         {
@@ -265,9 +265,14 @@ void ResetPwRequest::procIn(const QByteArray &binIn, uchar dType)
             cmdLine.replace(SUBJECT_SUB, "'" + escapeChars(subject, '\\', '\'') + "'");
             cmdLine.replace(MSG_SUB, "'" + escapeChars(body, '\\', '\'') + "'");
 
-            QProcess::startDetached(expandEnvVariables(app), parseArgs(toTEXT(cmdLine), -1));
-
-            mainTxt("A temporary password was sent to the email address associated with the account. this password will expire in 1hour.\n");
+            if (QProcess::startDetached(expandEnvVariables(app), parseArgs(cmdLine.toUtf8(), -1)))
+            {
+                mainTxt("A temporary password was sent to the email address associated with the account. this password will expire in 1hour.\n");
+            }
+            else
+            {
+                errTxt("err: The host email system has reported an internal error, try again later.\n");
+            }
         }
     }
 }
@@ -276,7 +281,7 @@ void VerifyEmail::procIn(const QByteArray &binIn, quint8 dType)
 {
     if ((flags & MORE_INPUT) && (dType == TEXT))
     {
-        auto txt = fromTEXT(binIn);
+        auto txt = QString::fromUtf8(binIn);
 
         if (txt.isEmpty())
         {
@@ -343,9 +348,14 @@ void VerifyEmail::procIn(const QByteArray &binIn, quint8 dType)
             cmdLine.replace(SUBJECT_SUB, "'" + escapeChars(subject, '\\', '\'') + "'");
             cmdLine.replace(MSG_SUB, "'" + escapeChars(body, '\\', '\'') + "'");
 
-            QProcess::startDetached(expandEnvVariables(app), parseArgs(toTEXT(cmdLine), -1));
-
-            privTxt("A confirmation code was sent to your email address: " + email + "\n\n" + "Please enter that code now or leave blank to cancel: ");
+            if (QProcess::startDetached(expandEnvVariables(app), parseArgs(cmdLine.toUtf8(), -1)))
+            {
+                privTxt("A confirmation code was sent to your email address: " + email + "\n\n" + "Please enter that code now or leave blank to cancel: ");
+            }
+            else
+            {
+                errTxt("err: The host email system has reported an internal error, try again later.\n");
+            }
         }
     }
 }
@@ -373,7 +383,7 @@ void SetEmailTemplate::procIn(const QByteArray &binIn, quint8 dType)
 {
     if ((flags & MORE_INPUT) && (dType == GEN_FILE))
     {
-        bodyText.append(fromTEXT(binIn));
+        bodyText.append(QString::fromUtf8(binIn));
 
         dataSent += binIn.size();
 

@@ -42,7 +42,7 @@ enum TypeID : quint8
 ```TEXT```
 This is text that can be displayed directly to the user, passed as command line arguments to be processed or used to carry text data within other data types.
 
-format: ```[UTF-16LE_string] (no BOM)```
+format: ```[UTF-8_string] (no BOM)```
 
 ```GEN_FILE```
 This is a file transfer type id that can be used to transfer any file type (music, photos, documents, etc...). It operates in its own protocol of sorts. The 1st GEN_FILE frame received by the host or client is TEXT parameters similar to what you see in terminal command lines with at least one of the arguments listed below. The next set of GEN_FILE frames received by the host or client is then the binary data that needs to be written to an open file or streamed until the limit defined in -len is meet.
@@ -77,7 +77,7 @@ This id can be treated exactly like TEXT except this tells the client that the c
 This is similar to PRIV_TEXT expect it is not asking for private information. It is simply prompting for non-sensitive information from the user.
 
 ```BIG_TEXT```
-Also formatted exactly like TEXT but this indicates to the client that this is a large body of text that is recommended to be word wrapped when displaying to the user. It can contain line breaks so clients are also recommended to honor those line breaks.
+Also formatted exactly like TEXT but this indicates to the client that this is a large body of text that is recommended to be word wrapped when displaying to the user. It can contain line breaks so clients are recommended to honor those line breaks.
 
 ```IDLE```
 All commands started during the session returns this type id when it has finished it's task. It carries a 16bit unsigned integer indicating the result of the task that the command was running.
@@ -97,13 +97,13 @@ enum RetCode : quint16
 notes:
 1. the custom return code can be additional data added to the end of the 16bit
    integer that can carry additional data about the result of the task. it can
-   be any format that the module itself decides it can should be. nothing is
-   stopping modules from defining return codes beyond the value of 7 but it is
-   advised not to because this enum might be expanded in the future.
+   be any format that the module itself decides it to be. nothing is stopping 
+   modules from defining return codes beyond the value of 7 but it is advised 
+   not to because this enum might be expanded in the future.
 ``` 
 
 ```TERM_CMD```
-This type id doesn't carry any actual data. It is used to tell the host to stop/terminate the command id and branch id that was used to send it. It does not actually terminate the module's process within the host, it only simply tells it to stop what it is currently doing. This will also terminate any commands in a prompt/more input state.
+This type id doesn't carry any actual data. It is used to tell the host to stop/terminate the command id and branch id that was used to send it. It does not actually terminate the module's process within the host, it will only tell it to stop what it is currently doing. This will also terminate any commands in a prompt state.
 
 ```KILL_CMD```
 This works similarly to TERM_CMD except it will also terminate the module process. The module process will have 3 seconds to shutdown gracefully before it is force killed by the host session.
@@ -143,12 +143,12 @@ This is a data structure that carries information about a file system object (fi
   2. bytes[1-8]   - creation time in msec since Epoch UTC (64bit little endian uint)
   3. bytes[9-16]  - modification time in msec since Epoch UTC (64bit little endian uint)
   4. bytes[17-24] - file size (64bit little endian uint)
-  5. bytes[25-n]  - file name (UTF16-LE string, 16bit terminated)
-  6. bytes[n-n]   - symmlink target if it is a symmlink (UTF16-LE string, 16bit terminated)
+  5. bytes[25-n]  - file name (UTF8 string, NULL terminated)
+  6. bytes[n-n]   - symmlink target if it is a symmlink (UTF8 string, NULL terminated)
 
   notes:
-  1. 16bit terminated UTF-16LE strings are basically
-     terminated by 2 bytes of 0x00.
+  1. NULL terminated UTF-8 strings are basically tailed
+     by a single 0x00 byte to indicate the end-of-string.
      
   2. the symmlink target is empty if not a symmlink but
      the terminator should still be present.
@@ -169,11 +169,11 @@ This carry some user account and session information about a peer client connect
 
 ```
   format:
-  1. bytes[0-27]    28bytes  - session id (224bit hash)
-  2. bytes[28-59]   32bytes  - user id (256bit hash)
-  3. bytes[60-107]  48bytes  - user name (TEXT - padded with 0x00)
-  4. bytes[108-241] 134bytes - app name (TEXT - padded with 0x00)
-  5. bytes[242-305] 64bytes  - disp name (TEXT - padded with 0x00)
+  1. bytes[0-27]    28bytes - session id (224bit hash)
+  2. bytes[28-59]   32bytes - user id (256bit hash)
+  3. bytes[60-83]   24bytes - user name (TEXT - padded with 0x00)
+  4. bytes[84-115]  32bytes - app name (TEXT - padded with 0x00)
+  5. bytes[116-139] 24bytes - disp name (TEXT - padded with 0x00)
 
   notes:
   1. the session id is unique to the peer's session connection only. it
@@ -183,23 +183,23 @@ This carry some user account and session information about a peer client connect
      even when the user name changes and across all clients logged into
      the same account.
      
-  3. the display name is the preffered display name of the peer. clients
+  3. the display name is the preferred display name of the peer. clients
      are encouraged to use this rather than the user name when displaying
-     peer info to the user. if empty, it's ok to just fall back to the user
-     name.
+     peer info to the end user. if empty, then it is ok to fall back to 
+     displaying the user name.
 ```
 
 ```PING_PEERS```
-This is formatted extactly as PEER_INFO except it is used by the ASYNC_LIMITED_CAST [async](async.md) command to tell all peer sessions that receive it to send a PEER_INFO frame about the local session to their own clients and return PEER_INFO frames about themselves to the local session.
+This is formatted extactly as PEER_INFO except it is used by the ASYNC_LIMITED_CAST [async](async.md) command to tell all peer sessions that receive it to forward the same frame to their own clients and return PEER_INFO frames about themselves to the session that sent the PING_PEERS.
 
 ```MY_INFO```
 This contains all of the information found in ```PEER_INFO``` for the local session but also includes the following:
 
 ```
   format:
-  1. bytes[306-433] 128bytes - email (TEXT - padded with 0x00)
-  2. bytes[434-437] 4bytes   - host rank (32bit unsigned int)
-  3. bytes[438]     1byte    - is email confirmed? (0x00 false, 0x01 true)
+  1. bytes[140-203] 64bytes - email (TEXT - padded with 0x00)
+  2. bytes[204-207] 4bytes  - host rank (32bit unsigned int)
+  3. bytes[208]     1byte   - is email confirmed? (0x00 false, 0x01 true)
 ```
 
 ```NEW_CMD```
@@ -207,13 +207,13 @@ This contains information about a new command that was added to the current sess
 
 ```
   format:
-  1. bytes[0-1]     2bytes   - 16bit LE unsigned int (command id)
-  2. bytes[2]       1byte    - 8bit LE unsigned int (genfile type)
-  3. bytes[3-130]   128bytes - command name (TEXT - padded with 0x00)
-  4. bytes[131-258] 128bytes - library name (TEXT - padded with 0x00)
-  5. bytes[259-n]   variable - short text (16bit null terminated)
-  6. bytes[n-n]     variable - io text (16bit null terminated)
-  7. bytes[n-n]     variable - long text (16bit null terminated)
+  1. bytes[0-1]    2bytes   - 16bit LE unsigned int (command id)
+  2. bytes[2]      1byte    - 8bit LE unsigned int (genfile type)
+  3. bytes[3-66]   64bytes  - command name (TEXT - padded with 0x00)
+  4. bytes[67-130] 64bytes  - library name (TEXT - padded with 0x00)
+  5. bytes[131-n]  variable - short text (null terminated)
+  6. bytes[n-n]    variable - io text (null terminated)
+  7. bytes[n-n]    variable - long text (null terminated)
 
   notes:
   1. the genfile type is numerical value of 2, 3 or 0. a value of 2 
@@ -288,13 +288,13 @@ This contains public information about a channel member.
   2. bytes[8-39] 32bytes  - user id (256bit hash)
   3. bytes[40]   1byte    - is invite? (0x00=false, 0x01=true)
   4. bytes[41]   1byte    - member's channel privilege level (8bit unsigned int)
-  5. bytes[42-n] variable - user name (TEXT - 16bit null terminated)
-  6. bytes[n-n]  variable - display name (TEXT - 16bit null terminated)
-  7. bytes[n-n]  variable - channel name (TEXT - 16bit null terminated)
+  5. bytes[42-n] variable - user name (TEXT - null terminated)
+  6. bytes[n-n]  variable - display name (TEXT - null terminated)
+  7. bytes[n-n]  variable - channel name (TEXT - null terminated)
   
   notes:
-  1. a 16bit null terminated TEXT formatted string ended with 2 bytes of
-     (0x00) to indicate the end of the string data.
+  1. a null terminated TEXT formatted string ends with a 0x00 to
+     indicate the end of the string.
      
   2. the member's privilege level can be any of the values discribed in
      section [4.3](host_features.md).

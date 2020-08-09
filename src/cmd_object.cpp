@@ -197,27 +197,27 @@ void CmdObject::postProc()
 
 void CmdObject::mainTxt(const QString &txt)
 {
-    emit procOut(toTEXT(txt), TEXT);
+    emit procOut(txt.toUtf8(), TEXT);
 }
 
 void CmdObject::errTxt(const QString &txt)
 {
-    emit procOut(toTEXT(txt), ERR);
+    emit procOut(txt.toUtf8(), ERR);
 }
 
 void CmdObject::privTxt(const QString &txt)
 {
-    emit procOut(toTEXT(txt), PRIV_TEXT);
+    emit procOut(txt.toUtf8(), PRIV_TEXT);
 }
 
 void CmdObject::bigTxt(const QString &txt)
 {
-    emit procOut(toTEXT(txt), BIG_TEXT);
+    emit procOut(txt.toUtf8(), BIG_TEXT);
 }
 
 void CmdObject::promptTxt(const QString &txt)
 {
-    emit procOut(toTEXT(txt), PROMPT_TEXT);
+    emit procOut(txt.toUtf8(), PROMPT_TEXT);
 }
 
 void CmdObject::async(quint16 asyncId, const QByteArray &data)

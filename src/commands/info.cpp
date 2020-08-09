@@ -84,8 +84,8 @@ void ListCommands::onIPCConnected()
 
         frame.append(QByteArray(2, 0x00));
         frame.append(genType);
-        frame.append(fixedToTEXT(cmdName, BLKSIZE_CMD_NAME));
-        frame.append(fixedToTEXT(libName(), BLKSIZE_LIB_NAME));
+        frame.append(toFixedTEXT(cmdName, 64));
+        frame.append(toFixedTEXT(libName(), 64));
         frame.append(nullTermTEXT(shortText(cmdName)));
         frame.append(nullTermTEXT(ioText(cmdName)));
         frame.append(nullTermTEXT(longText(cmdName)));
@@ -139,9 +139,9 @@ void MyInfo::procIn(const QByteArray &binIn, quint8 dType)
         QString     txt;
         QTextStream txtOut(&txt);
 
-        QString sesId = rdFromBlock(sessionId, BLKSIZE_SESSION_ID).toHex();
-        QString ip    = rdStringFromBlock(clientIp, BLKSIZE_CLIENT_IP);
-        QString app   = rdStringFromBlock(appName, BLKSIZE_APP_NAME);
+        auto sesId = rdFromBlock(sessionId, BLKSIZE_SESSION_ID).toHex();
+        auto ip    = rdStringFromBlock(clientIp, BLKSIZE_CLIENT_IP);
+        auto app   = rdStringFromBlock(appName, BLKSIZE_APP_NAME);
 
         txtOut << "Session id:     " << sesId << Qt::endl;
         txtOut << "IP Address:     " << ip    << Qt::endl;
@@ -149,7 +149,7 @@ void MyInfo::procIn(const QByteArray &binIn, quint8 dType)
 
         if (!isEmptyBlock(userId, BLKSIZE_USER_ID))
         {
-            QByteArray uId = rdFromBlock(userId, BLKSIZE_USER_ID);
+            auto uId = rdFromBlock(userId, BLKSIZE_USER_ID);
 
             Query db(this);
 

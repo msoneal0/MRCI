@@ -33,11 +33,13 @@
 #include <QProcess>
 #include <QDateTime>
 #include <QRandomGenerator>
+#include <QJsonObject>
+#include <QJsonDocument>
 
 #include "shell.h"
 
 #define APP_NAME   "MRCI"
-#define APP_VER    "3.5.1.0"
+#define APP_VER    "4.0.2.0"
 #define APP_TARGET "mrci"
 
 #ifdef Q_OS_WIN
@@ -68,6 +70,7 @@
 #define DEFAULT_PUB_KEY_NAME    "cert.pem"
 #define DEFAULT_PRIV_KEY_NAME   "priv.pem"
 #define DEFAULT_DB_FILE         "data.db"
+#define DEFAULT_DB_JSON_FILE    "db_settings.json"
 #define DEFAULT_ROOT_USER       "root"
 #define DEFAULT_CONFIRM_SUBJECT "Email Verification"
 #define DEFAULT_TEMP_PW_SUBJECT "Password Reset"
@@ -159,25 +162,27 @@ Date requested: %date%."
 #define COLUMN_DEFAULT_PASS    "default_password"
 #define COLUMN_ROOT_USER       "root_user"
 
-QString    genPw();
-QList<int> genSequence(int min, int max, int len);
-QChar      genLetter();
-QChar      genNum();
-QChar      genSpecialChar();
-int        inRange(int pos, int min, int max);
-QString    sqlDataPath();
-QString    columnType(const QString &column);
-quint32    initHostRank();
-QByteArray getSalt(const QByteArray &uId, const QString &table);
-QByteArray genUniqueHash();
-QByteArray rootUserId();
-bool       createUser(const QString &userName, const QString &email, const QString &dispName, const QString &password);
-bool       createTempPw(const QByteArray &uId, const QString &password);
-bool       updatePassword(const QByteArray &uId, const QString &password, const QString &table, bool requireNewPass = false);
-bool       auth(const QByteArray &uId, const QString &password, const QString &table);
-void       cleanupDbConnection();
-void       moveCharLeft(int pos, QString &str);
-void       moveCharRight(int pos, QString &str);
+QString     genPw();
+QList<int>  genSequence(int min, int max, int len);
+QChar       genLetter();
+QChar       genNum();
+QChar       genSpecialChar();
+int         inRange(int pos, int min, int max);
+QString     sqlDataPath();
+QString     columnType(const QString &column);
+quint32     initHostRank();
+QByteArray  getSalt(const QByteArray &uId, const QString &table);
+QByteArray  genUniqueHash();
+QByteArray  rootUserId();
+QJsonObject getDbSettings(bool defaults = false);
+bool        createUser(const QString &userName, const QString &email, const QString &dispName, const QString &password);
+bool        createTempPw(const QByteArray &uId, const QString &password);
+bool        updatePassword(const QByteArray &uId, const QString &password, const QString &table, bool requireNewPass = false);
+bool        auth(const QByteArray &uId, const QString &password, const QString &table);
+void        cleanupDbConnection();
+void        saveDbSettings(const QJsonObject &obj);
+void        moveCharLeft(int pos, QString &str);
+void        moveCharRight(int pos, QString &str);
 
 class Query : public QObject
 {

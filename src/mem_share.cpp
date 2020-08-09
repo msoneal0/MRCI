@@ -18,7 +18,8 @@
 
 QString createHostSharedMem(QSharedMemory *mem)
 {
-    int     len = 0;
+    auto len = 0;
+
     QString ret;
 
     len += BLKSIZE_HOST_LOAD; // hostLoad
@@ -39,8 +40,8 @@ QString createHostSharedMem(QSharedMemory *mem)
 
 int posOfLikeBlock(const QByteArray &block, const char *blocks, quint32 numOfBlocks, quint32 bytesPerBlock)
 {
-    int     ret    = -1;
-    quint32 cmpLen = static_cast<quint32>(block.size());
+    auto ret    = -1;
+    auto cmpLen = static_cast<quint32>(block.size());
 
     if (cmpLen > bytesPerBlock)
     {
@@ -110,7 +111,7 @@ int posOfEmptyBlock(const char *blocks, quint32 numOfBlocks, quint32 bytesPerBlo
 
 bool addBlockToBlockset(const char *block, char *blocks, quint32 numOfBlocks, quint32 bytesPerBlock)
 {
-    bool ret = false;
+    auto ret = false;
 
     if (posOfBlock(block, blocks, numOfBlocks, bytesPerBlock) == -1)
     {
@@ -180,7 +181,8 @@ bool isEmptyBlock(const char *block, quint32 blockSize)
 
 void wrStringToBlock(const QString &str, char *block, quint32 blockSize)
 {
-    quint32 strByteSize = static_cast<quint32>(str.size()) * 2;
+    auto strBytes    = str.toUtf8();
+    auto strByteSize = static_cast<quint32>(strBytes.size());
 
     if (strByteSize > blockSize)
     {
@@ -191,7 +193,7 @@ void wrStringToBlock(const QString &str, char *block, quint32 blockSize)
         memset(block, 0, blockSize);
     }
 
-    memcpy(block, reinterpret_cast<const char*>(str.utf16()), strByteSize);
+    memcpy(block, strBytes.data(), strByteSize);
 }
 
 void wr8BitToBlock(quint8 num, char *block)
@@ -290,24 +292,21 @@ quint64 rd64BitFromBlock(const char *block)
 
 QString rdStringFromBlock(const char *block, quint32 blockSize)
 {
-    QString ret;
-    quint16 chr;
+    quint32 len = 0;
 
-    for (quint32 i = 0; i < blockSize; i += 2)
+    for (quint32 i = 0; i < blockSize; i++)
     {
-        memcpy(&chr, block + i, 2);
-
-        if (chr == 0)
+        if (block[i] == 0)
         {
             break;
         }
         else
         {
-            ret.append(QChar(chr));
+            len++;
         }
     }
 
-    return ret;
+    return QString(QByteArray(block, len));
 }
 
 QByteArray rdFromBlock(const char *block, quint32 blockSize)
@@ -339,8 +338,8 @@ MemShare::MemShare(QObject *parent) : QObject(parent)
 
 bool MemShare::createSharedMem(const QByteArray &sesId, const QString &hostKey)
 {
-    int  len = 0;
-    bool ret = false;
+    auto len = 0;
+    auto ret = false;
 
     sharedMem->setKey(sesId.toHex());
     hostSharedMem->setNativeKey(hostKey);
@@ -433,11 +432,11 @@ void MemShare::setupDataBlocks()
 
 QByteArray MemShare::createPeerInfoFrame()
 {
-    QByteArray sesId = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
-    QByteArray usrId = rdFromBlock(userId, BLKSIZE_USER_ID);
-    QByteArray uName = rdFromBlock(userName, BLKSIZE_USER_NAME);
-    QByteArray aName = rdFromBlock(appName, BLKSIZE_APP_NAME);
-    QByteArray dName = rdFromBlock(displayName, BLKSIZE_DISP_NAME);
+    auto sesId = rdFromBlock(sessionId, BLKSIZE_SESSION_ID);
+    auto usrId = rdFromBlock(userId, BLKSIZE_USER_ID);
+    auto uName = rdFromBlock(userName, BLKSIZE_USER_NAME);
+    auto aName = rdFromBlock(appName, BLKSIZE_APP_NAME);
+    auto dName = rdFromBlock(displayName, BLKSIZE_DISP_NAME);
 
     return sesId + usrId + uName + aName + dName;
 }

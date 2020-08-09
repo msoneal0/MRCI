@@ -18,7 +18,7 @@
 
 bool setupDb(QString *errMsg)
 {
-    bool ret = true;
+    auto ret = true;
 
     errMsg->clear();
 
@@ -110,7 +110,7 @@ bool setupDb(QString *errMsg)
 
         if (query.createExecuted())
         {
-            QByteArray uId = genUniqueHash();
+            auto uId = genUniqueHash();
 
             query.setType(Query::PUSH, TABLE_USERS);
             query.addColumn(COLUMN_USERNAME, DEFAULT_ROOT_USER);
@@ -234,7 +234,7 @@ bool setupDb(QString *errMsg)
             randPw = genPw();
         }
 
-        QByteArray rootUId = rootUserId();
+        auto rootUId = rootUserId();
 
         if (query.createExecuted())
         {

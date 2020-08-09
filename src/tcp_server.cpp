@@ -217,11 +217,31 @@ void TCPServer::procPipeIn()
     {
         closeServer();
 
-        controlSocket->write(toTEXT("\n"));
+        controlSocket->write(QString("\n").toUtf8());
     }
     else if (args.contains("-load_ssl", Qt::CaseInsensitive))
     {
-        controlSocket->write(toTEXT(loadSSLData(true)));
+        controlSocket->write(loadSSLData(true).toUtf8());
+    }
+    else if (args.contains("-addr", Qt::CaseInsensitive))
+    {
+        auto params = getParam("-addr", args);
+        auto addr   = params.split(':');
+
+        close();
+
+        QString     text;
+        QTextStream txtOut(&text);
+
+        if (!listen(QHostAddress(addr[0]), addr[1].toUInt()))
+        {
+            txtOut << "" << Qt::endl << "err: TCP listen failure on address: " << addr[0] << " port: " << addr[1] << Qt::endl;
+            txtOut << "err: Reason - " << errorString() << Qt::endl;
+        }
+
+        txtOut << "" << Qt::endl;
+
+        controlSocket->write(text.toUtf8());
     }
     else if (args.contains("-status", Qt::CaseInsensitive))
     {
@@ -238,18 +258,17 @@ void TCPServer::procPipeIn()
         hostSharedMem->lock();
 
         txtOut << "" << Qt::endl;
-        txtOut << "Host Load:      " << rd32BitFromBlock(hostLoad) << "/" << maxSessions << Qt::endl;
-        txtOut << "Active Address: " << serverAddress().toString() << Qt::endl;
-        txtOut << "Active Port:    " << serverPort() << Qt::endl;
-        txtOut << "Set Address:    " << db.getData(COLUMN_IPADDR).toString() << Qt::endl;
-        txtOut << "Set Port:       " << db.getData(COLUMN_PORT).toUInt() << Qt::endl;
-        txtOut << "Working Path:   " << QDir::currentPath() << Qt::endl;
-        txtOut << "Database:       " << sqlDataPath() << Qt::endl;
-        txtOut << "SSL Chain:      " << sslCertChain() << Qt::endl;
-        txtOut << "SSL Private:    " << sslPrivKey() << Qt::endl << Qt::endl;
+        txtOut << "Host Load:    " << rd32BitFromBlock(hostLoad) << "/" << maxSessions << Qt::endl;
+        txtOut << "Address:      " << serverAddress().toString() << Qt::endl;
+        txtOut << "Port:         " << serverPort() << Qt::endl;
+        txtOut << "Working Path: " << QDir::currentPath() << Qt::endl;
+        txtOut << "SSL Chain:    " << sslCertChain() << Qt::endl;
+        txtOut << "SSL Private:  " << sslPrivKey() << Qt::endl << Qt::endl;
+
+        printDatabaseInfo(txtOut);
 
         hostSharedMem->unlock();
-        controlSocket->write(toTEXT(text));
+        controlSocket->write(text.toUtf8());
     }
 }
 

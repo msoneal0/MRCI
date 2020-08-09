@@ -73,6 +73,7 @@ void showHelp()
     txtOut << " -exempt_cmds : run the internal module to list it's rank exempt commands. for internal use only." << Qt::endl;
     txtOut << " -user_cmds   : run the internal module to list it's user commands. for internal use only." << Qt::endl;
     txtOut << " -run_cmd     : run an internal module command. for internal use only." << Qt::endl;
+    txtOut << " -ls_sql_drvs : list all available SQL drivers that the host currently supports." << Qt::endl;
     txtOut << " -load_ssl    : re-load the host SSL certificate without stopping the host instance." << Qt::endl << Qt::endl;
     txtOut << "Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:" << Qt::endl << Qt::endl;
     txtOut << " -pipe     : the named pipe used to establish a data connection with the session." << Qt::endl;
@@ -81,9 +82,9 @@ void showHelp()
     txtOut << "Details:" << Qt::endl << Qt::endl;
     txtOut << "addr     - this argument takes a {ip_address:port} string. it will return an error if not formatted correctly" << Qt::endl;
     txtOut << "           examples: 10.102.9.2:35516 or 0.0.0.0:35516." << Qt::endl << Qt::endl;
-    txtOut << "run_cmd  - this argument is used by the host itself, along side the internal module arguments below to run" << Qt::endl;
-    txtOut << "           the internal command names passed by it. this is not ment to be run directly by human input." << Qt::endl;
-    txtOut << "           the executable will auto close if it fails to connect to the pipe and/or shared memory segments" << Qt::endl << Qt::endl;
+    txtOut << "run_cmd  - this argument is used by the host itself along with the internal module arguments to run the" << Qt::endl;
+    txtOut << "           internal command names passed by it. this is not ment to be run directly by human input. the" << Qt::endl;
+    txtOut << "           executable will auto close if it fails to connect to the pipe and/or shared memory segments" << Qt::endl << Qt::endl;
 }
 
 void soeDueToDbErr(int *retCode, const QString *errMsg)
@@ -94,10 +95,10 @@ void soeDueToDbErr(int *retCode, const QString *errMsg)
     QTextStream(stderr) << "     what happened: " << Qt::endl << *errMsg << Qt::endl << Qt::endl;
 }
 
-int shellToHost(const QStringList &args, QCoreApplication &app)
+int shellToHost(const QStringList &args, bool holdErrs, QCoreApplication &app)
 {
     auto  ret = 0;
-    auto *ipc = new ShellIPC(args, &app);
+    auto *ipc = new ShellIPC(args, holdErrs, &app);
 
     QObject::connect(ipc, SIGNAL(closeInstance()), &app, SLOT(quit()));
 
@@ -135,11 +136,48 @@ int main(int argc, char *argv[])
 
     qInstallMessageHandler(msgHandler);
 
-    //args.append("-host"); // debug
+    // args.append("-ls_sql_drvs"); // debug
 
-    if (args.contains("-help", Qt::CaseInsensitive) || args.size() == 1)
+    if (args.contains("-run_cmd", Qt::CaseInsensitive)     ||
+        args.contains("-public_cmds", Qt::CaseInsensitive) ||
+        args.contains("-exempt_cmds", Qt::CaseInsensitive) ||
+        args.contains("-user_cmds", Qt::CaseInsensitive))
+    {
+        // security note: it is critical that the above internal arguments are checked
+        //                first. external clients have the ability to pass additional
+        //                args and those args come through here. it can be a security
+        //                threat if an external arg is a powerful arg like "reset_root"
+        //                and it ends up getting processed unintentionally by this
+        //                function.
+
+        if (setupDb(&err))
+        {
+            auto *mod = new Module(&app);
+
+            if (mod->start(args))
+            {
+                ret = QCoreApplication::exec();
+            }
+        }
+        else
+        {
+            soeDueToDbErr(&ret, &err);
+        }
+    }
+    else if (args.contains("-help", Qt::CaseInsensitive) || args.size() == 1)
     {
         showHelp();
+    }
+    else if (args.contains("-ls_sql_drvs", Qt::CaseInsensitive))
+    {
+        QTextStream(stdout) << "" << Qt::endl;
+
+        for (auto driver : QSqlDatabase::drivers())
+        {
+            QTextStream(stdout) << driver << Qt::endl;
+        }
+
+        QTextStream(stdout) << "" << Qt::endl;
     }
     else if (args.contains("-about", Qt::CaseInsensitive))
     {
@@ -152,11 +190,24 @@ int main(int argc, char *argv[])
              args.contains("-status", Qt::CaseInsensitive) ||
              args.contains("-load_ssl", Qt::CaseInsensitive))
     {
-        ret = shellToHost(args, app);
+        ret = shellToHost(args, false, app);
     }
     else if (setupDb(&err))
     {
-        if (args.contains("-addr", Qt::CaseInsensitive))
+        if (args.contains("-host", Qt::CaseInsensitive))
+        {
+            auto *serv = new TCPServer(&app);
+
+            if (serv->start())
+            {
+                ret = QCoreApplication::exec();
+            }
+        }
+        else if (args.contains("-host_trig", Qt::CaseInsensitive))
+        {
+            QProcess::startDetached(QCoreApplication::applicationFilePath(), QStringList() << "-host");
+        }
+        else if (args.contains("-addr", Qt::CaseInsensitive))
         {
             auto params = getParam("-addr", args);
             auto addr   = params.split(':');
@@ -186,41 +237,16 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
-                    ret = 0;
-
                     Query db(&app);
 
                     db.setType(Query::UPDATE, TABLE_SERV_SETTINGS);
                     db.addColumn(COLUMN_IPADDR, addr[0]);
                     db.addColumn(COLUMN_PORT, port);
                     db.exec();
+
+                    ret = shellToHost(args, true, app);
                 }
             }
-        }
-        else if (args.contains("-run_cmd", Qt::CaseInsensitive)     ||
-                 args.contains("-public_cmds", Qt::CaseInsensitive) ||
-                 args.contains("-exempt_cmds", Qt::CaseInsensitive) ||
-                 args.contains("-user_cmds", Qt::CaseInsensitive))
-        {
-            auto *mod = new Module(&app);
-
-            if (mod->start(args))
-            {
-                ret = QCoreApplication::exec();
-            }
-        }
-        else if (args.contains("-host", Qt::CaseInsensitive))
-        {
-            auto *serv = new TCPServer(&app);
-
-            if (serv->start())
-            {
-                ret = QCoreApplication::exec();
-            }
-        }
-        else if (args.contains("-host_trig"))
-        {
-            QProcess::startDetached(QCoreApplication::applicationFilePath(), QStringList() << "-host");
         }
         else if (args.contains("-reset_root", Qt::CaseInsensitive))
         {

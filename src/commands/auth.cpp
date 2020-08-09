@@ -115,7 +115,7 @@ void Auth::procIn(const QByteArray &binIn, quint8 dType)
     {
         if (flags & MORE_INPUT)
         {
-            QString text = fromTEXT(binIn);
+            auto text = QString::fromUtf8(binIn);
 
             if (loginOk)
             {
@@ -174,7 +174,7 @@ void Auth::procIn(const QByteArray &binIn, quint8 dType)
                     }
                     else if (validEmailAddr(text))
                     {
-                        errTxt("err: Invaild use rname. it looks like an email address.\n");
+                        errTxt("err: Invaild user name. it looks like an email address.\n");
                         promptTxt("Enter a new user name (leave blank to cancel): ");
                     }
                     else if (!validUserName(text))
@@ -202,7 +202,7 @@ void Auth::procIn(const QByteArray &binIn, quint8 dType)
                         db.addCondition(COLUMN_USER_ID, uId);
                         db.exec();
 
-                        async(ASYNC_USER_RENAMED, uId + fixedToTEXT(text, BLKSIZE_USER_NAME));
+                        async(ASYNC_USER_RENAMED, uId + toFixedTEXT(text, BLKSIZE_USER_NAME));
 
                         uName       = text;
                         newUserName = false;

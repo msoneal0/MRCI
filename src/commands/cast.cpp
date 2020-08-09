@@ -426,11 +426,11 @@ void ListRDonlyFlags::procIn(const QByteArray &binIn, quint8 dType)
                 
                 if (channelAccessLevel(rdFromBlock(userId, BLKSIZE_USER_ID), chOwnerOverride, chId) > REGULAR)
                 {
-                    TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName + " -" + QString(COLUMN_LOWEST_LEVEL) + " " + QString::number(PUBLIC)), dType);
+                    TableViewer::procIn(QString("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName + " -" + QString(COLUMN_LOWEST_LEVEL) + " " + QString::number(PUBLIC)).toUtf8(), dType);
                 }
                 else
                 {
-                    TableViewer::procIn(toTEXT("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName), dType);
+                    TableViewer::procIn(QString("-" + QString(COLUMN_CHANNEL_NAME) + " " + chName).toUtf8(), dType);
                 }
             }
         }

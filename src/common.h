@@ -72,21 +72,12 @@
 #include "shell.h"
 #include "mem_share.h"
 
-#define FRAME_HEADER_SIZE   8
-#define MAX_FRAME_BITS      24
-#define IMPORT_REV          3
-#define LOCAL_BUFFSIZE      16777215
-#define CLIENT_INIT_TIME    5000
-#define IPC_PREP_TIME       1000
-#define IPC_CONNECT_DELAY   500
-#define CLIENT_HEADER_LEN   410
-#define SERVER_HEADER_LEN   35
-#define EXE_CRASH_LIMIT     5
-#define EXE_DEBUG_INFO_SIZE 512
-#define SERVER_HEADER_TAG   "MRCI"
-#define HOST_CONTROL_PIPE   "MRCI_HOST_CONTROL"
-#define TXT_CODEC           "UTF-16LE"
-#define TXT_CODEC_BITS      16
+#define FRAME_HEADER_SIZE 8
+#define MAX_FRAME_BITS    24
+#define LOCAL_BUFFSIZE    16777215
+#define CLIENT_HEADER_LEN 292
+#define SERVER_HEADER_TAG "MRCI"
+#define HOST_CONTROL_PIPE "MRCI_HOST_CONTROL"
 
 enum AsyncCommands : quint16
 {
@@ -231,12 +222,12 @@ enum ChannelMemberLevel : quint8
 
 class Session;
 
-QByteArray  toTEXT(const QString &txt);
-QByteArray  fixedToTEXT(const QString &txt, int len);
+QByteArray  toFixedTEXT(const QString &txt, int len);
 QByteArray  nullTermTEXT(const QString &txt);
 QByteArray  rdFileContents(const QString &path, QTextStream &msg);
 quint32     toCmdId32(quint16 cmdId, quint16 branchId);
 quint16     toCmdId16(quint32 id);
+void        printDatabaseInfo(QTextStream &txt);
 void        serializeThread(QThread *thr);
 void        mkPath(const QString &path);
 void        listDir(QList<QPair<QString,QString> > &list, const QString &srcPath, const QString &dstPath);
@@ -249,7 +240,6 @@ bool        validUserName(const QString &uName);
 bool        validEmailAddr(const QString &email);
 bool        validPassword(const QString &pw);
 bool        validCommandName(const QString &name);
-bool        validCommonName(const QString &name);
 bool        validDispName(const QString &name);
 bool        validChName(const QString &name);
 bool        validLevel(const QString &num, bool includePub);
@@ -277,7 +267,6 @@ bool        isChOwner(const QByteArray &uId);
 int         channelAccessLevel(const QByteArray &uId, quint64 chId);
 int         channelAccessLevel(const QByteArray &uId, const char *override, quint64 chId);
 int         maxSubChannels();
-QString     fromTEXT(const QByteArray &txt);
 QString     getUserNameForEmail(const QString &email);
 QString     getEmailForUser(const QByteArray &uId);
 QString     getDispName(const QByteArray &uId);
@@ -330,6 +319,7 @@ class ShellIPC : public QLocalSocket
 private:
 
     QStringList arguments;
+    bool        holdErrs;
 
 private slots:
 
@@ -340,7 +330,7 @@ public:
 
     bool connectToHost();
 
-    explicit ShellIPC(const QStringList &args, QObject *parent = nullptr);
+    explicit ShellIPC(const QStringList &args, bool supressErr = false, QObject *parent = nullptr);
 
 signals:
 

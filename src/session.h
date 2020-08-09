@@ -33,6 +33,7 @@ private:
     QSslSocket                        *tcpSocket;
     QList<QSslCertificate>            *sslChain;
     QSslKey                           *sslKey;
+    QString                            modInst;
     QString                            currentDir;
     QHash<QString, QStringList>        modCmdNames;
     QHash<quint32, QList<QByteArray> > frameQueue;

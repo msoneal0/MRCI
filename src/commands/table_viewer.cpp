@@ -210,7 +210,7 @@ void TableViewer::procIn(const QByteArray &binIn, quint8 dType)
     {
         if (flags & MORE_INPUT)
         {
-            auto text = fromTEXT(binIn).toLower();
+            auto text = QString::fromUtf8(binIn).toLower();
 
             if (text == "y")
             {

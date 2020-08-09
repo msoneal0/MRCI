@@ -103,7 +103,7 @@ void Session::sesRdy()
     emit connectPeers(QSharedPointer<SessionCarrier>(payload));
 
     loadCmds();
-    asyncToClient(ASYNC_RDY, toTEXT("\nReady!\n\n"), TEXT);
+    asyncToClient(ASYNC_RDY, QString("\nReady!\n\n").toUtf8(), TEXT);
 }
 
 void Session::addIpAction(const QString &action)
@@ -221,6 +221,7 @@ ModProcess *Session::initModProc(const QString &modApp)
     auto *proc = new ModProcess(modApp, sesMemKey, hostMemKey, pipe, this);
 
     proc->setWorkingDirectory(currentDir);
+    proc->addArgs(modInst);
     proc->setSessionParams(&cmdUniqueNames, &cmdRealNames, &cmdAppById, &modCmdNames, &cmdIds, rnk);
 
     connect(proc, &ModProcess::dataToClient, this, &Session::dataToClient);
@@ -292,7 +293,7 @@ void Session::dataToCmd(quint32 cmdId, const QByteArray &data, quint8 typeId)
     }
     else
     {
-        dataToClient(cmdId, toTEXT("err: No such command id: " + QString::number(cmdId16) + "."), ERR);
+        dataToClient(cmdId, QString("err: No such command id: " + QString::number(cmdId16) + ".").toUtf8(), ERR);
     }
 }
 
@@ -336,15 +337,18 @@ void Session::dataFromClient()
         {
             auto clientHeader = tcpSocket->read(CLIENT_HEADER_LEN);
 
-            // client header format: [4bytes(tag)][134bytes(appName)][272bytes(padding)]
+            // client header format: [4bytes(tag)][32bytes(appName)][128bytes(mod_instructions)][128byes(padding)]
 
             // tag     = 0x4D, 0x52, 0x43, 0x49 (MRCI)
-            // appName = UTF16LE string (padded with 0x00)
-            // padding = just a string of 0x00 (reserved for future expansion)
+            // appName = UTF8 string (padded with 0x00)
+            // modInst = UTF8 string (padded with 0x00)
+            // padding = 128 bytes of (0x00)
 
             if (clientHeader.startsWith(SERVER_HEADER_TAG))
             {
                 wrToBlock(clientHeader.mid(4, BLKSIZE_APP_NAME), appName, BLKSIZE_APP_NAME);
+
+                modInst = rdStringFromBlock(clientHeader.data() + 36, 64);
 
                 auto ver = QCoreApplication::applicationVersion().split('.');
 
@@ -474,7 +478,7 @@ void Session::login(const QByteArray &uId)
 
         for (int i = 0; i < db.rows(); ++i)
         {
-            QByteArray chId = wrInt(db.getData(COLUMN_CHANNEL_ID, i).toULongLong(), 64);
+            auto chId = wrInt(db.getData(COLUMN_CHANNEL_ID, i).toULongLong(), 64);
 
             addBlockToBlockset(chId.data(), chList, MAX_CHANNELS_PER_USER, BLKSIZE_CHANNEL_ID);
         }
@@ -498,7 +502,7 @@ void Session::sendLocalInfo()
     db.addCondition(COLUMN_USER_ID, rdFromBlock(userId, BLKSIZE_USER_ID));
     db.exec();
 
-    frame.append(fixedToTEXT(db.getData(COLUMN_EMAIL).toString(), BLKSIZE_EMAIL_ADDR));
+    frame.append(toFixedTEXT(db.getData(COLUMN_EMAIL).toString(), BLKSIZE_EMAIL_ADDR));
     frame.append(rdFromBlock(hostRank, BLKSIZE_HOST_RANK));
 
     if (db.getData(COLUMN_EMAIL_VERIFIED).toBool())
@@ -616,11 +620,11 @@ void Session::privAsyncDataIn(quint16 cmdId, const QByteArray &data)
     }
     else if (cmdId == ASYNC_SET_DIR)
     {
-        currentDir = fromTEXT(data);
+        currentDir = QString::fromUtf8(data);
     }
     else if (cmdId == ASYNC_DEBUG_TEXT)
     {
-        qDebug() << fromTEXT(data);
+        qDebug() << QString::fromUtf8(data);
     }
 
     sharedMem->unlock();

@@ -116,7 +116,7 @@ QChar genSpecialChar()
 
 int inRange(int pos, int min, int max)
 {
-    int ret = pos;
+    auto ret = pos;
 
     if (pos < min) ret = min;
     if (pos > max) ret = max;
@@ -128,7 +128,7 @@ void moveCharLeft(int pos, QString &str)
 {
     pos = inRange(pos, 0, str.size() - 1);
 
-    QChar chr = str[pos];
+    auto chr = str[pos];
 
     str.remove(pos, 1);
 
@@ -140,7 +140,7 @@ void moveCharRight(int pos, QString &str)
 {
     pos = inRange(pos, 0, str.size() - 1);
 
-    QChar chr = str[pos];
+    auto chr = str[pos];
 
     str.remove(pos, 1);
 
@@ -152,7 +152,7 @@ QString genPw()
 {
     QString ret;
 
-    QList<int> seq = genSequence(2, 5, 4);
+    auto seq = genSequence(2, 5, 4);
 
     for (int i = 0; i < seq[0]; ++i)
     {
@@ -176,7 +176,7 @@ QString genPw()
 
     seq = genSequence(0, ret.size() - 1, 10);
 
-    bool toggle = false;
+    auto toggle = false;
 
     for (int i : seq)
     {
@@ -220,7 +220,7 @@ QByteArray rootUserId()
     db.addColumn(COLUMN_ROOT_USER);
     db.exec();
 
-    QByteArray id = db.getData(COLUMN_ROOT_USER).toByteArray();
+    auto id = db.getData(COLUMN_ROOT_USER).toByteArray();
 
     if (id.isEmpty())
     {
@@ -235,12 +235,59 @@ QByteArray rootUserId()
     return id;
 }
 
+QJsonObject getDbSettings(bool defaults)
+{
+    QJsonObject ret;
+
+    QFile file(DEFAULT_DB_JSON_FILE);
+
+    if (file.exists() && !defaults)
+    {
+        if (file.open(QFile::ReadOnly))
+        {
+            ret = QJsonDocument::fromJson(file.readAll()).object();
+        }
+        else
+        {
+            ret = getDbSettings(true);
+        }
+    }
+    else
+    {
+        ret.insert("driver", "QSQLITE");
+        ret.insert("host_name", "localhost");
+        ret.insert("user_name", QSysInfo::machineHostName());
+        ret.insert("password", QString(QSysInfo::machineUniqueId().toHex()));
+
+        if (file.open(QFile::WriteOnly | QFile::Truncate))
+        {
+            file.write(QJsonDocument(ret).toJson());
+        }
+    }
+
+    file.close();
+
+    return ret;
+}
+
+void saveDbSettings(const QJsonObject &obj)
+{
+    QFile file(DEFAULT_DB_JSON_FILE);
+
+    if (file.open(QFile::WriteOnly | QFile::Truncate))
+    {
+        file.write(QJsonDocument(obj).toJson());
+    }
+
+    file.close();
+}
+
 bool createUser(const QString &userName, const QString &email, const QString &dispName, const QString &password)
 {
-    bool ret = false;
+    auto ret    = false;
+    auto newUId = genUniqueHash();
 
-    Query      db;
-    QByteArray newUId = genUniqueHash();
+    Query db;
 
     db.setType(Query::PUSH, TABLE_USERS);
     db.addColumn(COLUMN_USERNAME, userName);
@@ -264,7 +311,7 @@ bool createUser(const QString &userName, const QString &email, const QString &di
 
 bool createTempPw(const QByteArray &uId, const QString &password)
 {
-    bool ret = false;
+    auto ret = false;
 
     Query db;
 
@@ -282,8 +329,8 @@ bool createTempPw(const QByteArray &uId, const QString &password)
 
 bool updatePassword(const QByteArray &uId, const QString &password, const QString &table, bool requireNewPass)
 {
-    bool       ret  = false;
-    QByteArray salt = getSalt(uId, table);
+    auto ret  = false;
+    auto salt = getSalt(uId, table);
 
     if (!salt.isEmpty())
     {
@@ -291,7 +338,7 @@ bool updatePassword(const QByteArray &uId, const QString &password, const QStrin
 
         QCryptographicHash hasher(QCryptographicHash::Keccak_512);
 
-        hasher.addData(QTextCodec::codecForName("UTF-16LE")->fromUnicode(password) + salt);
+        hasher.addData(password.toUtf8() + salt);
 
         db.setType(Query::UPDATE, table);
         db.addColumn(COLUMN_HASH, hasher.result());
@@ -306,8 +353,8 @@ bool updatePassword(const QByteArray &uId, const QString &password, const QStrin
 
 bool auth(const QByteArray &uId, const QString &password, const QString &table)
 {
-    bool       ret  = false;
-    QByteArray salt = getSalt(uId, table);
+    auto ret  = false;
+    auto salt = getSalt(uId, table);
 
     if (!salt.isEmpty())
     {
@@ -354,15 +401,28 @@ Query::Query(QObject *parent) : QObject(parent)
 
     if (!QSqlDatabase::contains(getConnectionName()))
     {
-        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", getConnectionName());
+        auto settings = getDbSettings();
+        auto driver   = settings["driver"].toString();
+        auto db       = QSqlDatabase::addDatabase(driver, getConnectionName());
 
-        db.setConnectOptions("ISC_DPB_LC_CTYPE=UTF16LE");
-        db.setDatabaseName(sqlDataPath());
+        db.setConnectOptions("ISC_DPB_LC_CTYPE=UTF8");
+
+        if (driver == "QSQLITE")
+        {
+            db.setDatabaseName(sqlDataPath());
+        }
+        else
+        {
+            db.setDatabaseName(APP_NAME);
+            db.setUserName(settings["user_name"].toString());
+            db.setHostName(settings["host_name"].toString());
+            db.setPassword(settings["password"].toString());
+        }
 
         if (db.open())
         {
             enableForeignKeys(true);
-            setTextEncoding("UTF16LE");
+            setTextEncoding("UTF8");
         }
         else
         {
@@ -386,19 +446,6 @@ QString Query::errDetail()
 
     txtOut << "     driver error: " << errTxt << Qt::endl;
     txtOut << "     query:        " << qStr << jStr << wStr << limit << Qt::endl;
-    txtOut << "     database:     " << sqlDataPath() << Qt::endl;
-
-    auto info = QFileInfo(QFileInfo(sqlDataPath()).path());
-
-    if (!info.isReadable())
-    {
-        txtOut << "     readable:     database path doesn't have read permissions." << Qt::endl;
-    }
-
-    if (!info.isWritable())
-    {
-        txtOut << "     writable:     database path doesn't have write permissions." << Qt::endl;
-    }
 
     return ret;
 }
@@ -752,7 +799,7 @@ void Query::addForeign(const QString &column, const QString &refTable, const QSt
 {
     if ((columnsAsPassed.contains(column)) && ((type == CREATE_TABLE) || (type == ALTER_TABLE)))
     {
-        QString str = "FOREIGN KEY (" + column + ") REFERENCES " + refTable + " (" + refColum + ")";
+        auto str = "FOREIGN KEY (" + column + ") REFERENCES " + refTable + " (" + refColum + ")";
 
         switch (onDel)
         {
@@ -778,7 +825,7 @@ void Query::addForeign(const QString &column, const QString &refTable, const QSt
 
 void Query::preExec()
 {
-    QString columnsStr = QStringList(columnList).join(", ");
+    auto columnsStr = QStringList(columnList).join(", ");
 
     qStr.replace("%columns%", columnsStr);
     data.clear();
@@ -806,14 +853,14 @@ void Query::preExec()
 
 bool Query::createRedirect()
 {
-    bool ret = false;
+    auto ret = false;
 
     if ((type == CREATE_TABLE) && (tables().contains(table)))
     {
         ret = true;
 
-        QStringList existingColumns = columnsInTable(table);
-        QStringList newColumns      = columnsAsPassed;
+        auto existingColumns = columnsInTable(table);
+        auto newColumns      = columnsAsPassed;
 
         for (int i = 0; (i < newColumns.size()) && queryOk; ++i)
         {
@@ -895,7 +942,7 @@ QVariant Query::getData(const QString &column, int row)
 
     if ((row < data.size()) && (row >= 0))
     {
-        int index = columnsAsPassed.indexOf(column);
+        auto index = columnsAsPassed.indexOf(column);
 
         if (index != -1)
         {
@@ -908,7 +955,7 @@ QVariant Query::getData(const QString &column, int row)
 
 int Query::rows()
 {
-    int ret = 0;
+    auto ret = 0;
 
     if ((type == PULL) || (type == INNER_JOIN_PULL))
     {

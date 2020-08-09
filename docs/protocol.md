@@ -58,18 +58,21 @@ Any increments to the Major resets the Minor to 0. Any 3rd party client applicat
 ### 1.4 Client Header ###
 
 ```
-[tag][appName][padding]
+[tag][appName][mod_instructions][padding]
 
 tag     - 4bytes   - 0x4D, 0x52, 0x43, 0x49 (MRCI)
-appName - 134bytes - UTF16LE string (padded with 0x00)
-padding - 272bytes - padding of 0x00 bytes reserved for future expansion
+appName - 32bytes  - UTF8 string (padded with 0x00)
+modInst - 128bytes - UTF8 string (padded with 0x00)
+padding - 128bytes - string of (0x00)
 ```
 
 notes:
 
-* The **tag** is just a fixed ascii string "MRCI" that indicates to the host that the client is indeed attempting to use the MRCI protocol.
+* **tag** is just a fixed ascii string "MRCI" that indicates to the host that the client is indeed attempting to use the MRCI protocol.
 
-* The **appName** is the name of the client application that is connected to the host. It can also contain the client's app version if needed because it doesn't follow any particular standard. This string is accessable to all modules so the commands themselves can be made aware of what app the user is currently using.
+* **appName** is the name of the client application that is connected to the host. It can also contain the client's app version if needed because it doesn't follow any particular standard. This string is accessable to all modules so the commands themselves can be made aware of what app the user is currently using.
+
+* **modInst** is an additional set of command lines that can be passed onto to all module processes when they are intialized. This can be used by certain clients that want to intruct certain modules that might be installed in the host to do certain actions during intialization. This remains constant for as long as the session is active and cannot be changed at any point.
 
 ### 1.5 Host Header ###
 

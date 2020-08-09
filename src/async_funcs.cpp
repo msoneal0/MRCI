@@ -25,8 +25,8 @@ void Session::acctDeleted(const QByteArray &data)
         if (memcmp(userId, data.data(), BLKSIZE_USER_ID) == 0)
         {
             logout("", true);
-            asyncToClient(ASYNC_SYS_MSG, toTEXT("\nsystem: your session was forced to logout because your account was deleted.\n"), TEXT);
-            asyncToClient(ASYNC_USER_DELETED, data, TEXT);
+            asyncToClient(ASYNC_SYS_MSG, "\nsystem: your session was forced to logout because your account was deleted.\n", TEXT);
+            asyncToClient(ASYNC_USER_DELETED, data, BYTES);
         }
     }
 }
@@ -48,7 +48,7 @@ void Session::acctRenamed(const QByteArray &data)
 {
     if (flags & LOGGED_IN)
     {
-        // format: [32bytes(user_id)][48bytes(new_user_name)]
+        // format: [32bytes(user_id)][24bytes(new_user_name)]
 
         if (memcmp(userId, data.data(), BLKSIZE_USER_ID) == 0)
         {
@@ -63,7 +63,7 @@ void Session::acctDispChanged(const QByteArray &data)
 {
     if (flags & LOGGED_IN)
     {
-        // format: [32bytes(user_id)][64bytes(new_disp_name)]
+        // format: [32bytes(user_id)][24bytes(new_disp_name)]
 
         if (memcmp(userId, data.data(), BLKSIZE_USER_ID) == 0)
         {
@@ -325,7 +325,7 @@ void Session::subChannelUpdated(quint16 cmdId, const QByteArray &data)
 
 void Session::addModule(const QByteArray &data)
 {
-    auto modApp = fromTEXT(data);
+    auto modApp = QString::fromUtf8(data);
 
     if (!modCmdNames.contains(modApp))
     {
@@ -335,7 +335,7 @@ void Session::addModule(const QByteArray &data)
 
 void Session::rmModule(const QByteArray &data)
 {
-    auto modApp = fromTEXT(data);
+    auto modApp = QString::fromUtf8(data);
 
     if (modCmdNames.contains(modApp) && (modApp != QCoreApplication::applicationFilePath()))
     {
