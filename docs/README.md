@@ -22,6 +22,7 @@ Usage: mrci <argument>
  -exempt_cmds : run the internal module to list it's rank exempt commands. for internal use only.
  -user_cmds   : run the internal module to list it's user commands. for internal use only.
  -run_cmd     : run an internal module command. for internal use only.
+ -ls_sql_drvs : list all available SQL drivers that the host currently supports.
  -load_ssl    : re-load the host SSL certificate without stopping the host instance.
 
 Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:
