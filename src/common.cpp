@@ -996,23 +996,21 @@ ShellIPC::ShellIPC(const QStringList &args, bool supressErr, QObject *parent) : 
 
 bool ShellIPC::connectToHost()
 {
-    auto pipeInfo = QFileInfo(QDir::tempPath() + "/" + HOST_CONTROL_PIPE);
+    auto pipeInfo = QFileInfo(HOST_CONTROL_PIPE);
 
-    if (!pipeInfo.exists())
+    connectToServer(HOST_CONTROL_PIPE);
+
+    if (!waitForConnected() && !holdErrs)
     {
-        if (!holdErrs)
+        QTextStream(stdout) << "" << Qt::endl << "err: Failed to connect to the host instance control pipe." << Qt::endl;
+
+        if (error() == QLocalSocket::ServerNotFoundError)
         {
-            QTextStream(stdout) << "" << Qt::endl << "A host instance is not running." << Qt::endl << Qt::endl;
+            QTextStream(stdout) << "err: Reason - Host instance not running." << Qt::endl << Qt::endl;
         }
-    }
-    else
-    {
-        connectToServer(HOST_CONTROL_PIPE);
-
-        if (!waitForConnected() && !holdErrs)
+        else
         {
-            QTextStream(stdout) << "" << Qt::endl << "err: Failed to connect to the host instance control pipe." << Qt::endl;
-            QTextStream(stdout) << "err: Reason - " << errorString() << Qt::endl;
+            QTextStream(stdout) << "err: Reason - " << errorString() << Qt::endl << Qt::endl;
         }
     }
 

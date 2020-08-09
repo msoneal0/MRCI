@@ -26,6 +26,7 @@
 //    <http://www.gnu.org/licenses/>.
 
 #ifdef Q_OS_WINDOWS
+#define NEED_APPLINK
 extern "C"
 {
 // applink.c was copied from the openssl lib and slightly modified so

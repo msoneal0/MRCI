@@ -37,7 +37,6 @@ private:
     char                  *hostLoad;
     QList<QSslCertificate> sslChain;
     QSslKey                sslKey;
-    QString                controlPipePath;
     QString                hostKey;
     QString                wanIP;
     quint32                maxSessions;

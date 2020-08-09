@@ -66,10 +66,10 @@ bool TCPServer::createPipe()
 {
     auto ret = controlPipe->listen(HOST_CONTROL_PIPE);
 
-    controlPipePath = controlPipe->fullServerName();
-
     if (!ret)
     {
+        auto controlPipePath = controlPipe->fullServerName();
+
         if (QFile::exists(controlPipePath))
         {
             QFile::remove(controlPipePath);
