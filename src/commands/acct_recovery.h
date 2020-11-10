@@ -1,4 +1,4 @@
-#ifndef ACCT_RECOVERY_H
+﻿#ifndef ACCT_RECOVERY_H
 #define ACCT_RECOVERY_H
 
 //    This file is part of MRCI.
@@ -19,13 +19,6 @@
 
 #include "../common.h"
 #include "../cmd_object.h"
-
-enum TemplateType
-{
-    PW_RESET,
-    CONFIRM_EMAIL,
-    NONE
-};
 
 bool expired(const QByteArray &uId);
 void delRecoverPw(const QByteArray &uId);
@@ -98,47 +91,6 @@ public:
     void procIn(const QByteArray &binIn, quint8 dType);
 
     explicit IsEmailVerified(QObject *parent = nullptr);
-};
-
-//------------------
-
-class SetEmailTemplate : public CmdObject
-{
-    Q_OBJECT
-
-private:
-
-    QString      bodyText;
-    QString      subject;
-    QString      len;
-    int          dataSent;
-    bool         textFromFile;
-    TemplateType eType;
-
-    void proc();
-
-public:
-
-    static QString cmdName();
-
-    void procIn(const QByteArray &binIn, quint8 dType);
-
-    explicit SetEmailTemplate(QObject *parent = nullptr);
-};
-
-//-----------------
-
-class PreviewEmail : public CmdObject
-{
-    Q_OBJECT
-
-public:
-
-    static QString cmdName();
-
-    void procIn(const QByteArray &binIn, quint8 dType);
-
-    explicit PreviewEmail(QObject *parent = nullptr);
 };
 
 #endif // ACCT_RECOVERY_H

@@ -39,7 +39,6 @@ private:
     QSslKey                sslKey;
     QString                hostKey;
     QString                wanIP;
-    quint32                maxSessions;
     quint32                flags;
 
     QString loadSSLData(bool onReload);
@@ -55,12 +54,10 @@ private slots:
     void newPipeConnection();
     void closedPipeConnection();
     void sessionEnded();
-    void setMaxSessions(quint32 value);
     void replyFromIpify(QNetworkReply *reply);
 
 public slots:
 
-    void resServer();
     void closeServer();
 
 public:

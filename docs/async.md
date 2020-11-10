@@ -32,15 +32,12 @@ enum AsyncCommands : quint16
 {
     ASYNC_RDY               = 1,   // client   | retricted
     ASYNC_SYS_MSG           = 2,   // client   | retricted
-    ASYNC_EXIT              = 3,   // internal | private
     ASYNC_CAST              = 4,   // client   | public
-    ASYNC_MAXSES            = 5,   // internal | private
     ASYNC_LOGOUT            = 6,   // internal | private
     ASYNC_USER_DELETED      = 7,   // client   | public
     ASYNC_DISP_RENAMED      = 8,   // internal | public
     ASYNC_USER_RANK_CHANGED = 9,   // internal | public
     ASYNC_CMD_RANKS_CHANGED = 10,  // internal | public
-    ASYNC_RESTART           = 11,  // internal | private
     ASYNC_ENABLE_MOD        = 12,  // internal | public
     ASYNC_DISABLE_MOD       = 13,  // internal | public
     ASYNC_END_SESSION       = 14,  // internal | private
@@ -84,10 +81,7 @@ enum AsyncCommands : quint16
 This command signals to the client that your current session is now ready to start running commands. This is sent to the client after successfully setting up the tcp connection ([protocol](protocol.md)). It can carry [TEXT](type_ids.md) data that can be displayed directly to the user if needed.
 
 ```ASYNC_SYS_MSG (2)```
-This command carry [TEXT](type_ids.md) or [ERR](type_ids.md) data that are system messages that can be directly displayed to the user of needed. It is also used to carry [HOST_CERT](type_ids.md) data during the tcp connection setup and MY_INFO when local user account information has changed.
-
-```ASYNC_EXIT (3)```
-This is an internal async command that doesn't carry any data. It is used to send a ```closeServer()``` signal to the TCPServer object in the main process. This will cause it stop listing for clients, close all sessions and then close the main process.
+This command carry [TEXT](type_ids.md) or [ERR](type_ids.md) data that are system messages that can be directly displayed to the user of needed. It is also used to carry MY_INFO data when local user account information is changed.
 
 ```ASYNC_CAST (4)```
 This is an internal only command that carries a 54byte open sub-channels list described in section 5.3 and an embedded frame that can then be sent to clients that have any of the matching open sub-channels. It drops that sub-channel list before arriving at the client so it will apppear like a regular [mrci frame](protocol.md) of any data type.
@@ -96,9 +90,6 @@ from_module: [54bytes(sub_channel_list)][1byte(type_id)][rest-of-bytes(pay_load)
 to_client:   [type_id][cmd_id(4)][branch_id(0)][size_of_payload][payload]
 ```
 
-```ASYNC_MAXSES (5)```
-Internal only async command can used by modules to send a 4byte unsigned 32bit int to the session object to change the maximum amount the concurrent sessions for the TCPServer object.
-
 ```ASYNC_LOGOUT (6)```
 This internal only async command doesn't carry any data. This can be used by modules to tell the session object to logout the current user.
 
@@ -106,7 +97,7 @@ This internal only async command doesn't carry any data. This can be used by mod
 This command carries a 32byte user id hash of the user account that was delete from the host database. All sessions that are currently logged into this account will force logout.
 
 ```ASYNC_DISP_RENAMED (8)```
-This command carries a combination of the 32byte user id hash and the 64byte new display name (UTF-16LE, padded with 0x00) of the user account that changed it's display name. This will trigger all sessions that are currently logged into this account to send an updated [MY_INFO](type_ids.md) frame via ASYNC_SYS_MSG to the clients.
+This command carries a combination of the 32byte user id hash and the 64byte new display name (UTF-8, padded with 0x00) of the user account that changed it's display name. This will trigger all sessions that are currently logged into this account to send an updated [MY_INFO](type_ids.md) frame via ASYNC_SYS_MSG to the clients.
 ```
 from_module: [32bytes(user_id)][64bytes(new_disp_name)]
 to_client:   [type_id(9)][cmd_id(2)][branch_id(0)][size_of_payload][payload(MY_INFO)]
@@ -121,9 +112,6 @@ to_client:   [type_id(9)][cmd_id(2)][branch_id(0)][size_of_payload][payload(MY_I
 
 ```ASYNC_CMD_RANKS_CHANGED (10)```
 This internal only command doesn't carry any data, it just triggers all sessions to re-load runable commands.
-
-```ASYNC_RESTART (11)```
-This internal only async commmand doesn't carry any data. It is used to send a ```resServer()``` signal to the TCPServer object in the main process. This will cause it stop listing for clients, close all sessions, reload the host settings and start listening for clients again.
 
 ```ASYNC_ENABLE_MOD (12)```
 This internal only async commmand that carry a [TEXT](type_ids.md) path to a module executable. All session objects that receive this will then attempt to load the module.
@@ -182,7 +170,7 @@ to_client: [type_id(26)][cmd_id(22)][branch_id(0)][size_of_payload][payload(CH_I
 ```
 
 ```ASYNC_RENAME_CH (23)```
-This async command carries a combination of the channel id and a 16bit null terminated UTF-16LE string containing the new name of the channel that has been renamed. This command desn't use any of the standard frame formats so it sends a [BYTES](type_ids.md) frame to the client.
+This async command carries a combination of the channel id and a null terminated UTF-8 string containing the new name of the channel that has been renamed. This command desn't use any of the standard frame formats so it sends a [BYTES](type_ids.md) frame to the client.
 ```
 to_client: [type_id(14)][cmd_id(28)][branch_id(0)][size_of_payload][payload(channel_id + new_channel_name)]
 ```
@@ -194,7 +182,7 @@ format: [8bytes(64bit_ch_id)][1byte(8bit_sub_ch_id)]
 ```
 
 ```ASYNC_NEW_SUB_CH (25)```
-This async command carries a comination of the channel id, sub-channel id, access level and a 16bit null terminated UTF-16LE string containing the sub-channel name when a new sub-channel is created. All sessions that are logged in as a member of the channel forwards the data to the clients as a [BYTES](type_ids.md) frame.
+This async command carries a comination of the channel id, sub-channel id, access level and a null terminated UTF-8 string containing the sub-channel name when a new sub-channel is created. All sessions that are logged in as a member of the channel forwards the data to the clients as a [BYTES](type_ids.md) frame.
 ```
 to_client: [type_id(14)][cmd_id(25)][branch_id(0)][8bytes(64bit_ch_id)][1byte(8bit_sub_ch_id)]
            [1byte(8bit_access_level)][16bit_null_term_sub-channel_name]
@@ -207,7 +195,7 @@ to_client: [type_id(14)][cmd_id(26)][branch_id(0)][8bytes(64bit_ch_id)][1byte(8b
 ```
 
 ```ASYNC_RENAME_SUB_CH (27)```
-This async command carries a combination of the channel id, sub-channel id, access level and a 16bit null terminated UTF-16LE string containing the new sub-channel name. All sessions that are logged in as a member of the channel forwards the data to the clients as a [BYTES](type_ids.md) frame.
+This async command carries a combination of the channel id, sub-channel id, access level and a null terminated UTF-8 string containing the new sub-channel name. All sessions that are logged in as a member of the channel forwards the data to the clients as a [BYTES](type_ids.md) frame.
 ```
 to_client: [type_id(14)][cmd_id(27)][branch_id(0)][8bytes(64bit_ch_id)][1byte(8bit_sub_ch_id)]
            [16bit_null_term_sub-channel_name]
@@ -303,7 +291,7 @@ This async command doesn't carry any data. Any module command that sends it tell
 
 ### 5.3 Open Sub-Channel List ###
 
-An open sub-channel list is a binary data structure that string togeather up to 6 channel-sub combinations that indicate which channel id and sub id combinations are currently open. Each sub-channel are 9bytes long and the list itself maintians a fixed length of 54bytes so it is padded with 0x00 chars to maintain the fixed length (this padding can appear anywhere in 9byte increments within the list). Each sub-channel is formatted like this:
+An open sub-channel list is a binary data structure that string togeather up to 6 sub-channel combinations that indicate which channel id and sub id combinations are currently open. Each sub-channel are 9bytes long and the list itself maintians a fixed length of 54bytes so it is padded with 0x00 chars to maintain the fixed length (this padding can appear anywhere in 9byte increments within the list). Each sub-channel is formatted like this:
 
 ```
   bytes[0-7] - 64bit LE unsigned int (channel id)

@@ -75,10 +75,6 @@ void ListCommands::onIPCConnected()
         {
             genType = QByteArray(1, GEN_UPLOAD);
         }
-        else if (cmdName == SetEmailTemplate::cmdName())
-        {
-            genType = QByteArray(1, GEN_UPLOAD);
-        }
 
         QByteArray frame;
 
@@ -100,21 +96,16 @@ void HostInfo::procIn(const QByteArray &binIn, quint8 dType)
 
     if (dType == TEXT)
     {
-        Query db(this);
-
-        db.setType(Query::PULL, TABLE_SERV_SETTINGS);
-        db.addColumn(COLUMN_IPADDR);
-        db.addColumn(COLUMN_PORT);
-        db.addColumn(COLUMN_MAXSESSIONS);
-        db.exec();
-
         QString     txt;
         QTextStream txtOut(&txt);
 
         hostSharedMem->lock();
 
-        quint32 sesCount = rd32BitFromBlock(hostLoad);
-        quint32 maxSes   = db.getData(COLUMN_MAXSESSIONS).toUInt();
+        auto confObj  = confObject();
+        auto sesCount = rd32BitFromBlock(hostLoad);
+        auto maxSes   = confObj[CONF_MAX_SESSIONS].toInt();
+        auto addr     = confObj[CONF_LISTEN_ADDR].toString();
+        auto port     = confObj[CONF_LISTEN_PORT].toInt();
 
         hostSharedMem->unlock();
 
@@ -123,8 +114,8 @@ void HostInfo::procIn(const QByteArray &binIn, quint8 dType)
         txtOut << "Host Name:      " << QSysInfo::machineHostName() << Qt::endl;
         txtOut << "Host OS:        " << QSysInfo::prettyProductName() << Qt::endl;
         txtOut << "Load:           " << sesCount << "/" << maxSes << Qt::endl;
-        txtOut << "Listening Addr: " << db.getData(COLUMN_IPADDR).toString() << Qt::endl;
-        txtOut << "Listening Port: " << db.getData(COLUMN_PORT).toUInt() << Qt::endl;
+        txtOut << "Listening Addr: " << addr << Qt::endl;
+        txtOut << "Listening Port: " << port << Qt::endl;
 
         mainTxt(txt);
     }

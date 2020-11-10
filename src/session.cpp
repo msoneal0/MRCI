@@ -594,18 +594,6 @@ void Session::privAsyncDataIn(quint16 cmdId, const QByteArray &data)
     {
         logout("", true);
     }
-    else if (cmdId == ASYNC_EXIT)
-    {
-        emit closeServer();
-    }
-    else if (cmdId == ASYNC_RESTART)
-    {
-        emit resServer();
-    }
-    else if (cmdId == ASYNC_MAXSES)
-    {
-        emit setMaxSessions(static_cast<quint32>(rdInt(data)));
-    }
     else if (cmdId == ASYNC_PING_PEERS)
     {
         castPingForPeers();

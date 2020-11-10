@@ -95,19 +95,10 @@ bool TCPServer::start()
     close();
     cleanupDbConnection();
 
-    Query db(this);
-
-    db.setType(Query::PULL, TABLE_SERV_SETTINGS);
-    db.addColumn(COLUMN_PORT);
-    db.addColumn(COLUMN_IPADDR);
-    db.addColumn(COLUMN_MAXSESSIONS);
-    db.exec();
-
-    maxSessions = db.getData(COLUMN_MAXSESSIONS).toUInt();
-
     auto ret  = false;
-    auto addr = db.getData(COLUMN_IPADDR).toString();
-    auto port = static_cast<quint16>(db.getData(COLUMN_PORT).toUInt());
+    auto conf = confObject();
+    auto addr = conf[CONF_LISTEN_ADDR].toString();
+    auto port = conf[CONF_LISTEN_PORT].toInt();
 
     if (!createPipe())
     {
@@ -149,10 +140,6 @@ void TCPServer::sessionEnded()
     {
         closeServer();
     }
-    else if ((count == 0) && (flags & RES_ON_EMPTY))
-    {
-        resServer();
-    }
     else if (!(flags & (CLOSE_ON_EMPTY | RES_ON_EMPTY)) && !servOverloaded())
     {
         resumeAccepting();
@@ -181,28 +168,12 @@ void TCPServer::closeServer()
     }
 }
 
-void TCPServer::resServer()
-{
-    if (rd32BitFromBlock(hostLoad) == 0)
-    {
-        controlPipe->close();
-
-        start();
-    }
-    else
-    {
-        flags |=  RES_ON_EMPTY;
-        flags &= ~CLOSE_ON_EMPTY;
-
-        emit endAllSessions();
-    }
-}
-
 bool TCPServer::servOverloaded()
 {
     hostSharedMem->lock();
 
-    bool ret = rd32BitFromBlock(hostLoad) >= maxSessions;
+    auto confObj = confObject();
+    auto ret     = rd32BitFromBlock(hostLoad) >= static_cast<quint32>(confObj[CONF_MAX_SESSIONS].toInt());
 
     hostSharedMem->unlock();
 
@@ -248,39 +219,22 @@ void TCPServer::procPipeIn()
         QString     text;
         QTextStream txtOut(&text);
 
-        Query db(this);
-
-        db.setType(Query::PULL, TABLE_SERV_SETTINGS);
-        db.addColumn(COLUMN_IPADDR);
-        db.addColumn(COLUMN_PORT);
-        db.exec();
-
         hostSharedMem->lock();
 
+        auto confObj = confObject();
+
         txtOut << "" << Qt::endl;
-        txtOut << "Host Load:    " << rd32BitFromBlock(hostLoad) << "/" << maxSessions << Qt::endl;
-        txtOut << "Address:      " << serverAddress().toString() << Qt::endl;
-        txtOut << "Port:         " << serverPort() << Qt::endl;
-        txtOut << "Working Path: " << QDir::currentPath() << Qt::endl;
-        txtOut << "SSL Chain:    " << sslCertChain() << Qt::endl;
-        txtOut << "SSL Private:  " << sslPrivKey() << Qt::endl << Qt::endl;
+        txtOut << "Host Load:   " << rd32BitFromBlock(hostLoad) << "/" << confObj[CONF_MAX_SESSIONS].toInt() << Qt::endl;
+        txtOut << "Address:     " << serverAddress().toString() << Qt::endl;
+        txtOut << "Port:        " << serverPort() << Qt::endl;
+        txtOut << "SSL Chain:   " << confObj[CONF_CERT_CHAIN].toString() << Qt::endl;
+        txtOut << "SSL Private: " << confObj[CONF_PRIV_KEY].toString() << Qt::endl << Qt::endl;
 
         printDatabaseInfo(txtOut);
 
         hostSharedMem->unlock();
         controlSocket->write(text.toUtf8());
     }
-}
-
-void TCPServer::setMaxSessions(quint32 value)
-{
-    Query db(this);
-
-    db.setType(Query::UPDATE, TABLE_SERV_SETTINGS);
-    db.addColumn(COLUMN_MAXSESSIONS, value);
-    db.exec();
-
-    maxSessions = value;
 }
 
 void TCPServer::incomingConnection(qintptr socketDescriptor)
@@ -316,9 +270,6 @@ void TCPServer::incomingConnection(qintptr socketDescriptor)
         connect(ses, &Session::ended, this, &TCPServer::sessionEnded);
         connect(ses, &Session::ended, thr, &QThread::quit);
         connect(ses, &Session::connectPeers, this, &TCPServer::connectPeers);
-        connect(ses, &Session::closeServer, this, &TCPServer::closeServer);
-        connect(ses, &Session::resServer, this, &TCPServer::resServer);
-        connect(ses, &Session::setMaxSessions, this, &TCPServer::setMaxSessions);
 
         connect(this, &TCPServer::connectPeers, ses, &Session::connectToPeer);
         connect(this, &TCPServer::endAllSessions, ses, &Session::endSession);
@@ -407,12 +358,14 @@ QString TCPServer::loadSSLData(bool onReload)
     QString     txtMsg;
     QTextStream stream(&txtMsg);
 
-    auto chain          = sslCertChain().split(":");
-    auto priv           = sslPrivKey();
+    auto localObj       = confObject();
+    auto privPath       = localObj[CONF_PRIV_KEY].toString();
+    auto pubPath        = localObj[CONF_CERT_CHAIN].toString();
+    auto chain          = pubPath.split(":");
     auto allCertsExists = true;
-    auto privKeyExists  = QFile::exists(priv);
+    auto privKeyExists  = QFile::exists(privPath);
 
-    stream << "Private key: " << priv << Qt::endl;
+    stream << "Private key: " << privPath << Qt::endl;
 
     if (!privKeyExists)
     {
@@ -433,16 +386,19 @@ QString TCPServer::loadSSLData(bool onReload)
 
     if (chain.isEmpty())
     {
-        stream << "No cert files are defined in the env." << Qt::endl;
+        stream << "No cert files are defined in the conf file." << Qt::endl;
 
         allCertsExists = false;
     }
 
     stream << Qt::endl;
 
+    auto defaultPriv = getLocalFilePath(DEFAULT_PRIV_FILENAME);
+    auto defaultCert = getLocalFilePath(DEFAULT_CERT_FILENAME);
+
     if (allCertsExists && privKeyExists)
     {
-        if (onReload && (priv == DEFAULT_PRIV_KEY_NAME) && (sslCertChain() == DEFAULT_PUB_KEY_NAME))
+        if (onReload && (privPath == defaultPriv) && (pubPath == defaultCert))
         {
             stream << "Re-generating self-signed cert." << Qt::endl;
 
@@ -452,18 +408,18 @@ QString TCPServer::loadSSLData(bool onReload)
             }
         }
 
-        applyPrivKey(priv, stream);
+        applyPrivKey(privPath, stream);
         applyCerts(chain, stream);
     }
-    else if ((priv == DEFAULT_PRIV_KEY_NAME) && (sslCertChain() == DEFAULT_PUB_KEY_NAME))
+    else if ((privPath == defaultPriv) && (pubPath == defaultCert))
     {
         stream << "Generating self-signed cert." << Qt::endl;
 
         if (genDefaultSSLFiles(wanIP, stream))
         {
-            stream << Qt::endl << "The default self-signed cert files are generated successfully." << Qt::endl << Qt::endl;
+            stream << Qt::endl << "The default self-signed cert files were generated successfully." << Qt::endl << Qt::endl;
 
-            applyPrivKey(priv, stream);
+            applyPrivKey(privPath, stream);
             applyCerts(chain, stream);
         }
     }

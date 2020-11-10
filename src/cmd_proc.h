@@ -18,6 +18,7 @@
 //    <http://www.gnu.org/licenses/>.
 
 #include "common.h"
+#include "db.h"
 
 class ModProcess : public QProcess
 {

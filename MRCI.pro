@@ -71,7 +71,6 @@ SOURCES += src/main.cpp \
            src/commands/mods.cpp \
            src/commands/info.cpp \
            src/commands/cast.cpp \
-           src/commands/admin.cpp \
            src/commands/auth.cpp \
            src/commands/acct_recovery.cpp \
            src/commands/table_viewer.cpp \
@@ -97,7 +96,6 @@ HEADERS += \
            src/commands/mods.h \
            src/commands/info.h \
            src/commands/cast.h \
-           src/commands/admin.h \
            src/commands/auth.h \
            src/commands/acct_recovery.h \
            src/commands/table_viewer.h \

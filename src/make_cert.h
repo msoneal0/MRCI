@@ -32,7 +32,7 @@
 #include <QHostAddress>
 #include <QSslKey>
 
-#include "db.h"
+#include "common.h"
 
 class Cert : public QObject
 {

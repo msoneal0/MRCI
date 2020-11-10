@@ -47,11 +47,7 @@ void Auth::addToThreshold()
     db.addColumn(COLUMN_ACCEPTED, false);
     db.exec();
 
-    db.setType(Query::PULL, TABLE_SERV_SETTINGS);
-    db.addColumn(COLUMN_LOCK_LIMIT);
-    db.exec();
-
-    auto maxAttempts = db.getData(COLUMN_LOCK_LIMIT).toUInt();
+    auto maxAttempts = confObject()[CONF_AUTO_LOCK_LIM].toInt();
 
     db.setType(Query::PULL, TABLE_AUTH_LOG);
     db.addColumn(COLUMN_IPADDR);
@@ -61,7 +57,7 @@ void Auth::addToThreshold()
     db.addCondition(COLUMN_ACCEPTED, false);
     db.exec();
 
-    if (static_cast<quint32>(db.rows()) > maxAttempts)
+    if (db.rows() > maxAttempts)
     {
         db.setType(Query::UPDATE, TABLE_USERS);
         db.addColumn(COLUMN_LOCKED, true);
@@ -86,12 +82,6 @@ void Auth::confirmAuth()
     db.addCondition(COLUMN_COUNT, true);
     db.addCondition(COLUMN_USER_ID, uId);
     db.addCondition(COLUMN_AUTH_ATTEMPT, true);
-
-    if (rootUserId() == uId)
-    {
-        db.addCondition(COLUMN_IPADDR, ip);
-    }
-
     db.exec();
 
     db.setType(Query::PUSH, TABLE_AUTH_LOG);
@@ -166,11 +156,6 @@ void Auth::procIn(const QByteArray &binIn, quint8 dType)
 
                         flags  &= ~MORE_INPUT;
                         retCode = ABORTED;
-                    }
-                    else if (noCaseMatch(DEFAULT_ROOT_USER, text))
-                    {
-                        errTxt("err: '" + QString(DEFAULT_ROOT_USER) + "' is a reserved keyword. invalid for use as a user name.\n");
-                        promptTxt("Enter a new user name (leave blank to cancel): ");
                     }
                     else if (validEmailAddr(text))
                     {

@@ -154,6 +154,9 @@ def local_install(app_target, app_name):
             if make_install_dir(install_dir):
                 if not os.path.exists("/var/opt/" + app_target):
                     os.makedirs("/var/opt/" + app_target)
+
+                if not os.path.exists("/etc/" + app_target):
+                    os.makedirs("/etc/" + app_target)
             
                 template_to_deploy("app_dir/linux/" + app_target + ".sh", install_dir + "/" + app_target + ".sh", install_dir, app_name, app_target)
                 template_to_deploy("app_dir/linux/uninstall.sh", install_dir + "/uninstall.sh", install_dir, app_name, app_target)
@@ -168,7 +171,8 @@ def local_install(app_target, app_name):
                 subprocess.run(["useradd", "-r", app_target])
                 subprocess.run(["chmod", "-R", "755", install_dir])    
                 subprocess.run(["chmod", "755", "/etc/systemd/system/" + app_target + ".service"])    
-                subprocess.run(["chown", "-R", app_target + ":" + app_target, "/var/opt/" + app_target])    
+                subprocess.run(["chown", "-R", app_target + ":" + app_target, "/var/opt/" + app_target])
+                subprocess.run(["chown", "-R", app_target + ":" + app_target, "/etc/" + app_target])    
                 subprocess.run(["systemctl", "start", app_target])    
                 subprocess.run(["systemctl", "enable", app_target])
             
@@ -247,7 +251,7 @@ def make_install(app_ver, app_name):
             print("adding file: " + file)
             zip_file.write(file)
             
-    sub_copy_file(__file__, path, "main(is_sfx=False)", "main(is_sfx=True)\n\n\n", 7700)
+    sub_copy_file(__file__, path, "main(is_sfx=False)", "main(is_sfx=True)\n\n\n", 11000)
         
     with open(path, "a") as dst_file, open("app_dir.zip", "rb") as src_file:
         print("Packing the compressed app_dir into the sfx script file --")

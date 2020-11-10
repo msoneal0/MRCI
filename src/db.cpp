@@ -25,31 +25,25 @@ QString columnType(const QString &column)
 {
     QString ret;
 
-    if ((column == COLUMN_IPADDR)       || (column == COLUMN_LOGENTRY)     || (column == COLUMN_USERNAME)     ||
-        (column == COLUMN_CHANNEL_NAME) || (column == COLUMN_EMAIL)        || (column == COLUMN_SUB_CH_NAME)  ||
-        (column == COLUMN_COMMAND)      || (column == COLUMN_CLIENT_VER)   || (column == COLUMN_DISPLAY_NAME))
+    if ((column == COLUMN_IPADDR)       || (column == COLUMN_LOGENTRY)     || (column == COLUMN_USERNAME)    ||
+        (column == COLUMN_CHANNEL_NAME) || (column == COLUMN_EMAIL)        || (column == COLUMN_SUB_CH_NAME) ||
+        (column == COLUMN_COMMAND)      || (column == COLUMN_DISPLAY_NAME))
     {
         ret = "TEXT COLLATE NOCASE";
     }
-    else if ((column == COLUMN_COUNT)          || (column == COLUMN_ACCEPTED)        || (column == COLUMN_LOCKED)          ||
-             (column == COLUMN_NEED_PASS)      || (column == COLUMN_NEED_NAME)       || (column == COLUMN_PUB_USERS)       ||
-             (column == COLUMN_AUTH_ATTEMPT)   || (column == COLUMN_EMAIL_VERIFIED)  || (column == COLUMN_ENABLE_PW_RESET) ||
-             (column == COLUMN_ENABLE_CONFIRM) || (column == COLUMN_RECOVER_ATTEMPT) || (column == COLUMN_ACTIVE_UPDATE)   ||
-             (column == COLUMN_PENDING_INVITE))
+    else if ((column == COLUMN_COUNT)          || (column == COLUMN_ACCEPTED)        || (column == COLUMN_LOCKED)         ||
+             (column == COLUMN_NEED_PASS)      || (column == COLUMN_NEED_NAME)       || (column == COLUMN_PENDING_INVITE) ||
+             (column == COLUMN_AUTH_ATTEMPT)   || (column == COLUMN_EMAIL_VERIFIED)  || (column == COLUMN_ACTIVE_UPDATE)  ||
+             (column == COLUMN_RECOVER_ATTEMPT))
     {
         ret = "BOOL";
     }
-    else if ((column == COLUMN_TEMP_PW_MSG) || (column == COLUMN_ZIPBIN)     || (column == COLUMN_CONFIRM_SUBJECT) ||
-             (column == COLUMN_ZIPCOMPRESS) || (column == COLUMN_ZIPEXTRACT) || (column == COLUMN_TEMP_PW_SUBJECT) ||
-             (column == COLUMN_MAILERBIN)   || (column == COLUMN_MAIL_SEND)  || (column == COLUMN_CONFIRM_MSG)     ||
-             (column == COLUMN_MOD_MAIN))
+    else if (column == COLUMN_MOD_MAIN)
     {
         ret = "TEXT";
     }
-    else if ((column == COLUMN_LOCK_LIMIT)   || (column == COLUMN_PORT)        || (column == COLUMN_BAN_LIMIT)    ||
-             (column == COLUMN_HOST_RANK)    || (column == COLUMN_MAXSESSIONS) || (column == COLUMN_LOWEST_LEVEL) ||
-             (column == COLUMN_ACCESS_LEVEL) || (column == COLUMN_CHANNEL_ID)  || (column == COLUMN_SUB_CH_ID)    ||
-             (column == COLUMN_MAX_SUB_CH)   || (column == COLUMN_INITRANK))
+    else if ((column == COLUMN_CHANNEL_ID)   || (column == COLUMN_LOWEST_LEVEL) || (column == COLUMN_SUB_CH_ID)    ||
+             (column == COLUMN_HOST_RANK)    || (column == COLUMN_ACCESS_LEVEL))
     {
         ret = "INTEGER";
     }
@@ -74,11 +68,6 @@ QByteArray genUniqueHash()
     hasher.addData(QByteArray::number(QRandomGenerator::global()->generate()));
 
     return hasher.result();
-}
-
-QString sqlDataPath()
-{
-    return expandEnvVariables(qEnvironmentVariable(ENV_DB_PATH, DEFAULT_DB_FILE));
 }
 
 QList<int> genSequence(int min, int max, int len)
@@ -189,17 +178,6 @@ QString genPw()
     return ret;
 }
 
-quint32 initHostRank()
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_SERV_SETTINGS);
-    db.addColumn(COLUMN_INITRANK);
-    db.exec();
-
-    return db.getData(COLUMN_INITRANK).toUInt();
-}
-
 QByteArray getSalt(const QByteArray &uId, const QString &table)
 {
     Query db;
@@ -212,77 +190,20 @@ QByteArray getSalt(const QByteArray &uId, const QString &table)
     return db.getData(COLUMN_SALT).toByteArray();
 }
 
-QByteArray rootUserId()
+bool testDbWritable()
 {
     Query db;
 
-    db.setType(Query::PULL, TABLE_SERV_SETTINGS);
-    db.addColumn(COLUMN_ROOT_USER);
+    db.setType(Query::CREATE_TABLE, "test");
+    db.addColumn("test");
     db.exec();
 
-    auto id = db.getData(COLUMN_ROOT_USER).toByteArray();
+    db.setType(Query::DEL_TABLE, "test");
 
-    if (id.isEmpty())
-    {
-        db.setType(Query::PULL, TABLE_USERS);
-        db.addColumn(COLUMN_USER_ID);
-        db.addCondition(COLUMN_USERNAME, DEFAULT_ROOT_USER);
-        db.exec();
-
-        id = db.getData(COLUMN_USER_ID).toByteArray();
-    }
-
-    return id;
+    return db.exec();
 }
 
-QJsonObject getDbSettings(bool defaults)
-{
-    QJsonObject ret;
-
-    QFile file(DEFAULT_DB_JSON_FILE);
-
-    if (file.exists() && !defaults)
-    {
-        if (file.open(QFile::ReadOnly))
-        {
-            ret = QJsonDocument::fromJson(file.readAll()).object();
-        }
-        else
-        {
-            ret = getDbSettings(true);
-        }
-    }
-    else
-    {
-        ret.insert("driver", "QSQLITE");
-        ret.insert("host_name", "localhost");
-        ret.insert("user_name", QSysInfo::machineHostName());
-        ret.insert("password", QString(QSysInfo::machineUniqueId().toHex()));
-
-        if (file.open(QFile::WriteOnly | QFile::Truncate))
-        {
-            file.write(QJsonDocument(ret).toJson());
-        }
-    }
-
-    file.close();
-
-    return ret;
-}
-
-void saveDbSettings(const QJsonObject &obj)
-{
-    QFile file(DEFAULT_DB_JSON_FILE);
-
-    if (file.open(QFile::WriteOnly | QFile::Truncate))
-    {
-        file.write(QJsonDocument(obj).toJson());
-    }
-
-    file.close();
-}
-
-bool createUser(const QString &userName, const QString &email, const QString &dispName, const QString &password)
+bool createUser(const QString &userName, const QString &email, const QString &dispName, const QString &password, int rank, bool requireNewPass)
 {
     auto ret    = false;
     auto newUId = genUniqueHash();
@@ -292,7 +213,7 @@ bool createUser(const QString &userName, const QString &email, const QString &di
     db.setType(Query::PUSH, TABLE_USERS);
     db.addColumn(COLUMN_USERNAME, userName);
     db.addColumn(COLUMN_EMAIL, email);
-    db.addColumn(COLUMN_HOST_RANK, initHostRank());
+    db.addColumn(COLUMN_HOST_RANK, rank);
     db.addColumn(COLUMN_DISPLAY_NAME, dispName);
     db.addColumn(COLUMN_EMAIL_VERIFIED, false);
     db.addColumn(COLUMN_NEED_PASS, false);
@@ -303,7 +224,7 @@ bool createUser(const QString &userName, const QString &email, const QString &di
 
     if (db.exec())
     {
-        ret = updatePassword(newUId, password, TABLE_USERS);
+        ret = updatePassword(newUId, password, TABLE_USERS, requireNewPass);
     }
 
     return ret;
@@ -401,28 +322,34 @@ Query::Query(QObject *parent) : QObject(parent)
 
     if (!QSqlDatabase::contains(getConnectionName()))
     {
-        auto settings = getDbSettings();
-        auto driver   = settings["driver"].toString();
-        auto db       = QSqlDatabase::addDatabase(driver, getConnectionName());
+        auto confObj = confObject();
+        auto driver  = confObj[CONF_DB_DRIVER].toString();
+        auto db      = QSqlDatabase::addDatabase(driver, getConnectionName());
 
         db.setConnectOptions("ISC_DPB_LC_CTYPE=UTF8");
 
         if (driver == "QSQLITE")
         {
-            db.setDatabaseName(sqlDataPath());
+            db.setDatabaseName(confObj[CONF_DB_ADDR].toString());
         }
         else
         {
             db.setDatabaseName(APP_NAME);
-            db.setUserName(settings["user_name"].toString());
-            db.setHostName(settings["host_name"].toString());
-            db.setPassword(settings["password"].toString());
+            db.setUserName(confObj[CONF_DB_UNAME].toString());
+            db.setHostName(confObj[CONF_DB_ADDR].toString());
+            db.setPassword(confObj[CONF_DB_PW].toString());
         }
 
         if (db.open())
         {
             enableForeignKeys(true);
             setTextEncoding("UTF8");
+
+            if (!testDbWritable())
+            {
+                queryOk = false;
+                lastErr = "Write access to the database is denied.";
+            }
         }
         else
         {
@@ -562,6 +489,11 @@ void Query::setType(QueryType qType, const QString &tbl)
 
         break;
     }
+    case DEL_TABLE:
+
+        txt << "DROP TABLE " << tbl;
+
+        break;
     }
 }
 

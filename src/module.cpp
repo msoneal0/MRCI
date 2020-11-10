@@ -16,36 +16,12 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-Module::Module(QObject *parent) : QObject(parent)
-{
-    pubReg            = false;
-    emailConfirmation = false;
-    passwrdResets     = false;
-
-    loadSettings();
-}
-
-void Module::loadSettings()
-{
-    Query db(this);
-
-    db.setType(Query::PULL, TABLE_SERV_SETTINGS);
-    db.addColumn(COLUMN_PUB_USERS);
-    db.addColumn(COLUMN_ENABLE_CONFIRM);
-    db.addColumn(COLUMN_ENABLE_PW_RESET);
-    db.exec();
-
-    pubReg            = db.getData(COLUMN_PUB_USERS).toBool();
-    emailConfirmation = db.getData(COLUMN_ENABLE_CONFIRM).toBool();
-    passwrdResets     = db.getData(COLUMN_ENABLE_PW_RESET).toBool();
-}
+Module::Module(QObject *parent) : QObject(parent) {}
 
 QStringList Module::userCmdList()
 {
     QStringList ret;
 
-    ret << CloseHost::cmdName();
-    ret << RestartHost::cmdName();
     ret << Cast::cmdName();
     ret << OpenSubChannel::cmdName();
     ret << CloseSubChannel::cmdName();
@@ -63,15 +39,12 @@ QStringList Module::userCmdList()
     ret << LsCmdRanks::cmdName();
     ret << RemoveCmdRank::cmdName();
     ret << AssignCmdRank::cmdName();
-    ret << ServSettings::cmdName();
     ret << LockUser::cmdName();
     ret << NameChangeRequest::cmdName();
     ret << PasswordChangeRequest::cmdName();
     ret << OverWriteEmail::cmdName();
     ret << RemoveUser::cmdName();
     ret << ChangeUserRank::cmdName();
-    ret << SetEmailTemplate::cmdName();
-    ret << PreviewEmail::cmdName();
     ret << DownloadFile::cmdName();
     ret << UploadFile::cmdName();
     ret << Delete::cmdName();
@@ -121,12 +94,14 @@ QStringList Module::pubCmdList()
     ret << Auth::cmdName();
     ret << MyInfo::cmdName();
 
-    if (pubReg)
+    auto confObj = confObject();
+
+    if (confObj[CONF_ENABLE_PUB_REG].toBool())
     {
         ret << CreateUser::cmdName();
     }
 
-    if (passwrdResets)
+    if (confObj[CONF_ENABLE_PWRES].toBool())
     {
         ret << ResetPwRequest::cmdName();
         ret << RecoverAcct::cmdName();
@@ -147,7 +122,9 @@ QStringList Module::rankExemptList()
     ret << ChangeEmail::cmdName();
     ret << IsEmailVerified::cmdName();
 
-    if (emailConfirmation)
+    auto confObj = confObject();
+
+    if (confObj[CONF_ENABLE_EVERIFY].toBool())
     {
         ret << VerifyEmail::cmdName();
     }
@@ -161,9 +138,7 @@ bool Module::runCmd(const QString &name)
 
     if (userCmdList().contains(name, Qt::CaseInsensitive))
     {
-        if      (noCaseMatch(name, CloseHost::cmdName()))             new CloseHost(this);
-        else if (noCaseMatch(name, RestartHost::cmdName()))           new RestartHost(this);
-        else if (noCaseMatch(name, Auth::cmdName()))                  new Auth(this);
+        if      (noCaseMatch(name, Auth::cmdName()))                  new Auth(this);
         else if (noCaseMatch(name, Cast::cmdName()))                  new Cast(this);
         else if (noCaseMatch(name, OpenSubChannel::cmdName()))        new OpenSubChannel(this);
         else if (noCaseMatch(name, CloseSubChannel::cmdName()))       new CloseSubChannel(this);
@@ -182,7 +157,6 @@ bool Module::runCmd(const QString &name)
         else if (noCaseMatch(name, LsCmdRanks::cmdName()))            new LsCmdRanks(this);
         else if (noCaseMatch(name, RemoveCmdRank::cmdName()))         new RemoveCmdRank(this);
         else if (noCaseMatch(name, AssignCmdRank::cmdName()))         new AssignCmdRank(this);
-        else if (noCaseMatch(name, ServSettings::cmdName()))          new ServSettings(this);
         else if (noCaseMatch(name, LockUser::cmdName()))              new LockUser(this);
         else if (noCaseMatch(name, NameChangeRequest::cmdName()))     new NameChangeRequest(this);
         else if (noCaseMatch(name, PasswordChangeRequest::cmdName())) new PasswordChangeRequest(this);
@@ -194,8 +168,6 @@ bool Module::runCmd(const QString &name)
         else if (noCaseMatch(name, RemoveUser::cmdName()))            new RemoveUser(this);
         else if (noCaseMatch(name, ChangeUserRank::cmdName()))        new ChangeUserRank(this);
         else if (noCaseMatch(name, IsEmailVerified::cmdName()))       new IsEmailVerified(this);
-        else if (noCaseMatch(name, SetEmailTemplate::cmdName()))      new SetEmailTemplate(this);
-        else if (noCaseMatch(name, PreviewEmail::cmdName()))          new PreviewEmail(this);
         else if (noCaseMatch(name, MyInfo::cmdName()))                new MyInfo(this);
         else if (noCaseMatch(name, DownloadFile::cmdName()))          new DownloadFile(this);
         else if (noCaseMatch(name, UploadFile::cmdName()))            new UploadFile(this);

@@ -16,14 +16,184 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-QString sslCertChain()
+#include "db.h"
+
+QString getLocalFilePath(const QString &fileName, bool var)
 {
-    return expandEnvVariables(qEnvironmentVariable(ENV_PUB_KEY, DEFAULT_PUB_KEY_NAME));
+#ifdef Q_OS_WINDOWS
+
+    auto path = QDir::homePath() + "\\AppData\\" + APP_TARGET + "\\" + fileName;
+
+#else
+
+    auto path = QDir::homePath() + "/." + APP_TARGET + "/" + fileName;
+
+#endif
+
+    if (!QFile::exists(path))
+    {
+    #ifdef Q_OS_WINDOWS
+
+        path = expandEnvVariables("%PROGRAMDATA%\\") + APP_TARGET + "\\" + fileName;
+
+    #else
+
+        if (var)
+        {
+            path = QString("/var/opt/") + APP_TARGET + "/" + fileName;
+        }
+        else
+        {
+            path = QString("/etc/") + APP_TARGET + "/" + fileName;
+        }
+
+    #endif
+    }
+
+    mkPath(QFileInfo(path).path());
+
+    return path;
 }
 
-QString sslPrivKey()
+QJsonObject confObject()
 {
-    return expandEnvVariables(qEnvironmentVariable(ENV_PRIV_KEY, DEFAULT_PRIV_KEY_NAME));
+    QJsonObject obj;
+
+    QFile file(getLocalFilePath(CONF_FILENAME));
+
+    if (file.exists())
+    {
+        if (file.open(QFile::ReadOnly))
+        {
+            obj = QJsonDocument::fromJson(file.readAll()).object();
+        }
+        else if (file.remove())
+        {
+            obj = confObject();
+        }
+    }
+    else
+    {
+        obj.insert(CONF_LISTEN_ADDR, DEFAULT_LISTEN_ADDRESS);
+        obj.insert(CONF_LISTEN_PORT, DEFAULT_LISTEN_PORT);
+        obj.insert(CONF_AUTO_LOCK_LIM, DEFAULT_LOCK_LIMIT);
+        obj.insert(CONF_MAX_SESSIONS, DEFAULT_MAXSESSIONS);
+        obj.insert(CONF_MAX_SUBS, DEFAULT_MAX_SUBS);
+        obj.insert(CONF_INIT_RANK, DEFAULT_INIT_RANK);
+        obj.insert(CONF_ENABLE_PUB_REG, false);
+        obj.insert(CONF_ENABLE_EVERIFY, true);
+        obj.insert(CONF_ENABLE_PWRES, true);
+        obj.insert(CONF_ALL_CH_UPDATE, false);
+        obj.insert(CONF_DB_DRIVER, DEFAULT_DB_DRIVER);
+        obj.insert(CONF_DB_ADDR, getLocalFilePath(DEFAULT_DB_FILENAME, true));
+        obj.insert(CONF_DB_UNAME, QSysInfo::machineHostName());
+        obj.insert(CONF_DB_PW, QString(QSysInfo::machineUniqueId().toHex()));
+        obj.insert(CONF_MAIL_CLIENT_CMD, DEFAULT_MAIL_SEND);
+        obj.insert(CONF_CERT_CHAIN, getLocalFilePath(DEFAULT_CERT_FILENAME));
+        obj.insert(CONF_PRIV_KEY, getLocalFilePath(DEFAULT_PRIV_FILENAME));
+        obj.insert(CONF_PW_RES_EMAIL_SUBJECT, DEFAULT_TEMP_PW_SUBJECT);
+        obj.insert(CONF_EVERIFY_SUBJECT, DEFAULT_CONFIRM_SUBJECT);
+        obj.insert(CONF_PW_RES_EMAIL_TEMP, getLocalFilePath(DEFAULT_RES_PW_FILENAME));
+        obj.insert(CONF_EVERIFY_TEMP, getLocalFilePath(DEFAULT_EVERIFY_FILENAME));
+
+        wrDefaultMailTemplates(obj);
+
+        if (file.open(QFile::WriteOnly | QFile::Truncate))
+        {
+            file.write(QJsonDocument(obj).toJson());
+        }
+    }
+
+    file.close();
+
+    return obj;
+}
+
+void wrDefaultMailTemplates(const QJsonObject &obj)
+{
+    QFile file(obj[CONF_PW_RES_EMAIL_TEMP].toString());
+
+    if (file.open(QFile::WriteOnly | QFile::Truncate))
+    {
+        file.write(TXT_TempPwTemplate);
+    }
+
+    file.close();
+    file.setFileName(obj[CONF_EVERIFY_TEMP].toString());
+
+    if (file.open(QFile::WriteOnly | QFile::Truncate))
+    {
+        file.write(TXT_ConfirmCodeTemplate);
+    }
+
+    file.close();
+}
+
+void updateConf(const QJsonObject &obj)
+{
+    QFile file(getLocalFilePath(CONF_FILENAME));
+
+    if (file.open(QFile::WriteOnly | QFile::Truncate))
+    {
+        file.write(QJsonDocument(obj).toJson());
+    }
+
+    file.close();
+}
+
+void updateConf(const char *key, const QJsonValue &value)
+{
+    auto obj = confObject();
+
+    obj[key] = value;
+
+    updateConf(obj);
+}
+
+bool getEmailParams(const QString &mailCmd, const QString &bodyFile, QString *bodyText, QString *errMsg)
+{
+    auto ret = false;
+
+    errMsg->clear();
+    bodyText->clear();
+
+    QFile file(bodyFile);
+
+    if (!file.open(QFile::ReadOnly))
+    {
+        errMsg->append("err: The host could not open the email message template, please notify a system administrator.\n");
+
+        qDebug() << "err: Could not open the email message template file '" << bodyFile << "' reason: " << file.errorString();
+    }
+    else
+    {
+        auto body = QString(file.readAll());
+
+        if ((!body.contains(DATE_SUB, Qt::CaseInsensitive))     ||
+            (!body.contains(USERNAME_SUB, Qt::CaseInsensitive)) ||
+            (!body.contains(OTP_SUB, Qt::CaseInsensitive)))
+        {
+            errMsg->append("err: The host email message template is invalid, please notify a system administrator.\n");
+
+            qDebug() << "err: Email message template '" << bodyFile << "' is missing one of the following key words: " << DATE_SUB << ", " << USERNAME_SUB << ", " << OTP_SUB;
+        }
+        else if ((mailCmd.contains(SUBJECT_SUB, Qt::CaseInsensitive))       ||
+                 (mailCmd.contains(MSG_SUB, Qt::CaseInsensitive))           ||
+                 (mailCmd.contains(TARGET_EMAIL_SUB, Qt::CaseInsensitive)))
+        {
+            errMsg->append("err: The host email client parameters are invalid, please notify a system administrator.\n");
+
+            qDebug() << "err: Email client command line '" << mailCmd << "' is missing one of the following key words: " << SUBJECT_SUB << ", " << MSG_SUB << ", " << TARGET_EMAIL_SUB;
+        }
+        else
+        {
+            ret = true;
+        }
+    }
+
+    file.close();
+
+    return ret;
 }
 
 QByteArray rdFileContents(const QString &path, QTextStream &msg)
@@ -524,7 +694,7 @@ bool fullMatchChs(const char *openChs, const char *comp)
 
 void containsActiveCh(const char *subChs, char *actBlock)
 {
-    if (globalActiveFlag())
+    if (confObject()[CONF_ALL_CH_UPDATE].toBool())
     {
         wr8BitToBlock(1, actBlock);
     }
@@ -558,34 +728,11 @@ void containsActiveCh(const char *subChs, char *actBlock)
 
 void printDatabaseInfo(QTextStream &txt)
 {
-    auto json   = getDbSettings();
-    auto driver = json["driver"].toString();
+    auto confObj = confObject();
 
     txt << "Database Parameters --" << Qt::endl << Qt::endl;
-    txt << "Driver: " << driver << Qt::endl;
-
-    if (driver == "QSQLITE")
-    {
-        txt << "File:   " << sqlDataPath() << Qt::endl;
-    }
-    else
-    {
-        txt << "Host:   " << json["host_name"].toString() << Qt::endl;
-        txt << "User:   " << json["user_name"].toString() << Qt::endl;
-    }
-
-    txt << Qt::endl;
-}
-
-QString defaultPw()
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_SERV_SETTINGS);
-    db.addColumn(COLUMN_DEFAULT_PASS);
-    db.exec();
-
-    return db.getData(COLUMN_DEFAULT_PASS).toString();
+    txt << "Driver: " << confObj[CONF_DB_DRIVER].toString() << Qt::endl;
+    txt << "Host:   " << confObj[CONF_DB_ADDR].toString() << Qt::endl << Qt::endl;
 }
 
 bool channelExists(const QString &chName, quint64 *chId)
@@ -637,17 +784,6 @@ bool inviteExists(const QByteArray &uId, quint64 chId)
     return db.rows();
 }
 
-bool globalActiveFlag()
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_SERV_SETTINGS);
-    db.addColumn(COLUMN_ACTIVE_UPDATE);
-    db.exec();
-
-    return db.getData(COLUMN_ACTIVE_UPDATE).toBool();
-}
-
 bool genSubId(quint64 chId, quint8 *newId)
 {
     bool ret = false;
@@ -659,7 +795,7 @@ bool genSubId(quint64 chId, quint8 *newId)
     db.addCondition(COLUMN_CHANNEL_ID, chId);
     db.exec();
 
-    if (db.rows() < maxSubChannels())
+    if (db.rows() < confObject()[CONF_MAX_SUBS].toInt())
     {
         QList<quint8> subList;
 
@@ -689,17 +825,6 @@ bool isChOwner(const QByteArray &uId)
     db.exec();
 
     return db.rows();
-}
-
-int maxSubChannels()
-{
-    Query db;
-
-    db.setType(Query::PULL, TABLE_SERV_SETTINGS);
-    db.addColumn(COLUMN_MAX_SUB_CH);
-    db.exec();
-
-    return db.getData(COLUMN_MAX_SUB_CH).toInt();
 }
 
 int channelAccessLevel(const QByteArray &uId, const char *override, quint64 chId)

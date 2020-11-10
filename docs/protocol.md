@@ -1,6 +1,6 @@
 ### 1.1 The Protocol ###
 
-The main goal of this application is to transport data from remote TCP clients to the [Modules](modules.md) defined in the host. How the data is processed and/or returned back to the client depends entirely on the type of data being transported or the module itself. The data format that the host understands for data transport is referred to as MRCI frames described below in section 1.2.
+The main goal of this application is to transport data from remote TCP clients to the [Modules](modules.md) defined in the host. How the data is processed and/or returned back to the client depends entirely on the module itself. The data format that the host understands for data transport is referred to as MRCI frames described below in section 1.2.
 
 Before any MRCI frames can be transported, both the host and client need basic information about each other. This is done by having the client send a fixed length client header when it successfully connects to the host and the host will reply with it's own fixed length host header. Descriptions of these headers can be found in sections 1.4 and 1.5. 
 
@@ -20,7 +20,7 @@ notes:
 
 * A full description of the type id's can be found in the [Type_IDs.md](type_ids.md) document.
 
-* Modules call commands via a command name but the host will assign a unique command id to all command names so clients can call them using a simple 2 byte integer instead of full text. The command ids can change as the modules change so it is recommended for clients to not depend on consistant command ids but depend on the [ASYNC_ADD_CMD](async.md) and [ASYNC_RM_CMD](async.md) async commands.
+* Modules call commands via a command name but the host will assign a unique command id to all command names so clients can call them using a simple 2 byte integer instead of full text. The command ids can change as the modules change so it is recommended for clients to not depend on consistant command ids but depend on the [ASYNC_ADD_CMD](async.md) and [ASYNC_RM_CMD](async.md) async commands instead.
 
 * The branch id is an id that can be assigned by the client itself to run muliple instances of the same command. Commands sent by a certain branch id will result in data sent back to the client from the module with that same branch id.
 
@@ -48,7 +48,7 @@ TCP_Rev - this indicate any changes to the MRCI protocol that interface the
           
 Mod_Rev - this indicate any changes to the IPC protocol that interface the
           host with the modules via named pipes. any changes to the IPC 
-          frames, NEW_CMD/CMD_ID type ids, etc. will cause this rev to
+          frames or major changes to async commands will cause this rev to
           increment.
    
 ```

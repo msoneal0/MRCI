@@ -508,13 +508,6 @@ bool CmdProcess::validAsync(quint16 async, const QByteArray &data, QTextStream &
             ret = false; errMsg << "expected data containing the user id and display name to be " << (BLKSIZE_USER_ID + BLKSIZE_DISP_NAME) << " bytes long.";
         }
     }
-    else if (async == ASYNC_MAXSES)
-    {
-        if (data.size() != BLKSIZE_HOST_LOAD)
-        {
-            ret = false; errMsg << "the 32bit max session int is not " << BLKSIZE_HOST_LOAD << " bytes long.";
-        }
-    }
     else if (async == ASYNC_USER_RANK_CHANGED)
     {
         if (data.size() != (BLKSIZE_USER_ID + BLKSIZE_HOST_RANK))
@@ -624,9 +617,8 @@ bool CmdProcess::validAsync(quint16 async, const QByteArray &data, QTextStream &
 
 void CmdProcess::asyncDirector(quint16 id, const QByteArray &payload)
 {
-    if ((id == ASYNC_EXIT)        || (id == ASYNC_MAXSES)     || (id == ASYNC_LOGOUT)     || (id == ASYNC_RESTART)     ||
-        (id == ASYNC_END_SESSION) || (id == ASYNC_USER_LOGIN) || (id == ASYNC_OPEN_SUBCH) || (id == ASYNC_CLOSE_SUBCH) ||
-        (id == ASYNC_KEEP_ALIVE)  || (id == ASYNC_SET_DIR)    || (id == ASYNC_DEBUG_TEXT))
+    if ((id == ASYNC_KEEP_ALIVE)  || (id == ASYNC_DEBUG_TEXT) || (id == ASYNC_LOGOUT)     || (id == ASYNC_SET_DIR)     ||
+        (id == ASYNC_END_SESSION) || (id == ASYNC_USER_LOGIN) || (id == ASYNC_OPEN_SUBCH) || (id == ASYNC_CLOSE_SUBCH))
     {
         emit privIPC(id, payload);
     }

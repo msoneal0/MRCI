@@ -1,6 +1,6 @@
 # MRCI #
 
-(Modular Remote Command Interpreter) is a command interpreter primarily designed to provide any type of remote service to connected clients. As the name implies, it is expandable via 3rd party modules by adding addtional commands that remote clients can run on the host. It has a fully feasured user account management system with access control to certain commands for certain users. All persistent data is handled by a SQLite database and all remote connections are handled via TCP and encrypted in SSL/TLS.
+(Modular Remote Command Interpreter) is a command interpreter primarily designed to provide any type of remote service to connected clients. As the name implies, it is expandable via 3rd party modules by adding addtional commands that remote clients can run on the host. It has a fully feasured user account management system with access control to certain commands for certain users.
 
 ### Usage ###
 
@@ -12,18 +12,17 @@ Usage: mrci <argument>
  -help        : display usage information about this application.
  -stop        : stop the current host instance if one is currently running.
  -about       : display versioning/warranty information about this application.
- -addr        : set the listening address and port for TCP clients.
  -status      : display status information about the host instance if it is currently running.
- -reset_root  : reset the root account password to the default password.
  -host        : start a new host instance. (this blocks)
  -host_trig   : start a new host instance. (this does not block)
- -default_pw  : show the default password.
  -public_cmds : run the internal module to list it's public commands. for internal use only.
  -exempt_cmds : run the internal module to list it's rank exempt commands. for internal use only.
  -user_cmds   : run the internal module to list it's user commands. for internal use only.
  -run_cmd     : run an internal module command. for internal use only.
  -ls_sql_drvs : list all available SQL drivers that the host currently supports.
  -load_ssl    : re-load the host SSL certificate without stopping the host instance.
+ -elevate     : elevate any user account to rank 1.
+ -add_admin   : create a rank 1 account with a randomized password.
 
 Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:
 
@@ -33,17 +32,20 @@ Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:
 
 Details:
 
-addr     - this argument takes a {ip_address:port} string. it will return an error if not formatted correctly
-           examples: 10.102.9.2:35516 or 0.0.0.0:35516.
+add_admin - this argument takes a single string representing a user name to create a rank 1 account with.
+            the host will set a randomized password for it and display it on the CLI. this user will be
+            required to change the password upon logging in.
+            example: -add_admin somebody
+
+elevate   - this argument takes a single string representing a user name to an account to promote to rank 1.
+            example: -elevate somebody
 
 run_cmd  - this argument is used by the host itself, along side the internal module arguments below to run
            the internal command names passed by it. this is not ment to be run directly by human input.
            the executable will auto close if it fails to connect to the pipe and/or shared memory segments
 ```
  
-The host can only be managed via a connected client that supports text input/output so the host application is always listening for clients while running entirely in the background. By default the host listen for clients on address 0.0.0.0 and port 35516, effectively making it reachable on any network interface of the host platform via that specific port.
-
-Any one user account registered with the host can be given root privileges which basically gives this user unrestricted access to anything in the host for administrative purposes. When a host instance is created for the first time, it will create a new user account called 'root' with a randomized default password. To find out what the default password is, run -default_pw. When logging in for the fist time, the host will require you to change the user name and password before continuing.
+The host can be managed via a connected client that supports text input/output so the host application is always listening for clients while running entirely in the background. By default the host listen for clients on address 0.0.0.0 and port 35516, effectively making it reachable on any network interface of the host platform via that specific port.
 
 ### More Than Just a Command Interpreter ###
 
@@ -101,7 +103,7 @@ while running the install script, it will ask you to input 1 of 3 options:
 
 ***local machine*** - This option will install the built application onto the local machine without creating an installer.
 
-***create installer*** - This option creates an installer that can be distributed to other machines to installation. The resulting installer is just a regular .py script file that the target machine can run if it has Python3 insalled. Only Python3 needs to be installed and an internet connection is not required.
+***create installer*** - This option creates an installer that can be distributed to other machines for installation. The resulting installer is just a regular .py script file that the target machine can run if it has Python3 insalled. Only Python3 needs to be installed and an internet connection is not required.
 
 ***exit*** - Cancel the installation.
 

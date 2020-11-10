@@ -9,7 +9,6 @@
         <file>docs/intern_commands/add_sub_ch.md</file>
         <file>docs/intern_commands/auth.md</file>
         <file>docs/intern_commands/cast.md</file>
-        <file>docs/intern_commands/close_host.md</file>
         <file>docs/intern_commands/close_sub_ch.md</file>
         <file>docs/intern_commands/decline_ch.md</file>
         <file>docs/intern_commands/find_ch.md</file>
@@ -24,7 +23,6 @@
         <file>docs/intern_commands/fs_move.md</file>
         <file>docs/intern_commands/fs_tree.md</file>
         <file>docs/intern_commands/fs_upload.md</file>
-        <file>docs/intern_commands/host_config.md</file>
         <file>docs/intern_commands/host_info.md</file>
         <file>docs/intern_commands/invite_to_ch.md</file>
         <file>docs/intern_commands/is_email_verified.md</file>
@@ -47,7 +45,6 @@
         <file>docs/intern_commands/p2p_open.md</file>
         <file>docs/intern_commands/p2p_request.md</file>
         <file>docs/intern_commands/ping_peers.md</file>
-        <file>docs/intern_commands/preview_email.md</file>
         <file>docs/intern_commands/recover_acct.md</file>
         <file>docs/intern_commands/remove_ch_member.md</file>
         <file>docs/intern_commands/rename_ch.md</file>
@@ -55,7 +52,6 @@
         <file>docs/intern_commands/request_new_pw.md</file>
         <file>docs/intern_commands/request_new_user_name.md</file>
         <file>docs/intern_commands/request_pw_reset.md</file>
-        <file>docs/intern_commands/restart_host.md</file>
         <file>docs/intern_commands/rm_acct.md</file>
         <file>docs/intern_commands/rm_ch.md</file>
         <file>docs/intern_commands/rm_mod.md</file>
@@ -64,7 +60,6 @@
         <file>docs/intern_commands/rm_sub_ch.md</file>
         <file>docs/intern_commands/set_active_flag.md</file>
         <file>docs/intern_commands/set_disp_name.md</file>
-        <file>docs/intern_commands/set_email_template.md</file>
         <file>docs/intern_commands/set_email.md</file>
         <file>docs/intern_commands/set_member_level.md</file>
         <file>docs/intern_commands/set_pw.md</file>

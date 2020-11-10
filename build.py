@@ -38,13 +38,13 @@ def get_qt_from_cli():
             
     return ""
 
-def get_db_header():
+def get_info_header():
     current_dir = os.path.dirname(__file__)
     
     if current_dir == "":
-        return "src" + os.sep + "db.h"
+        return "src" + os.sep + "common.h"
     else:
-        return current_dir + os.sep + "src" + os.sep + "db.h"
+        return current_dir + os.sep + "src" + os.sep + "common.h"
 
 def get_nearest_subdir(path, sub_name):
     dir_list = os.listdir(path)
@@ -200,7 +200,7 @@ def complete(app_ver, app_target):
     print("You can now run the install.py script to install onto this machine or create an installer.")
     
 def main():
-    with open(get_db_header()) as file:
+    with open(get_info_header()) as file:
         text = file.read()
         
         app_target = get_app_target(text)

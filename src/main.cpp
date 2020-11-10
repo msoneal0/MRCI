@@ -64,28 +64,31 @@ void showHelp()
     txtOut << " -help        : display usage information about this application." << Qt::endl;
     txtOut << " -stop        : stop the current host instance if one is currently running." << Qt::endl;
     txtOut << " -about       : display versioning/warranty information about this application." << Qt::endl;
-    txtOut << " -addr        : set the listening address and port for TCP clients." << Qt::endl;
     txtOut << " -status      : display status information about the host instance if it is currently running." << Qt::endl;
-    txtOut << " -reset_root  : reset the root account password to the default password." << Qt::endl;
     txtOut << " -host        : start a new host instance. (this blocks)" << Qt::endl;
     txtOut << " -host_trig   : start a new host instance. (this does not block)" << Qt::endl;
-    txtOut << " -default_pw  : show the default password." << Qt::endl;
     txtOut << " -public_cmds : run the internal module to list it's public commands. for internal use only." << Qt::endl;
     txtOut << " -exempt_cmds : run the internal module to list it's rank exempt commands. for internal use only." << Qt::endl;
     txtOut << " -user_cmds   : run the internal module to list it's user commands. for internal use only." << Qt::endl;
     txtOut << " -run_cmd     : run an internal module command. for internal use only." << Qt::endl;
     txtOut << " -ls_sql_drvs : list all available SQL drivers that the host currently supports." << Qt::endl;
-    txtOut << " -load_ssl    : re-load the host SSL certificate without stopping the host instance." << Qt::endl << Qt::endl;
+    txtOut << " -load_ssl    : re-load the host SSL certificate without stopping the host instance." << Qt::endl;
+    txtOut << " -elevate     : elevate any user account to rank 1." << Qt::endl;
+    txtOut << " -add_admin   : create a rank 1 account with a randomized one time password." << Qt::endl << Qt::endl;
     txtOut << "Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:" << Qt::endl << Qt::endl;
     txtOut << " -pipe     : the named pipe used to establish a data connection with the session." << Qt::endl;
     txtOut << " -mem_ses  : the shared memory key for the session." << Qt::endl;
     txtOut << " -mem_host : the shared memory key for the host main process." << Qt::endl << Qt::endl;
     txtOut << "Details:" << Qt::endl << Qt::endl;
-    txtOut << "addr     - this argument takes a {ip_address:port} string. it will return an error if not formatted correctly" << Qt::endl;
-    txtOut << "           examples: 10.102.9.2:35516 or 0.0.0.0:35516." << Qt::endl << Qt::endl;
-    txtOut << "run_cmd  - this argument is used by the host itself along with the internal module arguments to run the" << Qt::endl;
-    txtOut << "           internal command names passed by it. this is not ment to be run directly by human input. the" << Qt::endl;
-    txtOut << "           executable will auto close if it fails to connect to the pipe and/or shared memory segments" << Qt::endl << Qt::endl;
+    txtOut << "add_admin - this argument takes a single string representing a user name to create a rank 1 account with." << Qt::endl;
+    txtOut << "            the host will set a randomized password for it and display it on the CLI. this user will be" << Qt::endl;
+    txtOut << "            required to change the password upon logging in." << Qt::endl;
+    txtOut << "            example: -add_admin somebody" << Qt::endl << Qt::endl;
+    txtOut << "elevate   - this argument takes a single string representing a user name to an account to promote to rank 1." << Qt::endl;
+    txtOut << "            example: -elevate somebody" << Qt::endl << Qt::endl;
+    txtOut << "run_cmd   - this argument is used by the host itself along with the internal module arguments to run the" << Qt::endl;
+    txtOut << "            internal command names passed by it. this is not ment to be run directly by human input. the" << Qt::endl;
+    txtOut << "            executable will auto close if it fails to connect to the pipe and/or shared memory segments" << Qt::endl << Qt::endl;
 }
 
 void soeDueToDbErr(int *retCode, const QString *errMsg)
@@ -121,15 +124,9 @@ int main(int argc, char *argv[])
 
     serializeThread(app.thread());
 
-    auto workDir = expandEnvVariables(qEnvironmentVariable(ENV_WORK_DIR, DEFAULT_WORK_DIR));
-    auto args    = QCoreApplication::arguments();
-    auto ret     = 0;
+    auto args = QCoreApplication::arguments();
+    auto ret  = 0;
 
-    QDir dir(workDir);
-
-    if (!dir.exists()) dir.mkpath(workDir);
-
-    QDir::setCurrent(workDir);
     QCoreApplication::setApplicationName(APP_NAME);
     QCoreApplication::setApplicationVersion(APP_VER);
 
@@ -144,13 +141,6 @@ int main(int argc, char *argv[])
         args.contains("-exempt_cmds", Qt::CaseInsensitive) ||
         args.contains("-user_cmds", Qt::CaseInsensitive))
     {
-        // security note: it is critical that the above internal arguments are checked
-        //                first. external clients have the ability to pass additional
-        //                args and those args come through here. it can be a security
-        //                threat if an external arg is a powerful arg like "reset_root"
-        //                and it ends up getting processed unintentionally by this
-        //                function.
-
         if (setupDb(&err))
         {
             auto *mod = new Module(&app);
@@ -208,64 +198,66 @@ int main(int argc, char *argv[])
         {
             QProcess::startDetached(QCoreApplication::applicationFilePath(), QStringList() << "-host");
         }
-        else if (args.contains("-addr", Qt::CaseInsensitive))
+        else if (args.contains("-elevate", Qt::CaseInsensitive))
         {
-            auto params = getParam("-addr", args);
-            auto addr   = params.split(':');
+            ret = 1;
 
-            ret = 128;
+            QByteArray uId;
 
-            if (addr.size() != 2)
+            if (args.size() <= 2)
             {
-                QTextStream(stderr) << "" << Qt::endl << "err: Address string parsing error, number of params found: " << addr.size() << Qt::endl;
+                QTextStream(stderr) << "err: A user name was not given." << Qt::endl;
+            }
+            else if (!validUserName(args[2]))
+            {
+                QTextStream(stderr) << "err: Invalid user name." << Qt::endl;
+            }
+            else if (!userExists(args[2], &uId))
+            {
+                QTextStream(stderr) << "err: The user name does not exists." << Qt::endl;
             }
             else
             {
-                bool pOk;
-                auto port = addr[1].toUShort(&pOk);
+                Query db;
 
-                if (!pOk)
-                {
-                    QTextStream(stderr) << "" << Qt::endl << "err: Invalid port." << Qt::endl;
-                }
-                else if (port == 0)
-                {
-                    QTextStream(stderr) << "" << Qt::endl << "err: The port cannot be 0." << Qt::endl;
-                }
-                else if (QHostAddress(addr[0]).isNull())
-                {
-                    QTextStream(stderr) << "" << Qt::endl << "err: Invalid ip address." << Qt::endl;
-                }
-                else
-                {
-                    Query db(&app);
+                db.setType(Query::UPDATE, TABLE_USERS);
+                db.addColumn(COLUMN_HOST_RANK, 1);
+                db.addCondition(COLUMN_USER_ID, uId);
+                db.exec();
 
-                    db.setType(Query::UPDATE, TABLE_SERV_SETTINGS);
-                    db.addColumn(COLUMN_IPADDR, addr[0]);
-                    db.addColumn(COLUMN_PORT, port);
-                    db.exec();
-
-                    ret = shellToHost(args, true, app);
-                }
+                ret = 0;
             }
         }
-        else if (args.contains("-reset_root", Qt::CaseInsensitive))
+        else if (args.contains("-add_admin", Qt::CaseInsensitive))
         {
-            auto uId = rootUserId();
+            ret = 1;
 
-            Query db(&app);
+            if (args.size() <= 2)
+            {
+                QTextStream(stderr) << "err: A user name was not given." << Qt::endl;
+            }
+            else if (!validUserName(args[2]))
+            {
+                QTextStream(stderr) << "err: Invalid user name." << Qt::endl;
+            }
+            else if (userExists(args[2]))
+            {
+                QTextStream(stderr) << "err: The user name already exists." << Qt::endl;
+            }
+            else
+            {
+                auto randPw = genPw();
 
-            db.setType(Query::UPDATE, TABLE_USERS);
-            db.addColumn(COLUMN_LOCKED, false);
-            db.addCondition(COLUMN_USER_ID, uId);
-            db.exec();
+                createUser(args[2], "", "", randPw, 1, true);
 
-            updatePassword(uId, defaultPw(), TABLE_USERS, true);
+                QTextStream(stdout) << "password: " << randPw << Qt::endl;
+
+                ret = 0;
+            }
         }
-        else if (args.contains("-default_pw", Qt::CaseInsensitive))
+        else
         {
-            QTextStream(stdout) << "" << Qt::endl << " Root User       : " << getUserName(rootUserId()) << Qt::endl;
-            QTextStream(stdout) << " Default Password: " << defaultPw() << Qt::endl << Qt::endl;
+            showHelp();
         }
     }
     else

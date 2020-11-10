@@ -148,7 +148,7 @@ void CreateUser::procIn(const QByteArray &binIn, quint8 dType)
                 errTxt(errMsg + "\n");
                 privTxt("Enter a new password (leave blank to cancel): ");
             }
-            else if (!createUser(newName, email, dispName, password))
+            else if (!createUser(newName, email, dispName, password, confObject()[CONF_INIT_RANK].toInt()))
             {
                 retCode = INVALID_PARAMS;
 
@@ -180,10 +180,6 @@ void CreateUser::procIn(const QByteArray &binIn, quint8 dType)
             else if (!validUserName(newName))
             {
                 errTxt("err: Invalid username. it must be 2-24 chars long and contain no spaces.\n");
-            }
-            else if (noCaseMatch(DEFAULT_ROOT_USER, newName))
-            {
-                errTxt("err: '" + QString(DEFAULT_ROOT_USER) + "' is a reserved keyword. invalid for use as a username.\n");
             }
             else if (validEmailAddr(newName))
             {
@@ -277,10 +273,6 @@ void RemoveUser::procIn(const QByteArray &binIn, quint8 dType)
             {
                 errTxt("err: The requested user name does not exists.\n");
             }
-            else if (rootUserId() == uId)
-            {
-                errTxt("err: Unable to delete root user: '" + uName + "'\n");
-            }
             else if (isChOwner(uId))
             {
                 errTxt("err: The requested user name is the owner of one or more channels. assign new owners for these channels before attempting to delete this account.\n");
@@ -346,11 +338,7 @@ void ChangeUserRank::procIn(const QByteArray &binIn, quint8 dType)
         {
             errTxt("err: The requested user account does not exists.\n");
         }
-        else if (rootUserId() == uId)
-        {
-            errTxt("err: You are not allowed to change the rank of root user: '" + uName + "'\n");
-        }
-        else if (!canModifyUser(uId, rd32BitFromBlock(hostRank), false))
+        else if (!canModifyUser(uId, rd32BitFromBlock(hostRank), uId == rdFromBlock(userId, BLKSIZE_USER_ID)))
         {
             errTxt("err: The target user out ranks you or is equal to your own rank. access denied.\n");
         }
@@ -422,10 +410,6 @@ void ChangeUsername::procIn(const QByteArray &binIn, quint8 dType)
         else if (!validUserName(newName))
         {
             errTxt("err: Invalid username. it must be 2-24 chars long and contain no spaces.\n");
-        }
-        else if (noCaseMatch(DEFAULT_ROOT_USER, newName))
-        {
-            errTxt("err: '" + QString(DEFAULT_ROOT_USER) + "' is a reserved keyword. invalid for use as a username.\n");
         }
         else if (validEmailAddr(newName))
         {

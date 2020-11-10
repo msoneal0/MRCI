@@ -19,7 +19,6 @@
 
 #include "common.h"
 #include "cmd_object.h"
-#include "commands/admin.h"
 #include "commands/cast.h"
 #include "commands/info.h"
 #include "commands/mods.h"
@@ -36,10 +35,6 @@ class Module : public QObject
     Q_OBJECT
 
 private:
-
-    bool pubReg;
-    bool emailConfirmation;
-    bool passwrdResets;
 
     bool        runCmd(const QString &name);
     void        listCmds(const QStringList &list);

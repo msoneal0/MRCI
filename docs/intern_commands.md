@@ -22,8 +22,6 @@ The host is extendable via 3rd party modules but the host itself is an internal 
 
 * [ch_owner_override](intern_commands/ch_owner_override.md) - set/unset the channel owner override flag for your current session.
 
-* [close_host](intern_commands/close_host.md) - close the host instance.
-
 * [close_sub_ch](intern_commands/close_sub_ch.md) - close a sub-channel for your current session.
 
 * [decline_ch](intern_commands/decline_ch.md) - decline an invite to a channel.
@@ -51,8 +49,6 @@ The host is extendable via 3rd party modules but the host itself is an internal 
 * [fs_tree](intern_commands/fs_tree.md) - list all files and sub-directories of an entire directory tree.
 
 * [fs_upload](intern_commands/fs_upload.md) - upload a single file to the host.
-
-* [host_config](intern_commands/host_config.md) - view/change various host settings.
 
 * [host_info](intern_commands/host_info.md) - display system information about the host.
 
@@ -98,8 +94,6 @@ The host is extendable via 3rd party modules but the host itself is an internal 
 
 * [ping_peers](intern_commands/ping_peers.md) - ping all peer sessions with any matching sub-channels to return information about themselves to you.
 
-* [preview_email](intern_commands/preview_email.md) - preview the confirmation or password reset emails with dummy values.
-
 * [recover_acct](intern_commands/recover_acct.md) - login to a user account using a temporary password.
 
 * [remove_ch_member](intern_commands/remove_ch_member.md) - remove a user as a member of a channel you currently a member of or cancel an invite.
@@ -113,8 +107,6 @@ The host is extendable via 3rd party modules but the host itself is an internal 
 * [request_new_user_name](intern_commands/request_new_user_name.md) - enable/disable a user name change request for a user on next login.
 
 * [request_pw_reset](intern_commands/request_pw_reset.md) - request a password reset for a user account.
-
-* [restart_host](intern_commands/restart_host.md) - re-start the host instance.
 
 * [rm_acct](intern_commands/rm_acct.md) - delete a user account from the host database.
 
@@ -133,8 +125,6 @@ The host is extendable via 3rd party modules but the host itself is an internal 
 * [set_disp_name](intern_commands/set_disp_name.md) - change your account display name.
 
 * [set_email](intern_commands/set_email.md) - set the user account email address.
-
-* [set_email_template](intern_commands/set_email_template.md) - set the email template used by the host to send emails for user account resets and confirmations.
 
 * [set_member_level](intern_commands/set_member_level.md) - set the user privilege levels of a channel member.
 

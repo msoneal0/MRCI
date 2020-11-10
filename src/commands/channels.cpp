@@ -486,7 +486,7 @@ void SetActiveState::procIn(const QByteArray &binIn, quint8 dType)
             db.addCondition(COLUMN_SUB_CH_ID, subId);
             db.exec();
 
-            if (globalActiveFlag())
+            if (confObject()[CONF_ALL_CH_UPDATE].toBool())
             {
                 mainTxt("warning: The host currently have the global active update flag set so setting this flag at the sub-channel level does nothing.\n");
             }
@@ -541,7 +541,9 @@ void CreateSubCh::procIn(const QByteArray &binIn, quint8 dType)
         }
         else if (!genSubId(chId, &subId))
         {
-            errTxt("err: This channel has reached the maximum amount sub-channels it can have (" + QString::number(maxSubChannels()) + ").\n");
+            auto max = confObject()[CONF_MAX_SUBS].toInt();
+
+            errTxt("err: This channel has reached the maximum amount sub-channels it can have (" + QString::number(max) + ").\n");
         }
         else
         {

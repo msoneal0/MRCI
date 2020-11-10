@@ -222,8 +222,8 @@ bool genDefaultSSLFiles(const QString &outsideAddr, QTextStream &msg)
     auto  ret  = genRSAKey(cert, msg);
 
     if (ret) ret = genX509(cert, outsideAddr, msg);
-    if (ret) ret = writePrivateKey(DEFAULT_PRIV_KEY_NAME, cert, msg);
-    if (ret) ret = writeX509(DEFAULT_PUB_KEY_NAME, cert, msg);
+    if (ret) ret = writePrivateKey(DEFAULT_PRIV_FILENAME, cert, msg);
+    if (ret) ret = writeX509(DEFAULT_CERT_FILENAME, cert, msg);
 
     cert->cleanup();
     cert->deleteLater();

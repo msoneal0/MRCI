@@ -120,10 +120,7 @@ signals:
     void killCmd32(quint32 cmdId);
     void asyncToPeers(quint16 cmdId, const QByteArray data);
     void connectPeers(QSharedPointer<SessionCarrier> peer);
-    void setMaxSessions(quint32 value);
     void ended();
-    void closeServer();
-    void resServer();
     void killMods();
 };
 

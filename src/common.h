@@ -36,7 +36,6 @@
 #include <QDir>
 #include <QSysInfo>
 #include <QFileInfoList>
-#include <QTemporaryFile>
 #include <QChar>
 #include <QtMath>
 #include <QStorageInfo>
@@ -63,35 +62,157 @@
 #include <QTcpSocket>
 #include <QMessageLogContext>
 #include <QtGlobal>
-#include <QLibrary>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QVariant>
+#include <QList>
+#include <QSqlError>
+#include <QDir>
+#include <QFile>
+#include <QTextCodec>
+#include <QCryptographicHash>
+#include <QDateTime>
 
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 
-#include "db.h"
 #include "shell.h"
 #include "mem_share.h"
 
+#define APP_NAME          "MRCI"
+#define APP_VER           "5.0.2.1"
+#define APP_TARGET        "mrci"
+#define SERVER_HEADER_TAG "MRCI"
+#define HOST_CONTROL_PIPE "MRCI_HOST_CONTROL"
 #define FRAME_HEADER_SIZE 8
 #define MAX_FRAME_BITS    24
 #define LOCAL_BUFFSIZE    16777215
 #define CLIENT_HEADER_LEN 292
-#define SERVER_HEADER_TAG "MRCI"
-#define HOST_CONTROL_PIPE "MRCI_HOST_CONTROL"
+#define MAX_LS_ENTRIES    50
+
+#define SUBJECT_SUB      "%subject%"
+#define MSG_SUB          "%message_body%"
+#define TARGET_EMAIL_SUB "%target_email%"
+#define OTP_SUB          "%otp%"
+#define USERNAME_SUB     "%user_name%"
+#define DATE_SUB         "%date%"
+
+#ifdef Q_OS_WIN
+
+#define DEFAULT_MAIL_SEND "%COMSPEC% echo %message_body% | mutt -s %subject% %target_email%"
+
+#else
+
+#define DEFAULT_MAIL_SEND "/bin/sh -c \"echo %message_body% | mutt -s %subject% %target_email%\""
+
+#endif
+
+#define DEFAULT_DB_DRIVER        "QSQLITE"
+#define DEFAULT_DB_FILENAME      "data.db"
+#define DEFAULT_CERT_FILENAME    "tls_chain.pem"
+#define DEFAULT_PRIV_FILENAME    "tls_priv.pem"
+#define DEFAULT_RES_PW_FILENAME  "res_pw_template.txt"
+#define DEFAULT_EVERIFY_FILENAME "email_verify_template.txt"
+#define DEFAULT_CONFIRM_SUBJECT  "Email Verification"
+#define DEFAULT_TEMP_PW_SUBJECT  "Password Reset"
+#define DEFAULT_LISTEN_ADDRESS   "0.0.0.0"
+#define DEFAULT_LISTEN_PORT      35516
+#define DEFAULT_LOCK_LIMIT       20
+#define DEFAULT_MAXSESSIONS      100
+#define DEFAULT_MAX_SUBS         50
+#define DEFAULT_INIT_RANK        2
+
+#define CONF_FILENAME             "conf.json"
+#define CONF_LISTEN_ADDR          "listening_addr"
+#define CONF_LISTEN_PORT          "listening_port"
+#define CONF_AUTO_LOCK_LIM        "auto_lock_limit"
+#define CONF_MAX_SESSIONS         "max_sessions"
+#define CONF_MAX_SUBS             "max_sub_channels"
+#define CONF_INIT_RANK            "initial_rank"
+#define CONF_ENABLE_PUB_REG       "enable_public_reg"
+#define CONF_ENABLE_EVERIFY       "enable_email_verify"
+#define CONF_ENABLE_PWRES         "enable_pw_reset"
+#define CONF_ALL_CH_UPDATE        "all_channels_active_update"
+#define CONF_DB_DRIVER            "db_driver"
+#define CONF_DB_ADDR              "db_host_name"
+#define CONF_DB_UNAME             "db_user_name"
+#define CONF_DB_PW                "db_password"
+#define CONF_MAIL_CLIENT_CMD      "mail_client_cmd"
+#define CONF_CERT_CHAIN           "tls_cert_chain"
+#define CONF_PRIV_KEY             "tls_priv_key"
+#define CONF_PW_RES_EMAIL_SUBJECT "reset_pw_mail_subject"
+#define CONF_EVERIFY_SUBJECT      "email_verify_subject"
+#define CONF_PW_RES_EMAIL_TEMP    "reset_pw_mail_template"
+#define CONF_EVERIFY_TEMP         "email_verify_template"
+
+#define TABLE_IPHIST       "ip_history"
+#define TABLE_USERS        "users"
+#define TABLE_CMD_RANKS    "command_ranks"
+#define TABLE_AUTH_LOG     "auth_log"
+#define TABLE_PW_RECOVERY  "pw_recovery"
+#define TABLE_DMESG        "host_debug_messages"
+#define TABLE_CHANNELS     "channels"
+#define TABLE_CH_MEMBERS   "channel_members"
+#define TABLE_SUB_CHANNELS "sub_channels"
+#define TABLE_RDONLY_CAST  "read_only_flags"
+#define TABLE_MODULES      "modules"
+
+#define COLUMN_IPADDR          "ip_address"
+#define COLUMN_LOGENTRY        "log_entry"
+#define COLUMN_SESSION_ID      "session_id"
+#define COLUMN_TIME            "time_stamp"
+#define COLUMN_USERNAME        "user_name"
+#define COLUMN_HOST_RANK       "host_rank"
+#define COLUMN_COMMAND         "command_name"
+#define COLUMN_MOD_MAIN        "module_executable"
+#define COLUMN_SALT            "salt"
+#define COLUMN_HASH            "hash"
+#define COLUMN_EMAIL           "email_address"
+#define COLUMN_NEED_PASS       "new_password_req"
+#define COLUMN_NEED_NAME       "new_name_req"
+#define COLUMN_EMAIL_VERIFIED  "email_verified"
+#define COLUMN_LOCKED          "locked"
+#define COLUMN_AUTH_ATTEMPT    "auth_attempt"
+#define COLUMN_RECOVER_ATTEMPT "recover_attempt"
+#define COLUMN_COUNT           "count_to_threshold"
+#define COLUMN_ACCEPTED        "accepted"
+#define COLUMN_DISPLAY_NAME    "display_name"
+#define COLUMN_USER_ID         "user_id"
+#define COLUMN_CHANNEL_NAME    "channel_name"
+#define COLUMN_CHANNEL_ID      "channel_id"
+#define COLUMN_ACTIVE_UPDATE   "active_updates"
+#define COLUMN_SUB_CH_NAME     "sub_channel_name"
+#define COLUMN_SUB_CH_ID       "sub_channel_id"
+#define COLUMN_PENDING_INVITE  "pending_invite"
+#define COLUMN_LOWEST_LEVEL    "lowest_access_level"
+#define COLUMN_ACCESS_LEVEL    "access_level"
+#define COLUMN_APP_NAME        "client_app"
+
+#define TXT_TempPwTemplate "\
+A password reset was requested for your account: %user_name%\n\
+Your recovery password is as follows:\n\n\
+%otp%\n\n\
+PLEASE IGNORE THIS EMAIL IF YOU MADE NO SUCH REQUEST.\n\n\
+Date requested: %date%."
+
+#define TXT_ConfirmCodeTemplate "\
+Please confirm your email address for account: %user_name%\n\
+Your confirmation code is as follows:\n\n\
+%otp%\n\n\
+Date requested: %date%."
 
 enum AsyncCommands : quint16
 {
     ASYNC_RDY               = 1,   // client   | retricted
     ASYNC_SYS_MSG           = 2,   // client   | retricted
-    ASYNC_EXIT              = 3,   // internal | private
     ASYNC_CAST              = 4,   // client   | public
-    ASYNC_MAXSES            = 5,   // internal | private
     ASYNC_LOGOUT            = 6,   // internal | private
     ASYNC_USER_DELETED      = 7,   // client   | public
     ASYNC_DISP_RENAMED      = 8,   // internal | public
     ASYNC_USER_RANK_CHANGED = 9,   // internal | public
     ASYNC_CMD_RANKS_CHANGED = 10,  // internal | public
-    ASYNC_RESTART           = 11,  // internal | private
     ASYNC_ENABLE_MOD        = 12,  // internal | public
     ASYNC_DISABLE_MOD       = 13,  // internal | public
     ASYNC_END_SESSION       = 14,  // internal | private
@@ -221,6 +342,7 @@ enum ChannelMemberLevel : quint8
 };
 
 class Session;
+class Query;
 
 QByteArray  toFixedTEXT(const QString &txt, int len);
 QByteArray  nullTermTEXT(const QString &txt);
@@ -232,6 +354,10 @@ void        serializeThread(QThread *thr);
 void        mkPath(const QString &path);
 void        listDir(QList<QPair<QString,QString> > &list, const QString &srcPath, const QString &dstPath);
 void        containsActiveCh(const char *subChs, char *actBlock);
+void        updateConf(const char *key, const QJsonValue &value);
+void        updateConf(const QJsonObject &obj);
+void        wrDefaultMailTemplates(const QJsonObject &obj);
+bool        getEmailParams(const QString &mailCmd, const QString &bodyFile, QString *bodyText, QString *errMsg);
 bool        acceptablePw(const QString &pw, const QByteArray &uId, QString *errMsg);
 bool        acceptablePw(const QString &pw, const QString &uName, const QString &dispName, const QString &email, QString *errMsg);
 bool        containsNewLine(const QString &str);
@@ -261,12 +387,10 @@ bool        noCaseMatch(const QString &strA, const QString &strB);
 bool        argExists(const QString &key, const QStringList &args);
 bool        matchAnyCh(const char *chsA, const char *chsB);
 bool        fullMatchChs(const char *openChs, const char *comp);
-bool        globalActiveFlag();
 bool        genSubId(quint64 chId, quint8 *newId);
 bool        isChOwner(const QByteArray &uId);
 int         channelAccessLevel(const QByteArray &uId, quint64 chId);
 int         channelAccessLevel(const QByteArray &uId, const char *override, quint64 chId);
-int         maxSubChannels();
 QString     getUserNameForEmail(const QString &email);
 QString     getEmailForUser(const QByteArray &uId);
 QString     getDispName(const QByteArray &uId);
@@ -275,10 +399,9 @@ QString     boolStr(bool state);
 QString     getParam(const QString &key, const QStringList &args);
 QString     escapeChars(const QString &str, const QChar &escapeChr, const QChar &chr);
 QString     genSerialNumber();
-QString     defaultPw();
-QString     sslCertChain();
-QString     sslPrivKey();
+QString     getLocalFilePath(const QString &fileName, bool var = false);
 QStringList parseArgs(const QByteArray &data, int maxArgs, int *pos = nullptr);
+QJsonObject confObject();
 
 //---------------------------
 
