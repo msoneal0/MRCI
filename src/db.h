@@ -105,8 +105,6 @@ public:
     QStringList              tables();
     QStringList              columnsInTable(const QString &tbl);
     QVariant                 getData(const QString &column, int row = 0);
-    QString                  errDetail();
-    QString                  errString();
     QList<QList<QVariant> > &allData();
 
 private:
@@ -116,7 +114,6 @@ private:
     bool                    queryOk;
     int                     rowsAffected;
     QString                 table;
-    QString                 lastErr;
     QString                 limit;
     QString                 qStr;
     QString                 wStr;

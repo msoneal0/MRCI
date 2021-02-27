@@ -112,10 +112,23 @@ def verbose_copy(src, dst):
         if os.path.exists(dst) and os.path.isdir(dst):
             shutil.rmtree(dst)
             
-        shutil.copytree(src, dst)
+        try:
+            # ignore errors thrown by shutil.copytree()
+            # it's likely not actually failing to copy
+            # the directory but still throws errors if
+            # it fails to apply the same file stats as
+            # the source. this type of errors can be
+            # ignored.
+            shutil.copytree(src, dst)
+            
+        except:
+            pass
     
-    else:
+    elif os.path.exists(src):
         shutil.copyfile(src, dst)
+        
+    else:
+        print("wrn: " + src + " does not exists. skipping.")
         
 def linux_build_app_dir(app_ver, app_name, app_target, qt_bin):
     if not os.path.exists("app_dir/linux/sqldrivers"):
@@ -127,6 +140,7 @@ def linux_build_app_dir(app_ver, app_name, app_target, qt_bin):
     verbose_copy(qt_bin + "/../plugins/sqldrivers/libqsqlite.so", "app_dir/linux/sqldrivers/libqsqlite.so")
     verbose_copy(qt_bin + "/../plugins/sqldrivers/libqsqlodbc.so", "app_dir/linux/sqldrivers/libqsqlodbc.so")
     verbose_copy(qt_bin + "/../plugins/sqldrivers/libqsqlpsql.so", "app_dir/linux/sqldrivers/libqsqlpsql.so")
+    verbose_copy(qt_bin + "/../plugins/sqldrivers/libqsqlmysql.so", "app_dir/linux/sqldrivers/libqsqlmysql.so")
     verbose_copy("build/linux/" + app_target, "app_dir/linux/" + app_target)
     
     shutil.copyfile("build/linux/" + app_target, "/tmp/" + app_target)
@@ -226,9 +240,18 @@ def main():
             else:
                 cd()
                 
+                if platform.system() == "Linux":
+                    if os.path.exists("build/linux"):
+                        shutil.rmtree("build/linux")
+                                    
+                elif platform.system() == "Windows":
+                    if os.path.exists("build/windows"):
+                        shutil.rmtree("build/windows")
+                
                 result = subprocess.run([qt_bin + os.sep + "qmake", "-config", "release"])
             
                 if result.returncode == 0:
+                    
                     result = subprocess.run([maker])
                 
                 if result.returncode == 0:

@@ -54,7 +54,6 @@ QStringList Module::userCmdList()
     ret << FileInfo::cmdName();
     ret << MakePath::cmdName();
     ret << ChangeDir::cmdName();
-    ret << ListDBG::cmdName();
     ret << ToPeer::cmdName();
     ret << LsP2P::cmdName();
     ret << P2POpen::cmdName();
@@ -134,7 +133,7 @@ QStringList Module::rankExemptList()
 
 bool Module::runCmd(const QString &name)
 {
-    bool ret = true;
+    auto ret = true;
 
     if (userCmdList().contains(name, Qt::CaseInsensitive))
     {
@@ -178,7 +177,6 @@ bool Module::runCmd(const QString &name)
         else if (noCaseMatch(name, FileInfo::cmdName()))              new FileInfo(this);
         else if (noCaseMatch(name, MakePath::cmdName()))              new MakePath(this);
         else if (noCaseMatch(name, ChangeDir::cmdName()))             new ChangeDir(this);
-        else if (noCaseMatch(name, ListDBG::cmdName()))               new ListDBG(this);
         else if (noCaseMatch(name, ToPeer::cmdName()))                new ToPeer(this);
         else if (noCaseMatch(name, LsP2P::cmdName()))                 new LsP2P(this);
         else if (noCaseMatch(name, P2POpen::cmdName()))               new P2POpen(this);
@@ -209,14 +207,14 @@ bool Module::runCmd(const QString &name)
         else if (noCaseMatch(name, Tree::cmdName()))                  new Tree(this);
         else
         {
-            qDebug() << "Module err: the loader claims command name '" << name << "' exists but no command object was actually matched/built.";
+            qCritical() << "Internal module - the module claim command name '" << name << "' exists but no command object was actually matched/built.";
 
             ret = false;
         }
     }
     else
     {
-        qDebug() << "Module err: command name '" << name << "' not found.";
+        qCritical() << "Internal module - command name '" << name << "' not found.";
 
         ret = false;
     }
@@ -231,7 +229,7 @@ void Module::listCmds(const QStringList &list)
 
 bool Module::start(const QStringList &args)
 {
-    bool ret = true;
+    auto ret = true;
 
     if (args.contains("-run_cmd"))
     {   

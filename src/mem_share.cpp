@@ -361,11 +361,11 @@ bool MemShare::createSharedMem(const QByteArray &sesId, const QString &hostKey)
 
     if (!sharedMem->create(len))
     {
-        qDebug() << "err: Failed to create a shared memory master block. reason: " + sharedMem->errorString();
+        qCritical() << "Failed to create a shared memory master block. reason: " + sharedMem->errorString();
     }
     else if (!hostSharedMem->attach())
     {
-        qDebug() << "err: Failed to attach to the host shared memory master block. reason: " + hostSharedMem->errorString();
+        qCritical() << "Failed to attach to the host shared memory master block. reason: " + hostSharedMem->errorString();
     }
     else
     {
@@ -387,11 +387,11 @@ bool MemShare::attachSharedMem(const QString &sKey, const QString &hKey)
 
     if (!sharedMem->attach())
     {
-        qDebug() << "err: Failed to attach to the session shared memory master block. reason: " + sharedMem->errorString();
+        qCritical() << "Failed to attach to the session shared memory master block. reason: " + sharedMem->errorString();
     }
     else if (!hostSharedMem->attach())
     {
-        qDebug() << "err: Failed to attach to the host shared memory master block. reason: " + hostSharedMem->errorString();
+        qCritical() << "Failed to attach to the host shared memory master block. reason: " + hostSharedMem->errorString();
     }
     else
     {

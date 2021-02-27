@@ -160,7 +160,7 @@ def local_install(app_target, app_name):
             
                 template_to_deploy("app_dir/linux/" + app_target + ".sh", install_dir + "/" + app_target + ".sh", install_dir, app_name, app_target)
                 template_to_deploy("app_dir/linux/uninstall.sh", install_dir + "/uninstall.sh", install_dir, app_name, app_target)
-                template_to_deploy("app_dir/linux/" + app_target + ".service", "/etc/systemd/system/" + app_target + ".service", install_dir, app_name, app_target)
+                template_to_deploy("app_dir/linux/" + app_target + ".service", "/lib/systemd/system/" + app_target + ".service", install_dir, app_name, app_target)
             
                 verbose_copy("app_dir/linux/" + app_target, install_dir + "/" + app_target)
                 verbose_copy("app_dir/linux/lib", install_dir + "/lib")
@@ -170,7 +170,7 @@ def local_install(app_target, app_name):
             
                 subprocess.run(["useradd", "-r", app_target])
                 subprocess.run(["chmod", "-R", "755", install_dir])    
-                subprocess.run(["chmod", "755", "/etc/systemd/system/" + app_target + ".service"])    
+                subprocess.run(["chmod", "644", "/lib/systemd/system/" + app_target + ".service"])    
                 subprocess.run(["chown", "-R", app_target + ":" + app_target, "/var/opt/" + app_target])
                 subprocess.run(["chown", "-R", app_target + ":" + app_target, "/etc/" + app_target])    
                 subprocess.run(["systemctl", "start", app_target])    

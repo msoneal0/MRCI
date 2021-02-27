@@ -54,3 +54,7 @@ notes:
 * Modules called with -run_cmd does not need to terminate after running the requested command, instead it must send an [IDLE](type_ids.md) frame to indicate that the command is finished when it eventually does finish. This is desired because not only it tells the client that the command is finished but it also makes it so the session doesn't need to recreate the module process on every subsequent call to the command.
 
 * The session will send a [KILL_CMD](type_ids.md) to the module after 2 mins of being idle (no IPC/Pipe activity). The module will have 3 seconds to do this before it is force killed. This will also happen when the user ends the session and the module process needs to terminate. Modules must still send an [IDLE](type_ids.md) frame to indicate the command is finished if a command was running.
+
+### 2.4 Module Standard Output/Error ###
+
+The host captures all text written to standard out/err. Although modules can send text data to clients via the [TEXT](type_ids.md) frame, another way to do the same thing is to write to stdout. The host however treats stderr differently, it sends all text written to stderr to the host logging system. On Linux systems, syslog is used. On windows systems, a local log file in %PROGRAMDATA%\mrci\messages.log is used. When logging messages, the host will send a generic error message to the client but the full error details will be sent to the logs along with the a generated message id and the module executable.

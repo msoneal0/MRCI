@@ -57,6 +57,7 @@ protected:
     virtual void onDataFromProc(quint8 typeId, const QByteArray &data);
 
     void cleanupPipe();
+    void logErrMsgs(quint32 id);
     void wrIpcFrame(quint8 typeId, const QByteArray &data);
     bool startProc(const QStringList &args);
     bool isCmdLoaded(const QString &name);
@@ -125,8 +126,8 @@ private:
 
 private slots:
 
-    void rdFromStdErr();
     void rdFromStdOut();
+    void rdFromStdErr();
 
 public slots:
 

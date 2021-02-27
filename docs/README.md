@@ -65,7 +65,7 @@ Typical use for a MRCI host is to run commands on a remote host that clients ask
 
 Because the host is modular, the things you can customize it to do is almost limitless by simply adding more commands.
 
-** The email system of this application depends on external email clients that run on the command line. The default is [mutt](http://www.mutt.org/). If you want emails to work out of the box, consider installing and configuring mutt. It just needs to be configured with a smtp account to send emails with. You don't have to use mutt though, the host does have options to change the email client to any other application that has a command line interface.
+** The email system of this application depends on external email clients that run on the command line. The default is [mutt](http://www.mutt.org/). If you want emails to work out of the box, consider installing and configuring mutt. It just needs to be configured with a smtp account to send emails with. You don't have to use mutt though, the host does have the option to change the email client to any other application that has a command line interface.
 
 ### Documentation ###
 

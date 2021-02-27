@@ -38,6 +38,7 @@ void Auth::addToThreshold()
 {
     Query db(this);
 
+    // log the failed login attempt
     db.setType(Query::PUSH, TABLE_AUTH_LOG);
     db.addColumn(COLUMN_USER_ID, uId);
     db.addColumn(COLUMN_IPADDR, ip);
@@ -49,6 +50,7 @@ void Auth::addToThreshold()
 
     auto maxAttempts = confObject()[CONF_AUTO_LOCK_LIM].toInt();
 
+    // pull all login attempts on the account
     db.setType(Query::PULL, TABLE_AUTH_LOG);
     db.addColumn(COLUMN_IPADDR);
     db.addCondition(COLUMN_USER_ID, uId);
@@ -59,12 +61,24 @@ void Auth::addToThreshold()
 
     if (db.rows() > maxAttempts)
     {
+        // reset login attempts
+        db.setType(Query::UPDATE, TABLE_AUTH_LOG);
+        db.addColumn(COLUMN_COUNT, false);
+        db.addCondition(COLUMN_COUNT, true);
+        db.addCondition(COLUMN_USER_ID, uId);
+        db.addCondition(COLUMN_AUTH_ATTEMPT, true);
+        db.exec();
+
+        // lock account
         db.setType(Query::UPDATE, TABLE_USERS);
         db.addColumn(COLUMN_LOCKED, true);
         db.addCondition(COLUMN_USER_ID, uId);
         db.exec();
 
-        flags &= ~MORE_INPUT;
+        flags  &= ~MORE_INPUT;
+        retCode = INVALID_PARAMS;
+
+        errTxt("err: Maximum login attempts exceeded, the account is now locked.\n");
     }
     else
     {
@@ -77,6 +91,7 @@ void Auth::confirmAuth()
 {
     Query db(this);
 
+    // reset login attempts
     db.setType(Query::UPDATE, TABLE_AUTH_LOG);
     db.addColumn(COLUMN_COUNT, false);
     db.addCondition(COLUMN_COUNT, true);
@@ -84,6 +99,7 @@ void Auth::confirmAuth()
     db.addCondition(COLUMN_AUTH_ATTEMPT, true);
     db.exec();
 
+    // log the login attempt as accepted
     db.setType(Query::PUSH, TABLE_AUTH_LOG);
     db.addColumn(COLUMN_USER_ID, uId);
     db.addColumn(COLUMN_IPADDR, ip);
@@ -205,6 +221,7 @@ void Auth::procIn(const QByteArray &binIn, quint8 dType)
             }
             else if (!validPassword(text))
             {
+                errTxt("err: Invalid password.\n");
                 addToThreshold();
             }
             else if (!auth(uId, text, TABLE_USERS))

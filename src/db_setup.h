@@ -19,6 +19,6 @@
 
 #include "db.h"
 
-bool setupDb(QString *errMsg = nullptr);
+bool setupDb();
 
 #endif // DB_SETUP_H

@@ -283,7 +283,7 @@ bool auth(const QByteArray &uId, const QString &password, const QString &table)
 
         QCryptographicHash hasher(QCryptographicHash::Keccak_512);
 
-        hasher.addData(QTextCodec::codecForName("UTF-16LE")->fromUnicode(password) + salt);
+        hasher.addData(password.toUtf8() + salt);
 
         db.setType(Query::PULL, table);
         db.addColumn(COLUMN_HASH);
@@ -348,33 +348,17 @@ Query::Query(QObject *parent) : QObject(parent)
             if (!testDbWritable())
             {
                 queryOk = false;
-                lastErr = "Write access to the database is denied.";
+
+                qCritical("%s", "Write access to the database is denied.");
             }
         }
         else
         {
             queryOk = false;
-            lastErr = db.lastError().databaseText().trimmed();
+
+            qCritical("%s", db.lastError().databaseText().trimmed().toUtf8().constData());
         }
     }
-}
-
-QString Query::errDetail()
-{
-    QString ret;
-    QString errTxt = "none";
-
-    if (!lastErr.isEmpty())
-    {
-        errTxt = lastErr;
-    }
-
-    QTextStream txtOut(&ret);
-
-    txtOut << "     driver error: " << errTxt << Qt::endl;
-    txtOut << "     query:        " << qStr << jStr << wStr << limit << Qt::endl;
-
-    return ret;
 }
 
 bool Query::inErrorstate()
@@ -440,7 +424,6 @@ void Query::setType(QueryType qType, const QString &tbl)
     limit.clear();
     columnList.clear();
     bindValues.clear();
-    lastErr.clear();
     directBind.clear();
     whereBinds.clear();
     columnsAsPassed.clear();
@@ -837,7 +820,6 @@ bool Query::exec()
         }
 
         queryOk      = query.exec();
-        lastErr      = query.lastError().driverText().trimmed();
         rowsAffected = query.numRowsAffected();
 
         if (queryOk && query.isSelect())
@@ -857,6 +839,24 @@ bool Query::exec()
         else if (queryOk && (type == CREATE_TABLE))
         {
             createRan = true;
+        }
+        else if (!queryOk)
+        {
+            auto errobj = query.lastError();
+
+            qCritical() << "Database failure";
+            qCritical() << "Query prep string: " + qStr + jStr + wStr + limit + ";";
+            qCritical() << "Driver text: " + errobj.driverText();
+            qCritical() << "Database text: " + errobj.databaseText();
+
+            switch (errobj.type())
+            {
+            case QSqlError::NoError:          qCritical() << "Error type: NoError";          break;
+            case QSqlError::ConnectionError:  qCritical() << "Error type: ConnectionError";  break;
+            case QSqlError::StatementError:   qCritical() << "Error type: StatementError";   break;
+            case QSqlError::TransactionError: qCritical() << "Error type: TransactionError"; break;
+            case QSqlError::UnknownError:     qCritical() << "Error type: UnknownError";     break;
+            }
         }
     }
 

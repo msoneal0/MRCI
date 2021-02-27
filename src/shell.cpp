@@ -101,7 +101,7 @@ QString parseMd(const QString &cmdName, int offset)
 
     if (!file.open(QFile::ReadOnly))
     {
-        qDebug() << "err: internal command: " << cmdName << " does not have a document file.";
+        qDebug() << "Internal command: " << cmdName << " does not have a document file.";
     }
     else
     {

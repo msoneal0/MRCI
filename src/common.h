@@ -26,12 +26,11 @@
 #include <QRandomGenerator>
 #include <QProcess>
 #include <QHash>
-#include <QRegExp>
+#include <QRegularExpression>
 #include <QStringList>
 #include <QDateTime>
 #include <QHostAddress>
 #include <QCoreApplication>
-#include <QTextCodec>
 #include <QFileInfo>
 #include <QDir>
 #include <QSysInfo>
@@ -71,7 +70,6 @@
 #include <QSqlError>
 #include <QDir>
 #include <QFile>
-#include <QTextCodec>
 #include <QCryptographicHash>
 #include <QDateTime>
 
@@ -82,7 +80,7 @@
 #include "mem_share.h"
 
 #define APP_NAME          "MRCI"
-#define APP_VER           "5.0.2.1"
+#define APP_VER           "5.1.2.1"
 #define APP_TARGET        "mrci"
 #define SERVER_HEADER_TAG "MRCI"
 #define HOST_CONTROL_PIPE "MRCI_HOST_CONTROL"
@@ -91,6 +89,7 @@
 #define LOCAL_BUFFSIZE    16777215
 #define CLIENT_HEADER_LEN 292
 #define MAX_LS_ENTRIES    50
+#define MAX_LOG_SIZE      100000000
 
 #define SUBJECT_SUB      "%subject%"
 #define MSG_SUB          "%message_body%"
@@ -111,6 +110,7 @@
 
 #define DEFAULT_DB_DRIVER        "QSQLITE"
 #define DEFAULT_DB_FILENAME      "data.db"
+#define DEFAULT_LOG_FILENAME     "messages.log"
 #define DEFAULT_CERT_FILENAME    "tls_chain.pem"
 #define DEFAULT_PRIV_FILENAME    "tls_priv.pem"
 #define DEFAULT_RES_PW_FILENAME  "res_pw_template.txt"
@@ -152,7 +152,6 @@
 #define TABLE_CMD_RANKS    "command_ranks"
 #define TABLE_AUTH_LOG     "auth_log"
 #define TABLE_PW_RECOVERY  "pw_recovery"
-#define TABLE_DMESG        "host_debug_messages"
 #define TABLE_CHANNELS     "channels"
 #define TABLE_CH_MEMBERS   "channel_members"
 #define TABLE_SUB_CHANNELS "sub_channels"
@@ -357,7 +356,7 @@ void        containsActiveCh(const char *subChs, char *actBlock);
 void        updateConf(const char *key, const QJsonValue &value);
 void        updateConf(const QJsonObject &obj);
 void        wrDefaultMailTemplates(const QJsonObject &obj);
-bool        getEmailParams(const QString &mailCmd, const QString &bodyFile, QString *bodyText, QString *errMsg);
+bool        getEmailParams(const QString &mailCmd, const QString &bodyFile, QString *bodyText);
 bool        acceptablePw(const QString &pw, const QByteArray &uId, QString *errMsg);
 bool        acceptablePw(const QString &pw, const QString &uName, const QString &dispName, const QString &email, QString *errMsg);
 bool        containsNewLine(const QString &str);
@@ -399,6 +398,7 @@ QString     boolStr(bool state);
 QString     getParam(const QString &key, const QStringList &args);
 QString     escapeChars(const QString &str, const QChar &escapeChr, const QChar &chr);
 QString     genSerialNumber();
+QString     genMsgNumber();
 QString     getLocalFilePath(const QString &fileName, bool var = false);
 QStringList parseArgs(const QByteArray &data, int maxArgs, int *pos = nullptr);
 QJsonObject confObject();
@@ -467,7 +467,9 @@ class Serial
 
 public:
 
-    static quint64 serialIndex;
+    static quint64 threadIndex;
+    static quint16 msgIndex;
+    static bool    msgDetails;
 };
 
 #endif // COMMON_H

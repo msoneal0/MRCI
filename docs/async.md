@@ -281,7 +281,7 @@ This internal only async command doesn't carry any data. The session object norm
 This internal only async command carries a [TEXT](type_ids.md) path that sets the working directory for the local session. All module processes started by the session will use this directory as the working directory and it is not shared among peer sessions. nothing happens if the path is invalid or does not exists.
 
 ```ASYNC_DEBUG_TEXT (44)```
-This internal only async command carries a [TEXT](type_ids.md) debug message to be logged into the host debug log from the module. Modules can use this to help with debugging issues if it doesn't have direct access to the host database.
+This internal only async command carries a [TEXT](type_ids.md) debug message to be logged into the host logging system. On Linux systems, syslog is used. On windows systems, a local log file in %PROGRAMDATA%\mrci\messages.log is used. This is useful if you want create custom log messages because it doesn't add any extras to the messages like the module path and message id. It is recommanded to have those extras added for easier debugging so module makers are encouraged simply use stderr output because the host will capture those messages for logging and will add the extras to them.
 
 ```ASYNC_HOOK_INPUT (45)```
 This async command doesn't carry any data. This just indicate to the local session that the module command is requesting to hook the tcp data input from the client. when the tcp input is hooked, all data sent from the client is redirected to the command object/process that initiated the hook until reqested to unhook. If the command that initiated the hook terminates in anyway with an active hook, the hook will automatically be removed.

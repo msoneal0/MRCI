@@ -47,9 +47,18 @@ ModProcess::ModProcess(const QString &app, const QString &memSes, const QString 
     setProgram(app);
 }
 
+void ModProcess::logErrMsgs(quint32 id)
+{
+    auto msgId = genMsgNumber();
+
+    emit dataToClient(id, "The command module generated an error, msg_id: " + msgId.toUtf8() + "\n", ERR);
+
+    qCritical() << "Module: " + program() + " " + readAllStandardError() + " msg_id: " + msgId.toUtf8();
+}
+
 void ModProcess::rdFromStdErr()
 {
-    emit dataToClient(toCmdId32(ASYNC_SYS_MSG, 0), readAllStandardError(), ERR);
+    logErrMsgs(toCmdId32(ASYNC_SYS_MSG, 0));
 }
 
 void ModProcess::rdFromStdOut()
@@ -71,8 +80,9 @@ quint16 ModProcess::genCmdId()
 
 QString ModProcess::makeCmdUnique(const QString &name)
 {
-    QString     strNum;
-    QStringList names = cmdUniqueNames->values();
+    QString strNum;
+
+    auto names = cmdUniqueNames->values();
 
     for (int i = 1; names.contains(name + strNum); ++i)
     {
@@ -180,7 +190,7 @@ void ModProcess::onDataFromProc(quint8 typeId, const QByteArray &data)
     }
     else if (typeId == ERR)
     {
-        qDebug() << QString::fromUtf8(data);
+        qCritical() << "Module: " << program() << " - " << QString::fromUtf8(data);
     }
 }
 
@@ -267,7 +277,6 @@ void ModProcess::setSessionParams(QHash<quint16, QString> *uniqueNames,
 
 void ModProcess::onFailToStart()
 {
-    emit dataToClient(toCmdId32(ASYNC_SYS_MSG, 0), "\nerr: A module failed to start so some commands may not have loaded. detailed error information was logged for admin review.\n", ERR);
     emit modProcFinished();
 
     deleteLater();
@@ -277,7 +286,8 @@ void ModProcess::err(QProcess::ProcessError error)
 {
     if (error == QProcess::FailedToStart)
     {
-        qDebug() << "err: Module process: " << program() << " failed to start. reason: " << errorString();
+        qCritical() << "Module process: " << program() << " failed to start. reason: " << errorString();
+        qCritical() << "Args in use: " << arguments().join(' ');
 
         onFailToStart();
     }
@@ -439,7 +449,6 @@ void CmdProcess::onReady()
 
 void CmdProcess::onFailToStart()
 {
-    emit dataToClient(cmdId, "err: The command failed to start. error details were logged for admin review.\n", ERR);
     emit dataToClient(cmdId, wrInt(FAILED_TO_START, 16), IDLE);
     emit cmdProcFinished(cmdId);
 
@@ -453,7 +462,9 @@ void CmdProcess::onFinished(int exitCode, QProcess::ExitStatus exitStatus)
 
     if (!cmdIdle)
     {
-        emit dataToClient(cmdId, "err: The command has stopped unexpectedly or it has failed to send an IDLE frame before exiting.\n", ERR);
+        qCritical() << "Module: " + program() + "Command: '" + cmdName + "' has crashed or failed to return an IDLE frame when it terminated.";
+
+        emit dataToClient(cmdId, "err: The command '" + cmdName.toUtf8() + "' has stopped unexpectedly.\n", ERR);
         emit dataToClient(cmdId, wrInt(CRASH, 16), IDLE);
     }
 
@@ -463,14 +474,14 @@ void CmdProcess::onFinished(int exitCode, QProcess::ExitStatus exitStatus)
     deleteLater();
 }
 
-void CmdProcess::rdFromStdErr()
-{
-    emit dataToClient(cmdId, readAllStandardError(), ERR);
-}
-
 void CmdProcess::rdFromStdOut()
 {
     emit dataToClient(cmdId, readAllStandardOutput(), TEXT);
+}
+
+void CmdProcess::rdFromStdErr()
+{
+    logErrMsgs(cmdId);
 }
 
 void CmdProcess::dataFromSession(quint32 id, const QByteArray &data, quint8 dType)
@@ -673,7 +684,7 @@ void CmdProcess::onDataFromProc(quint8 typeId, const QByteArray &data)
                 }
                 else
                 {
-                    qDebug() << "async id: " << async << " from command id: " << toCmdId16(cmdId) << " blocked. reason: " << errMsg;
+                    qCritical() << "async id: " << async << " from command id/name: " << toCmdId16(cmdId) << "/" << cmdName << " blocked. reason: " << errMsg;
                 }
             }
         }

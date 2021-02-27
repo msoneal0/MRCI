@@ -88,17 +88,4 @@ public:
     explicit MyInfo(QObject *parent = nullptr);
 };
 
-//-----------------------------------
-
-class ListDBG : public TableViewer
-{
-    Q_OBJECT
-
-public:
-
-    static QString cmdName();
-
-    explicit ListDBG(QObject *parent = nullptr);
-};
-
 #endif // INFO_H

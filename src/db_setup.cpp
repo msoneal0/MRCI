@@ -16,20 +16,15 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-bool setupDb(QString *errMsg)
+bool setupDb()
 {
     auto ret = true;
-
-    errMsg->clear();
 
     Query query(QThread::currentThread());
 
     if (query.inErrorstate())
     {
         ret = false;
-
-        errMsg->append("database open failure: \n");
-        errMsg->append(query.errDetail());
     }
 
     if (ret)
@@ -70,15 +65,6 @@ bool setupDb(QString *errMsg)
         query.addColumn(COLUMN_CHANNEL_NAME);
         query.setPrimaryAsc(COLUMN_CHANNEL_ID);
         query.addUnique(COLUMN_CHANNEL_NAME);
-
-        ret = query.exec();
-    }
-
-    if (ret)
-    {
-        query.setType(Query::CREATE_TABLE, TABLE_DMESG);
-        query.addColumn(COLUMN_TIME);
-        query.addColumn(COLUMN_LOGENTRY);
 
         ret = query.exec();
     }
@@ -167,12 +153,6 @@ bool setupDb(QString *errMsg)
         query.addForeign(COLUMN_CHANNEL_ID, TABLE_CHANNELS, COLUMN_CHANNEL_ID, Query::CASCADE, Query::CASCADE);
 
         ret = query.exec();
-    }
-
-    if (query.inErrorstate())
-    {
-        errMsg->append("main setup: \n");
-        errMsg->append(query.errDetail());
     }
 
     return ret;

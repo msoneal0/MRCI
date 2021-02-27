@@ -26,13 +26,6 @@ IPHist::IPHist(QObject *parent) : TableViewer(parent)
     addTableColumn(TABLE_IPHIST, COLUMN_LOGENTRY);
 }
 
-ListDBG::ListDBG(QObject *parent) : TableViewer(parent)
-{
-    setParams(TABLE_DMESG, true);
-    addTableColumn(TABLE_DMESG, COLUMN_TIME);
-    addTableColumn(TABLE_DMESG, COLUMN_LOGENTRY);
-}
-
 ListCommands::ListCommands(const QStringList &cmdList, QObject *parent) : CmdObject(parent)
 {
     list = cmdList;
@@ -43,7 +36,6 @@ MyInfo::MyInfo(QObject *parent)     : CmdObject(parent) {}
 
 QString HostInfo::cmdName() {return "host_info";}
 QString IPHist::cmdName()   {return "ls_act_log";}
-QString ListDBG::cmdName()  {return "ls_dbg";}
 QString MyInfo::cmdName()   {return "my_info";}
 
 QString ListCommands::shortText(const QString &cmdName)

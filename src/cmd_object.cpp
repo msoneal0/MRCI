@@ -79,6 +79,7 @@ CmdObject::CmdObject(QObject *parent) : MemShare(parent)
         ipcWorker      = new IPCWorker(pipe, nullptr);
         keepAliveTimer = new QTimer(this);
         progTimer      = new QTimer(this);
+        dProc          = new QProcess(this);
         progCurrent    = 0;
         progMax        = 0;
 
@@ -120,6 +121,11 @@ void CmdObject::term()
         flags   = 0;
         retCode = ABORTED;
 
+        if (dProc->state() == QProcess::Running)
+        {
+            dProc->kill();
+        }
+
         onTerminate();
         postProc();
     }
@@ -130,6 +136,30 @@ void CmdObject::kill()
     term();
 
     QCoreApplication::instance()->exit();
+}
+
+bool CmdObject::runDetachedProc(const QStringList &args)
+{
+    auto ret = false;
+
+    if (args.isEmpty())
+    {
+        qCritical() << "The external command call has no arguments.";
+    }
+    else
+    {
+        dProc->setProgram(args[0]);
+        dProc->setArguments(args.mid(1));
+
+        ret = dProc->startDetached();
+
+        if (!ret)
+        {
+            qCritical() << "External command execution failure: " + dProc->errorString();
+        }
+    }
+
+    return ret;
 }
 
 void CmdObject::preProc(const QByteArray &data, quint8 typeId)

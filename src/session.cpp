@@ -83,7 +83,7 @@ void Session::connectToPeer(const QSharedPointer<SessionCarrier> &peer)
 {
     if (peer->sessionObj == nullptr)
     {
-        qDebug() << "Session::connectToPeer() the peer session object is null.";
+        qCritical() << "Session::connectToPeer() the peer session object is null.";
     }
     else if ((peer->sessionObj != this) && (flags & SESSION_RDY))
     {

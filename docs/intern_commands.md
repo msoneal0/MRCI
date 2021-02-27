@@ -66,8 +66,6 @@ The host is extendable via 3rd party modules but the host itself is an internal 
 
 * [ls_chs](intern_commands/ls_chs.md) - list all channels you are currently a member of and all pending invites.
 
-* [ls_dbg](intern_commands/ls_dbg.md) - display all debug log messages.
-
 * [ls_mods](intern_commands/ls_mods.md) - list all available modules currently configured in the host.
 
 * [ls_open_chs](intern_commands/ls_open_chs.md) - list all of the sub-channels that are currently open.

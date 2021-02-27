@@ -37,20 +37,80 @@ extern "C"
 // a "no OPENSSL_Applink" error.
 #include <src/applink.c>
 }
+#else
+#include <syslog.h>
+#endif
+
+#ifdef Q_OS_WINDOWS
+
+void windowsLog(const QByteArray &id, const QByteArray &msg)
+{
+    auto file = QFile(getLocalFilePath(DEFAULT_LOG_FILENAME));
+    auto date = QDateTime::currentDateTime();
+
+    if (file.exists())
+    {
+        if (file.size() >= MAX_LOG_SIZE)
+        {
+            file.remove();
+
+            windowsLog(id, msg);
+        }
+        else if (file.open(QIODevice::Append))
+        {
+            file.write(date.toString(Qt::ISODateWithMs).toUtf8() + ": msg_id: " + id + " " + msg + "\n");
+        }
+    }
+    else
+    {
+        if (file.open(QIODevice::WriteOnly))
+        {
+            file.write(date.toString(Qt::ISODateWithMs).toUtf8() + ": msg_id: " + id + " " + msg + "\n");
+        }
+    }
+
+    file.close();
+}
+
 #endif
 
 void msgHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {
-    Q_UNUSED(type)
     Q_UNUSED(context)
 
     if (!msg.contains("QSslSocket: cannot resolve"))
     {
-        Query db;
+        auto logMsg = msg.toUtf8();
 
-        db.setType(Query::PUSH, TABLE_DMESG);
-        db.addColumn(COLUMN_LOGENTRY, msg);
-        db.exec();
+        switch (type)
+        {
+        case QtDebugMsg: case QtInfoMsg: case QtWarningMsg:
+        {
+            fprintf(stdout, "inf: %s\n", logMsg.constData());
+
+#ifdef Q_OS_WINDOWS
+            format.chop(2);
+
+            windowsLog(format, "inf: " + utf8);
+#else
+            syslog(LOG_INFO, "inf: %s", logMsg.constData());
+#endif
+            break;
+        }
+        case QtCriticalMsg: case QtFatalMsg:
+        {
+            fprintf(stderr, "err: %s\n", logMsg.constData());
+
+#ifdef Q_OS_WINDOWS
+            format.chop(2);
+
+            windowsLog(format, "err: " + utf8);
+#else
+            syslog(LOG_ERR, "err: %s", logMsg.constData());
+#endif
+            break;
+        }
+        }
     }
 }
 
@@ -74,12 +134,16 @@ void showHelp()
     txtOut << " -ls_sql_drvs : list all available SQL drivers that the host currently supports." << Qt::endl;
     txtOut << " -load_ssl    : re-load the host SSL certificate without stopping the host instance." << Qt::endl;
     txtOut << " -elevate     : elevate any user account to rank 1." << Qt::endl;
+    txtOut << " -res_pw      : reset a user account password with a randomized one time password." << Qt::endl;
     txtOut << " -add_admin   : create a rank 1 account with a randomized one time password." << Qt::endl << Qt::endl;
     txtOut << "Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:" << Qt::endl << Qt::endl;
     txtOut << " -pipe     : the named pipe used to establish a data connection with the session." << Qt::endl;
     txtOut << " -mem_ses  : the shared memory key for the session." << Qt::endl;
     txtOut << " -mem_host : the shared memory key for the host main process." << Qt::endl << Qt::endl;
     txtOut << "Details:" << Qt::endl << Qt::endl;
+    txtOut << "res_pw    - this argument takes a single string representing a user name to reset the password. the host" << Qt::endl;
+    txtOut << "            will set a randomized password and display it on the CLI." << Qt::endl << Qt::endl;
+    txtOut << "            example: -res_pw somebody" << Qt::endl << Qt::endl;
     txtOut << "add_admin - this argument takes a single string representing a user name to create a rank 1 account with." << Qt::endl;
     txtOut << "            the host will set a randomized password for it and display it on the CLI. this user will be" << Qt::endl;
     txtOut << "            required to change the password upon logging in." << Qt::endl;
@@ -89,14 +153,6 @@ void showHelp()
     txtOut << "run_cmd   - this argument is used by the host itself along with the internal module arguments to run the" << Qt::endl;
     txtOut << "            internal command names passed by it. this is not ment to be run directly by human input. the" << Qt::endl;
     txtOut << "            executable will auto close if it fails to connect to the pipe and/or shared memory segments" << Qt::endl << Qt::endl;
-}
-
-void soeDueToDbErr(int *retCode, const QString *errMsg)
-{
-    *retCode = 1;
-
-    QTextStream(stderr) << "" << Qt::endl << "err: Stop error." << Qt::endl;
-    QTextStream(stderr) << "     what happened: " << Qt::endl << *errMsg << Qt::endl << Qt::endl;
 }
 
 int shellToHost(const QStringList &args, bool holdErrs, QCoreApplication &app)
@@ -130,10 +186,6 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationName(APP_NAME);
     QCoreApplication::setApplicationVersion(APP_VER);
 
-    QString err;
-
-    qInstallMessageHandler(msgHandler);
-
     // args.append("-ls_sql_drvs"); // debug
 
     if (args.contains("-run_cmd", Qt::CaseInsensitive)     ||
@@ -141,7 +193,7 @@ int main(int argc, char *argv[])
         args.contains("-exempt_cmds", Qt::CaseInsensitive) ||
         args.contains("-user_cmds", Qt::CaseInsensitive))
     {
-        if (setupDb(&err))
+        if (setupDb())
         {
             auto *mod = new Module(&app);
 
@@ -152,7 +204,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-            soeDueToDbErr(&ret, &err);
+            ret = 1;
         }
     }
     else if (args.contains("-help", Qt::CaseInsensitive) || args.size() == 1)
@@ -163,7 +215,7 @@ int main(int argc, char *argv[])
     {
         QTextStream(stdout) << "" << Qt::endl;
 
-        for (auto driver : QSqlDatabase::drivers())
+        for (const auto &driver : QSqlDatabase::drivers())
         {
             QTextStream(stdout) << driver << Qt::endl;
         }
@@ -181,91 +233,131 @@ int main(int argc, char *argv[])
              args.contains("-status", Qt::CaseInsensitive) ||
              args.contains("-load_ssl", Qt::CaseInsensitive))
     {
+        qInstallMessageHandler(msgHandler);
+
         ret = shellToHost(args, false, app);
     }
-    else if (setupDb(&err))
+    else
     {
-        if (args.contains("-host", Qt::CaseInsensitive))
-        {
-            auto *serv = new TCPServer(&app);
+        qInstallMessageHandler(msgHandler);
 
-            if (serv->start())
-            {
-                ret = QCoreApplication::exec();
-            }
-        }
-        else if (args.contains("-host_trig", Qt::CaseInsensitive))
+        if (setupDb())
         {
-            QProcess::startDetached(QCoreApplication::applicationFilePath(), QStringList() << "-host");
-        }
-        else if (args.contains("-elevate", Qt::CaseInsensitive))
-        {
-            ret = 1;
+            if (args.contains("-host", Qt::CaseInsensitive))
+            {
+                auto *serv = new TCPServer(&app);
 
-            QByteArray uId;
+                if (serv->start())
+                {
+                    ret = QCoreApplication::exec();
+                }
+            }
+            else if (args.contains("-host_trig", Qt::CaseInsensitive))
+            {
+                QProcess::startDetached(QCoreApplication::applicationFilePath(), QStringList() << "-host");
+            }
+            else if (args.contains("-elevate", Qt::CaseInsensitive))
+            {
+                ret = 1;
 
-            if (args.size() <= 2)
-            {
-                QTextStream(stderr) << "err: A user name was not given." << Qt::endl;
+                QByteArray uId;
+
+                if (args.size() <= 2)
+                {
+                    QTextStream(stderr) << "err: A user name was not given." << Qt::endl;
+                }
+                else if (!validUserName(args[2]))
+                {
+                    QTextStream(stderr) << "err: Invalid user name." << Qt::endl;
+                }
+                else if (!userExists(args[2], &uId))
+                {
+                    QTextStream(stderr) << "err: The user name does not exists." << Qt::endl;
+                }
+                else
+                {
+                    Query db;
+
+                    db.setType(Query::UPDATE, TABLE_USERS);
+                    db.addColumn(COLUMN_HOST_RANK, 1);
+                    db.addCondition(COLUMN_USER_ID, uId);
+
+                    if (db.exec())
+                    {
+                        ret = 0;
+                    }
+                }
             }
-            else if (!validUserName(args[2]))
+            else if (args.contains("-add_admin", Qt::CaseInsensitive))
             {
-                QTextStream(stderr) << "err: Invalid user name." << Qt::endl;
+                ret = 1;
+
+                if (args.size() <= 2)
+                {
+                    QTextStream(stderr) << "err: A user name was not given." << Qt::endl;
+                }
+                else if (!validUserName(args[2]))
+                {
+                    QTextStream(stderr) << "err: Invalid user name." << Qt::endl;
+                }
+                else if (userExists(args[2]))
+                {
+                    QTextStream(stderr) << "err: The user name already exists." << Qt::endl;
+                }
+                else
+                {
+                    auto randPw = genPw();
+
+                    if (createUser(args[2], args[2] + "@change_me.null", "", randPw, 1, true))
+                    {
+                        QTextStream(stdout) << "password: " << randPw << Qt::endl;
+
+                        ret = 0;
+                    }
+                }
             }
-            else if (!userExists(args[2], &uId))
+            else if (args.contains("-res_pw", Qt::CaseInsensitive))
             {
-                QTextStream(stderr) << "err: The user name does not exists." << Qt::endl;
+                ret = 1;
+
+                QByteArray uId;
+
+                if (args.size() <= 2)
+                {
+                    QTextStream(stderr) << "err: A user name was not given." << Qt::endl;
+                }
+                else if (!validUserName(args[2]))
+                {
+                    QTextStream(stderr) << "err: Invalid user name." << Qt::endl;
+                }
+                else if (!userExists(args[2], &uId))
+                {
+                    QTextStream(stderr) << "err: The user name does not exists." << Qt::endl;
+                }
+                else
+                {
+                    auto randPw = genPw();
+
+                    if (updatePassword(uId, randPw, TABLE_USERS, true))
+                    {
+                        QTextStream(stdout) << "password: " << randPw << Qt::endl;
+
+                        ret = 0;
+                    }
+                }
             }
             else
             {
-                Query db;
-
-                db.setType(Query::UPDATE, TABLE_USERS);
-                db.addColumn(COLUMN_HOST_RANK, 1);
-                db.addCondition(COLUMN_USER_ID, uId);
-                db.exec();
-
-                ret = 0;
-            }
-        }
-        else if (args.contains("-add_admin", Qt::CaseInsensitive))
-        {
-            ret = 1;
-
-            if (args.size() <= 2)
-            {
-                QTextStream(stderr) << "err: A user name was not given." << Qt::endl;
-            }
-            else if (!validUserName(args[2]))
-            {
-                QTextStream(stderr) << "err: Invalid user name." << Qt::endl;
-            }
-            else if (userExists(args[2]))
-            {
-                QTextStream(stderr) << "err: The user name already exists." << Qt::endl;
-            }
-            else
-            {
-                auto randPw = genPw();
-
-                createUser(args[2], "", "", randPw, 1, true);
-
-                QTextStream(stdout) << "password: " << randPw << Qt::endl;
-
-                ret = 0;
+                showHelp();
             }
         }
         else
         {
-            showHelp();
+            ret = 1;
         }
-    }
-    else
-    {
-        soeDueToDbErr(&ret, &err);
-    }
 
-    cleanupDbConnection();
+        cleanupDbConnection();
+    }
 
     return ret;
 }

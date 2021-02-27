@@ -150,20 +150,17 @@ void updateConf(const char *key, const QJsonValue &value)
     updateConf(obj);
 }
 
-bool getEmailParams(const QString &mailCmd, const QString &bodyFile, QString *bodyText, QString *errMsg)
+bool getEmailParams(const QString &mailCmd, const QString &bodyFile, QString *bodyText)
 {
     auto ret = false;
 
-    errMsg->clear();
     bodyText->clear();
 
     QFile file(bodyFile);
 
     if (!file.open(QFile::ReadOnly))
     {
-        errMsg->append("err: The host could not open the email message template, please notify a system administrator.\n");
-
-        qDebug() << "err: Could not open the email message template file '" << bodyFile << "' reason: " << file.errorString();
+        qCritical() << "Could not open the email message template file '" << bodyFile << "' reason: " << file.errorString();
     }
     else
     {
@@ -173,17 +170,14 @@ bool getEmailParams(const QString &mailCmd, const QString &bodyFile, QString *bo
             (!body.contains(USERNAME_SUB, Qt::CaseInsensitive)) ||
             (!body.contains(OTP_SUB, Qt::CaseInsensitive)))
         {
-            errMsg->append("err: The host email message template is invalid, please notify a system administrator.\n");
-
-            qDebug() << "err: Email message template '" << bodyFile << "' is missing one of the following key words: " << DATE_SUB << ", " << USERNAME_SUB << ", " << OTP_SUB;
+            qCritical() << "Email message template '" << bodyFile << "' is missing one or more of the following key words: " << DATE_SUB << ", " << USERNAME_SUB << ", " << OTP_SUB;
         }
         else if ((mailCmd.contains(SUBJECT_SUB, Qt::CaseInsensitive))       ||
                  (mailCmd.contains(MSG_SUB, Qt::CaseInsensitive))           ||
                  (mailCmd.contains(TARGET_EMAIL_SUB, Qt::CaseInsensitive)))
         {
-            errMsg->append("err: The host email client parameters are invalid, please notify a system administrator.\n");
-
-            qDebug() << "err: Email client command line '" << mailCmd << "' is missing one of the following key words: " << SUBJECT_SUB << ", " << MSG_SUB << ", " << TARGET_EMAIL_SUB;
+            qCritical() << "Email client command line '" << mailCmd << "' is missing one or more of the following key words: " << SUBJECT_SUB << ", " << MSG_SUB << ", " << TARGET_EMAIL_SUB;
+            qCritical() << "Mail command: " << mailCmd;
         }
         else
         {
@@ -239,9 +233,16 @@ QString boolStr(bool state)
 
 QString genSerialNumber()
 {
-    Serial::serialIndex++;
+    Serial::threadIndex++;
 
-    return QString::number(QDateTime::currentDateTime().toMSecsSinceEpoch()) + "-" + QString::number(Serial::serialIndex);
+    return QString::number(QDateTime::currentDateTime().toMSecsSinceEpoch()) + "-" + QString::number(Serial::threadIndex);
+}
+
+QString genMsgNumber()
+{
+    Serial::msgIndex++;
+
+    return QDateTime::currentDateTime().toString("yyyy.MM.dd.hh.mm.ss.") + QString::number(Serial::msgIndex).rightJustified(5, ' ', true);
 }
 
 void serializeThread(QThread *thr)
@@ -1053,7 +1054,7 @@ QString getParam(const QString &key, const QStringList &args)
 
     QString ret;
 
-    int pos = args.indexOf(QRegExp(key, Qt::CaseInsensitive));
+    int pos = args.indexOf(QRegularExpression(key, QRegularExpression::CaseInsensitiveOption));
 
     if (pos != -1)
     {
@@ -1121,8 +1122,6 @@ ShellIPC::ShellIPC(const QStringList &args, bool supressErr, QObject *parent) : 
 
 bool ShellIPC::connectToHost()
 {
-    auto pipeInfo = QFileInfo(HOST_CONTROL_PIPE);
-
     connectToServer(HOST_CONTROL_PIPE);
 
     if (!waitForConnected() && !holdErrs)
@@ -1154,4 +1153,6 @@ void ShellIPC::dataIn()
     emit closeInstance();
 }
 
-quint64 Serial::serialIndex = 0;
+quint64 Serial::threadIndex = 0;
+quint16 Serial::msgIndex    = 0;
+bool    Serial::msgDetails  = true;

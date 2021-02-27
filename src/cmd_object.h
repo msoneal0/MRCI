@@ -67,6 +67,7 @@ protected:
     QTimer    *keepAliveTimer;
     QTimer    *progTimer;
     IPCWorker *ipcWorker;
+    QProcess  *dProc;
     quint32    flags;
     quint16    retCode;
     qint64     progCurrent;
@@ -81,6 +82,7 @@ protected:
     void    startProgPulse();
     void    stopProgPulse();
     void    postProc();
+    bool    runDetachedProc(const QStringList &args);
     QString libName();
 
     virtual void procIn(const QByteArray &, quint8) {}

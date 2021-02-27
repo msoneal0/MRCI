@@ -218,7 +218,6 @@ void TableViewer::procIn(const QByteArray &binIn, quint8 dType)
                 {
                     delQuery.exec();
 
-                    mainTxt(delQuery.errDetail());
                     idle();
                     onDel();
                 }

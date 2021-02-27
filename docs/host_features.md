@@ -106,7 +106,7 @@ db_driver : string
 
 db_host_name : string
 
-  This value contains the network, internet or file location address
+  This value contains the network, internet address or file location
   of the database.
 
 db_password : string

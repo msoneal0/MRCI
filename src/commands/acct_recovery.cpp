@@ -16,15 +16,15 @@
 //    along with MRCI under the LICENSE.md file. If not, see
 //    <http://www.gnu.org/licenses/>.
 
-RecoverAcct::RecoverAcct(QObject *parent)           : CmdObject(parent) {}
-ResetPwRequest::ResetPwRequest(QObject *parent)     : CmdObject(parent) {}
-VerifyEmail::VerifyEmail(QObject *parent)           : CmdObject(parent) {}
-IsEmailVerified::IsEmailVerified(QObject *parent)   : CmdObject(parent) {}
+RecoverAcct::RecoverAcct(QObject *parent)         : CmdObject(parent) {}
+IsEmailVerified::IsEmailVerified(QObject *parent) : CmdObject(parent) {}
+ResetPwRequest::ResetPwRequest(QObject *parent)   : CmdObject(parent) {}
+VerifyEmail::VerifyEmail(QObject *parent)         : CmdObject(parent) {}
 
-QString RecoverAcct::cmdName()      {return "recover_acct";}
-QString ResetPwRequest::cmdName()   {return "request_pw_reset";}
-QString VerifyEmail::cmdName()      {return "verify_email";}
-QString IsEmailVerified::cmdName()  {return "is_email_verified";}
+QString RecoverAcct::cmdName()     {return "recover_acct";}
+QString ResetPwRequest::cmdName()  {return "request_pw_reset";}
+QString VerifyEmail::cmdName()     {return "verify_email";}
+QString IsEmailVerified::cmdName() {return "is_email_verified";}
 
 void delRecoverPw(const QByteArray &uId)
 {
@@ -55,7 +55,7 @@ bool expired(const QByteArray &uId)
 
     auto expiry = db.getData(COLUMN_TIME).toDateTime().addSecs(3600); // pw datetime + 1hour;
 
-    if (expiry > QDateTime::currentDateTime().toUTC())
+    if (expiry > QDateTime::currentDateTimeUtc())
     {
         ret = false;
     }
@@ -71,6 +71,7 @@ void RecoverAcct::addToThreshold()
 {
     Query db(this);
 
+    // log recovery attempt failure
     db.setType(Query::PUSH, TABLE_AUTH_LOG);
     db.addColumn(COLUMN_USER_ID, uId);
     db.addColumn(COLUMN_IPADDR, rdStringFromBlock(clientIp, BLKSIZE_CLIENT_IP));
@@ -83,6 +84,7 @@ void RecoverAcct::addToThreshold()
     auto confObj     = confObject();
     auto maxAttempts = confObj[CONF_AUTO_LOCK_LIM].toInt();
 
+    // pull how many failed recovery attempts were made on this account
     db.setType(Query::PULL, TABLE_AUTH_LOG);
     db.addColumn(COLUMN_IPADDR);
     db.addCondition(COLUMN_USER_ID, uId);
@@ -95,11 +97,22 @@ void RecoverAcct::addToThreshold()
     {
         delRecoverPw(uId);
 
-        flags &= ~MORE_INPUT;
+        // reset recovery attempts
+        db.setType(Query::UPDATE, TABLE_AUTH_LOG);
+        db.addColumn(COLUMN_COUNT, false);
+        db.addCondition(COLUMN_USER_ID, uId);
+        db.addCondition(COLUMN_RECOVER_ATTEMPT, true);
+        db.addCondition(COLUMN_ACCEPTED, false);
+        db.exec();
+
+        retCode = INVALID_PARAMS;
+        flags  &= ~MORE_INPUT;
+
+        errTxt("err: You have exceeded the maximum amount of recovery attempts, recovery password deleted.\n");
     }
     else
     {
-        errTxt("err: Access denied.\n");
+        errTxt("err: Access denied.\n\n");
         privTxt("Enter the temporary password (leave blank to cancel): ");
     }
 }
@@ -118,18 +131,42 @@ void RecoverAcct::procIn(const QByteArray &binIn, quint8 dType)
             {
                 retCode = ABORTED;
                 flags  &= ~MORE_INPUT;
+
+                mainTxt("\n");
             }
             else if (!acceptablePw(pw, uId, &errMsg))
             {
-                errTxt(errMsg + "\n");
+                errTxt(errMsg + "\n\n");
                 privTxt("Enter a new password (leave blank to cancel): ");
             }
             else
             {
+                Query db(this);
+
+                // reset recovery attempts
+                db.setType(Query::UPDATE, TABLE_AUTH_LOG);
+                db.addColumn(COLUMN_COUNT, false);
+                db.addCondition(COLUMN_USER_ID, uId);
+                db.addCondition(COLUMN_RECOVER_ATTEMPT, true);
+                db.addCondition(COLUMN_ACCEPTED, false);
+                db.exec();
+
+                // log recovery accepted
+                db.setType(Query::PUSH, TABLE_AUTH_LOG);
+                db.addColumn(COLUMN_USER_ID, uId);
+                db.addColumn(COLUMN_IPADDR, rdStringFromBlock(clientIp, BLKSIZE_CLIENT_IP));
+                db.addColumn(COLUMN_AUTH_ATTEMPT, false);
+                db.addColumn(COLUMN_RECOVER_ATTEMPT, true);
+                db.addColumn(COLUMN_COUNT, false);
+                db.addColumn(COLUMN_ACCEPTED, true);
+                db.exec();
+
                 updatePassword(uId, pw, TABLE_USERS);
                 delRecoverPw(uId);
 
                 flags &= ~MORE_INPUT;
+
+                mainTxt("\n");
             }
         }
         else
@@ -138,9 +175,12 @@ void RecoverAcct::procIn(const QByteArray &binIn, quint8 dType)
             {
                 retCode = ABORTED;
                 flags  &= ~MORE_INPUT;
+
+                mainTxt("\n");
             }
             else if (!validPassword(pw))
             {
+                errTxt("err: Invalid password.\n");
                 addToThreshold();
             }
             else if (!auth(uId, pw, TABLE_PW_RECOVERY))
@@ -209,7 +249,6 @@ void ResetPwRequest::procIn(const QByteArray &binIn, uchar dType)
 
         QByteArray uId;
         QString    body;
-        QString    err;
 
         if (!email.isEmpty() && validEmailAddr(email))
         {
@@ -218,11 +257,7 @@ void ResetPwRequest::procIn(const QByteArray &binIn, uchar dType)
 
         retCode = INVALID_PARAMS;
 
-        if (!getEmailParams(cmdLine, msgFile, &body, &err))
-        {
-            errTxt(err);
-        }
-        else if (name.isEmpty() || !validUserName(name))
+        if (name.isEmpty() || !validUserName(name))
         {
             errTxt("err: The -user or -email argument is empty, not found or invalid.\n");
         }
@@ -230,40 +265,39 @@ void ResetPwRequest::procIn(const QByteArray &binIn, uchar dType)
         {
             errTxt("err: No such user.\n");
         }
-        else
+        else if (getEmailParams(cmdLine, msgFile, &body))
         {
-            retCode = NO_ERRORS;
+            retCode = EXECUTION_FAIL;
 
-            auto pw       = genPw();
-            auto date     = QDateTime::currentDateTimeUtc().toString("YYYY-MM-DD HH:MM:SS");
-            auto mailArgs = parseArgs(cmdLine.toUtf8(), -1);
+            auto pw    = genPw();
+            auto date  = QDateTime::currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss (t)");
+            auto dbrdy = false;
             
             if (recoverPWExists(uId))
             {
-                updatePassword(uId, pw, TABLE_PW_RECOVERY);
+                dbrdy = updatePassword(uId, pw, TABLE_PW_RECOVERY);
             }
             else
             {
-                createTempPw(uId, pw);
+                dbrdy = createTempPw(uId, pw);
             }
 
-            body.replace(DATE_SUB, date);
-            body.replace(USERNAME_SUB, name);
-            body.replace(OTP_SUB, pw);
-
-            cmdLine.replace(TARGET_EMAIL_SUB, email);
-            cmdLine.replace(SUBJECT_SUB, "'" + escapeChars(subject, '\\', '\'') + "'");
-            cmdLine.replace(MSG_SUB, "'" + escapeChars(body, '\\', '\'') + "'");
-
-            if (QProcess::startDetached(expandEnvVariables(mailArgs[0]), mailArgs.mid(1)))
+            if (dbrdy)
             {
-                mainTxt("A temporary password was sent to the email address associated with the account. this password will expire in 1 hour.\n");
-            }
-            else
-            {
-                retCode = EXECUTION_FAIL;
+                body.replace(DATE_SUB, date);
+                body.replace(USERNAME_SUB, name);
+                body.replace(OTP_SUB, pw);
 
-                errTxt("err: The host email system has reported an internal error, please try again later.\n");
+                cmdLine.replace(TARGET_EMAIL_SUB, email);
+                cmdLine.replace(SUBJECT_SUB, "'" + escapeChars(subject, '\\', '\'') + "'");
+                cmdLine.replace(MSG_SUB, "'" + escapeChars(body, '\\', '\'') + "'");
+
+                if (runDetachedProc(parseArgs(cmdLine.toUtf8(), -1)))
+                {
+                    retCode = NO_ERRORS;
+
+                    mainTxt("A temporary password was sent to the email address associated with the account. this password will expire in 1 hour.\n");
+                }
             }
         }
     }
@@ -277,6 +311,8 @@ void VerifyEmail::procIn(const QByteArray &binIn, quint8 dType)
 
         if (txt.isEmpty())
         {
+            mainTxt("\n");
+
             retCode = ABORTED;
             flags  &= ~MORE_INPUT;
         }
@@ -291,11 +327,14 @@ void VerifyEmail::procIn(const QByteArray &binIn, quint8 dType)
 
             async(ASYNC_RW_MY_INFO, uId);
 
-            flags &= ~MORE_INPUT;
+            retCode = NO_ERRORS;
+            flags  &= ~MORE_INPUT;
+
+            mainTxt("\n");
         }
         else
         {
-            errTxt("err: The code you entered does not match.\n");
+            errTxt("err: The code you entered does not match.\n\n");
             privTxt("Please try again: ");
         }
     }
@@ -312,26 +351,15 @@ void VerifyEmail::procIn(const QByteArray &binIn, quint8 dType)
         QString body;
         QString err;
 
-        if (email.isEmpty())
-        {
-            retCode = INVALID_PARAMS;
+        retCode = INVALID_PARAMS;
 
-            errTxt("err: Your account currently has no email address, please contact an admin to update it.\n");
-        }
-        else if (!getEmailParams(cmdLine, msgFile, &body, &err))
-        {
-            retCode = INVALID_PARAMS;
-
-            errTxt(err);
-        }
-        else
+        if (getEmailParams(cmdLine, msgFile, &body))
         {
             flags |= MORE_INPUT;
             code   = QString::number(QRandomGenerator::global()->bounded(100000, 999999));
 
-            auto uName    = rdStringFromBlock(userName, BLKSIZE_USER_NAME);
-            auto date     = QDateTime::currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss");
-            auto mailArgs = parseArgs(cmdLine.toUtf8(), -1);
+            auto uName = rdStringFromBlock(userName, BLKSIZE_USER_NAME);
+            auto date  = QDateTime::currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss (t)");
 
             body.replace(DATE_SUB, date);
             body.replace(USERNAME_SUB, uName);
@@ -341,15 +369,13 @@ void VerifyEmail::procIn(const QByteArray &binIn, quint8 dType)
             cmdLine.replace(SUBJECT_SUB, "'" + escapeChars(subject, '\\', '\'') + "'");
             cmdLine.replace(MSG_SUB, "'" + escapeChars(body, '\\', '\'') + "'");
 
-            if (QProcess::startDetached(expandEnvVariables(mailArgs[0]), mailArgs.mid(1)))
+            if (runDetachedProc(parseArgs(cmdLine.toUtf8(), -1)))
             {
                 privTxt("A confirmation code was sent to your email address: " + email + "\n\n" + "Please enter that code now or leave blank to cancel: ");
             }
             else
             {
                 retCode = EXECUTION_FAIL;
-
-                errTxt("err: The host email system has reported an internal error, please try again later.\n");
             }
         }
     }
