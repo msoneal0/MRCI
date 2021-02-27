@@ -22,6 +22,7 @@ Usage: mrci <argument>
  -ls_sql_drvs : list all available SQL drivers that the host currently supports.
  -load_ssl    : re-load the host SSL certificate without stopping the host instance.
  -elevate     : elevate any user account to rank 1.
+ -res_pw      : reset a user account password with a randomized one time password.
  -add_admin   : create a rank 1 account with a randomized password.
 
 Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:
@@ -31,6 +32,11 @@ Internal module | -public_cmds, -user_cmds, -exempt_cmds, -run_cmd |:
  -mem_host : the shared memory key for the host main process.
 
 Details:
+
+res_pw    - this argument takes a single string representing a user name to reset the password. the host
+            will set a randomized password and display it on the CLI.
+
+            example: -res_pw somebody
 
 add_admin - this argument takes a single string representing a user name to create a rank 1 account with.
             the host will set a randomized password for it and display it on the CLI. this user will be
